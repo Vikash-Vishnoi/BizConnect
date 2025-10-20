@@ -9,4 +9,7 @@ export type RootStackParamList = {
   CreateCampaign: undefined;
   Inbox: undefined;
   Conversation: {conversationId: string};
+  Templates: undefined;
+  CreateTemplate: undefined;
+  TemplateDetails: {templateId: string};
 };

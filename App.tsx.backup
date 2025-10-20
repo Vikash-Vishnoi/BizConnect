@@ -7,11 +7,6 @@ import DashboardScreen from './src/screens/DashboardScreen';
 import CampaignsScreen from './src/screens/CampaignsScreen';
 import CampaignDetailsScreen from './src/screens/CampaignDetailsScreen';
 import CreateCampaignScreen from './src/screens/CreateCampaignScreen';
-import InboxScreen from './src/screens/InboxScreen';
-import ConversationScreen from './src/screens/ConversationScreen';
-import TemplatesScreen from './src/screens/TemplatesScreen';
-import CreateTemplateScreen from './src/screens/CreateTemplateScreen';
-import TemplateDetailsScreen from './src/screens/TemplateDetailsScreen';
 import {RootStackParamList} from './src/types/navigation';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -30,11 +25,6 @@ function App(): React.JSX.Element {
         <Stack.Screen name="Campaigns" component={CampaignsScreen} />
         <Stack.Screen name="CampaignDetails" component={CampaignDetailsScreen} />
         <Stack.Screen name="CreateCampaign" component={CreateCampaignScreen} />
-        <Stack.Screen name="Inbox" component={InboxScreen} />
-        <Stack.Screen name="Conversation" component={ConversationScreen} />
-        <Stack.Screen name="Templates" component={TemplatesScreen} />
-        <Stack.Screen name="CreateTemplate" component={CreateTemplateScreen} />
-        <Stack.Screen name="TemplateDetails" component={TemplateDetailsScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );

@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState} from 'react';
 import {
   View,
   Text,
@@ -12,39 +12,12 @@ import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {RootStackParamList} from '../types/navigation';
 import {storageService} from '../services/storage';
 import {authAPI} from '../services/api';
-import {conversationAPI} from '../services/conversationService';
-import {templateService} from '../services/templateService';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Dashboard'>;
 
 const DashboardScreen = ({navigation, route}: Props) => {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [templatesCount, setTemplatesCount] = useState(0);
   const user = route.params?.user;
-
-  useEffect(() => {
-    loadUnreadCount();
-    loadTemplatesCount();
-  }, []);
-
-  const loadUnreadCount = async () => {
-    try {
-      const count = await conversationAPI.getUnreadCount();
-      setUnreadCount(count);
-    } catch (error) {
-      console.error('Failed to load unread count:', error);
-    }
-  };
-
-  const loadTemplatesCount = async () => {
-    try {
-      const stats = await templateService.getTemplateStats();
-      setTemplatesCount(stats.approved);
-    } catch (error) {
-      console.error('Failed to load templates count:', error);
-    }
-  };
 
   const handleLogout = async () => {
     Alert.alert('Logout', 'Are you sure you want to logout?', [
@@ -103,14 +76,14 @@ const DashboardScreen = ({navigation, route}: Props) => {
             <Text style={styles.statLabel}>Campaigns</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{templatesCount}</Text>
+            <Text style={styles.statNumber}>0</Text>
             <Text style={styles.statLabel}>Templates</Text>
           </View>
         </View>
 
         <View style={styles.statsContainer}>
           <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{unreadCount}</Text>
+            <Text style={styles.statNumber}>0</Text>
             <Text style={styles.statLabel}>Messages</Text>
           </View>
           <View style={styles.statCard}>
@@ -121,29 +94,6 @@ const DashboardScreen = ({navigation, route}: Props) => {
 
         <View style={styles.actionsCard}>
           <Text style={styles.actionsTitle}>Quick Actions</Text>
-          
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => navigation.navigate('Inbox')}>
-            <View style={styles.actionIcon}>
-              <Text style={styles.actionIconText}>💬</Text>
-            </View>
-            <View style={styles.actionContent}>
-              <View style={styles.actionTitleRow}>
-                <Text style={styles.actionTitle}>Inbox</Text>
-                {unreadCount > 0 && (
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>{unreadCount}</Text>
-                  </View>
-                )}
-              </View>
-              <Text style={styles.actionSubtitle}>
-                View and respond to patient messages
-              </Text>
-            </View>
-            <Text style={styles.actionArrow}>→</Text>
-          </TouchableOpacity>
-
           <TouchableOpacity
             style={styles.actionButton}
             onPress={() => navigation.navigate('Campaigns')}>
@@ -159,26 +109,14 @@ const DashboardScreen = ({navigation, route}: Props) => {
             <Text style={styles.actionArrow}>→</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => navigation.navigate('Templates')}>
+          <TouchableOpacity style={[styles.actionButton, styles.actionDisabled]}>
             <View style={styles.actionIcon}>
               <Text style={styles.actionIconText}>📝</Text>
             </View>
             <View style={styles.actionContent}>
-              <View style={styles.actionTitleRow}>
-                <Text style={styles.actionTitle}>Templates</Text>
-                {templatesCount > 0 && (
-                  <View style={[styles.badge, styles.badgeGreen]}>
-                    <Text style={styles.badgeText}>{templatesCount}</Text>
-                  </View>
-                )}
-              </View>
-              <Text style={styles.actionSubtitle}>
-                Create and manage message templates
-              </Text>
+              <Text style={styles.actionTitle}>Templates</Text>
+              <Text style={styles.actionSubtitle}>Coming soon...</Text>
             </View>
-            <Text style={styles.actionArrow}>→</Text>
           </TouchableOpacity>
 
           <TouchableOpacity style={[styles.actionButton, styles.actionDisabled]}>
@@ -369,28 +307,6 @@ const styles = StyleSheet.create({
   actionArrow: {
     fontSize: 24,
     color: '#25D366',
-  },
-  actionTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  badge: {
-    backgroundColor: '#FF5252',
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    paddingHorizontal: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  badgeGreen: {
-    backgroundColor: '#25D366',
-  },
-  badgeText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: 'bold',
   },
 });
 
