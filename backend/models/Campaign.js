@@ -1,0 +1,145 @@
+const mongoose = require('mongoose');
+
+const campaignSchema = new mongoose.Schema({
+  name: {
+    type: String,
+    required: [true, 'Campaign name is required'],
+    trim: true,
+    maxlength: [200, 'Campaign name cannot exceed 200 characters']
+  },
+  description: {
+    type: String,
+    trim: true,
+    maxlength: [1000, 'Description cannot exceed 1000 characters']
+  },
+  status: {
+    type: String,
+    enum: ['draft', 'scheduled', 'active', 'paused', 'completed', 'failed'],
+    default: 'draft'
+  },
+  templateId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Template',
+    default: null
+  },
+  message: {
+    type: String,
+    trim: true
+  },
+  scheduledAt: {
+    type: Date,
+    default: null
+  },
+  startedAt: {
+    type: Date,
+    default: null
+  },
+  completedAt: {
+    type: Date,
+    default: null
+  },
+  recipients: [{
+    phoneNumber: {
+      type: String,
+      required: true
+    },
+    name: {
+      type: String,
+      default: null
+    },
+    variables: {
+      type: Map,
+      of: String,
+      default: {}
+    },
+    status: {
+      type: String,
+      enum: ['pending', 'sent', 'delivered', 'read', 'failed'],
+      default: 'pending'
+    },
+    sentAt: Date,
+    deliveredAt: Date,
+    readAt: Date,
+    failedReason: String,
+    whatsappMessageId: String
+  }],
+  stats: {
+    total: {
+      type: Number,
+      default: 0
+    },
+    sent: {
+      type: Number,
+      default: 0
+    },
+    delivered: {
+      type: Number,
+      default: 0
+    },
+    read: {
+      type: Number,
+      default: 0
+    },
+    failed: {
+      type: Number,
+      default: 0
+    },
+    pending: {
+      type: Number,
+      default: 0
+    }
+  },
+  settings: {
+    sendRate: {
+      type: Number,
+      default: 10, // messages per minute
+      min: 1,
+      max: 100
+    },
+    retryFailed: {
+      type: Boolean,
+      default: false
+    },
+    maxRetries: {
+      type: Number,
+      default: 3,
+      min: 0,
+      max: 10
+    }
+  },
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  }
+}, {
+  timestamps: true
+});
+
+// Index for faster queries
+campaignSchema.index({ status: 1, createdAt: -1 });
+campaignSchema.index({ userId: 1, createdAt: -1 });
+campaignSchema.index({ scheduledAt: 1 });
+
+// Update stats before saving
+campaignSchema.pre('save', function(next) {
+  if (this.recipients && this.recipients.length > 0) {
+    this.stats.total = this.recipients.length;
+    this.stats.sent = this.recipients.filter(r => r.status === 'sent' || r.status === 'delivered' || r.status === 'read').length;
+    this.stats.delivered = this.recipients.filter(r => r.status === 'delivered' || r.status === 'read').length;
+    this.stats.read = this.recipients.filter(r => r.status === 'read').length;
+    this.stats.failed = this.recipients.filter(r => r.status === 'failed').length;
+    this.stats.pending = this.recipients.filter(r => r.status === 'pending').length;
+  }
+  next();
+});
+
+// Method to get campaign progress percentage
+campaignSchema.methods.getProgress = function() {
+  if (this.stats.total === 0) return 0;
+  return Math.round((this.stats.sent / this.stats.total) * 100);
+};
+
+const Campaign = mongoose.model('Campaign', campaignSchema);
+
+module.exports = Campaign;
