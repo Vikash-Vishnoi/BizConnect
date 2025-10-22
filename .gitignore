@@ -73,5 +73,26 @@ yarn-error.log
 !.yarn/sdks
 !.yarn/versions
 
-#other
-*.md
+# Keep documentation
+!README.md
+!SETUP_GUIDE.md
+!PROJECT_COMPLETE.md
+!backend/README.md
+!frontend/README.md
+
+# Backend specific
+backend/.env
+backend/node_modules/
+backend/uploads/
+backend/logs/
+
+# Old structure files at root (if any remain from reorganization)
+/android/
+/ios/
+/src/
+/__tests__/
+App.tsx
+App.tsx.backup
+index.js
+app.json
+*.ps1

@@ -35,6 +35,44 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
+// @route   GET /api/templates/stats
+// @desc    Get template statistics
+// @access  Private
+router.get('/stats', auth, async (req, res) => {
+  try {
+    const totalTemplates = await Template.countDocuments({ userId: req.userId });
+    const approvedTemplates = await Template.countDocuments({ 
+      userId: req.userId, 
+      status: 'approved' 
+    });
+    const pendingTemplates = await Template.countDocuments({ 
+      userId: req.userId, 
+      status: 'pending' 
+    });
+    const draftTemplates = await Template.countDocuments({ 
+      userId: req.userId, 
+      status: 'draft' 
+    });
+
+    // Get most used templates
+    const mostUsed = await Template.find({ userId: req.userId })
+      .sort({ 'usage.messages': -1 })
+      .limit(5)
+      .select('name category usage status');
+
+    res.json({
+      total: totalTemplates,
+      approved: approvedTemplates,
+      pending: pendingTemplates,
+      draft: draftTemplates,
+      mostUsed
+    });
+  } catch (error) {
+    console.error('Get template stats error:', error);
+    res.status(500).json({ error: 'Failed to fetch template stats' });
+  }
+});
+
 // @route   GET /api/templates/:id
 // @desc    Get template by ID
 // @access  Private

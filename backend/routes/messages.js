@@ -67,33 +67,37 @@ router.post('/', auth, async (req, res) => {
       return res.status(404).json({ error: 'Conversation not found' });
     }
 
-    // Send message via WhatsApp
-    let result;
-    if (type === 'text') {
-      result = await whatsappService.sendTextMessage(conversation.phoneNumber, text);
-    } else if (['image', 'video', 'document'].includes(type) && mediaUrl) {
-      result = await whatsappService.sendMediaMessage(
-        conversation.phoneNumber,
-        type,
-        mediaUrl,
-        caption
-      );
-    } else {
-      return res.status(400).json({ error: 'Invalid message type or missing mediaUrl' });
-    }
+    // Try to send message via WhatsApp (but don't fail if it doesn't work)
+    let whatsappMessageId = null;
+    let messageStatus = 'pending';
+    
+    try {
+      let result;
+      if (type === 'text') {
+        result = await whatsappService.sendTextMessage(conversation.phoneNumber, text);
+      } else if (['image', 'video', 'document'].includes(type) && mediaUrl) {
+        result = await whatsappService.sendMediaMessage(
+          conversation.phoneNumber,
+          type,
+          mediaUrl,
+          caption
+        );
+      }
 
-    if (!result.success) {
-      return res.status(400).json({
-        error: 'Failed to send message',
-        details: result.error
-      });
+      if (result && result.success) {
+        whatsappMessageId = result.messageId;
+        messageStatus = 'sent';
+      }
+    } catch (whatsappError) {
+      console.warn('WhatsApp send failed, saving message locally:', whatsappError.message);
+      // Continue to save message locally even if WhatsApp fails
     }
 
     // Create message record
     const message = new Message({
       conversationId,
-      whatsappMessageId: result.messageId,
-      from: process.env.WHATSAPP_PHONE_NUMBER_ID,
+      whatsappMessageId,
+      from: process.env.WHATSAPP_PHONE_NUMBER_ID || 'system',
       to: conversation.phoneNumber,
       direction: 'outgoing',
       type,
@@ -102,11 +106,17 @@ router.post('/', auth, async (req, res) => {
         mediaUrl,
         caption
       },
-      status: 'sent',
+      status: messageStatus,
       userId: req.userId
     });
 
     await message.save();
+
+    // Update conversation last message
+    conversation.lastMessage = text;
+    conversation.lastMessageAt = new Date();
+    conversation.unreadCount = 0; // Reset unread for outgoing message
+    await conversation.save();
 
     // Emit message via Socket.io
     const io = req.app.get('io');
@@ -121,7 +131,16 @@ router.post('/', auth, async (req, res) => {
     });
   } catch (error) {
     console.error('Send message error:', error);
-    res.status(500).json({ error: 'Failed to send message' });
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      conversationId: req.body.conversationId,
+      userId: req.userId
+    });
+    res.status(500).json({ 
+      error: 'Failed to send message',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 

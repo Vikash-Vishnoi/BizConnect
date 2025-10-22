@@ -48,19 +48,32 @@ class WhatsAppService {
   // Send a template message
   async sendTemplateMessage(to, templateName, languageCode, components = []) {
     try {
+      const templatePayload = {
+        name: templateName,
+        language: {
+          code: languageCode
+        }
+      };
+      
+      // Only add components if there are any (templates like hello_world don't need components)
+      if (components && components.length > 0) {
+        templatePayload.components = components;
+      }
+      
+      console.log('📤 Sending template message:');
+      console.log('  To:', to);
+      console.log('  Template:', templateName);
+      console.log('  Language:', languageCode);
+      console.log('  Components:', JSON.stringify(components));
+      console.log('  Payload:', JSON.stringify(templatePayload, null, 2));
+      
       const response = await axios.post(
         `${this.apiUrl}/${this.phoneNumberId}/messages`,
         {
           messaging_product: 'whatsapp',
           to: to,
           type: 'template',
-          template: {
-            name: templateName,
-            language: {
-              code: languageCode
-            },
-            components: components
-          }
+          template: templatePayload
         },
         {
           headers: {
@@ -70,13 +83,14 @@ class WhatsAppService {
         }
       );
 
+      console.log('✅ Template message sent successfully!');
       return {
         success: true,
         messageId: response.data.messages[0].id,
         data: response.data
       };
     } catch (error) {
-      console.error('WhatsApp Template Error:', error.response?.data || error.message);
+      console.error('❌ WhatsApp Template Error:', JSON.stringify(error.response?.data, null, 2) || error.message);
       return {
         success: false,
         error: error.response?.data?.error || error.message

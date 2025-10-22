@@ -287,28 +287,35 @@ async function startCampaign(campaignId, io) {
           // Send template message
           const template = campaign.templateId;
           
-          // Build components with variables
-          const components = [];
-          const bodyComponent = template.components.find(c => c.type === 'BODY');
+          // Build components with variables (convert to plain objects to avoid circular references)
+          let components = [];
           
-          if (bodyComponent && recipient.variables) {
-            const parameters = Object.values(recipient.variables).map(value => ({
-              type: 'text',
-              text: value
-            }));
+          // Only add components if there are actual variables to send
+          if (recipient.variables && Object.keys(recipient.variables).length > 0) {
+            const templateComponents = template.components ? JSON.parse(JSON.stringify(template.components)) : [];
+            const bodyComponent = templateComponents.find(c => c.type === 'BODY');
             
-            if (parameters.length > 0) {
-              components.push({
-                type: 'body',
-                parameters
-              });
+            if (bodyComponent) {
+              const parameters = Object.values(recipient.variables).map(value => ({
+                type: 'text',
+                text: String(value)
+              }));
+              
+              if (parameters.length > 0) {
+                components.push({
+                  type: 'body',
+                  parameters
+                });
+              }
             }
           }
+          // If no variables, send empty array (hello_world template doesn't need parameters)
+          components = components.length > 0 ? components : [];
 
           result = await whatsappService.sendTemplateMessage(
             recipient.phoneNumber,
-            template.name,
-            template.language,
+            String(template.name),
+            String(template.language),
             components
           );
         } else {
@@ -344,6 +351,7 @@ async function startCampaign(campaignId, io) {
         } else {
           campaign.recipients[i].status = 'failed';
           campaign.recipients[i].failedReason = result.error?.message || 'Unknown error';
+          console.error(`❌ WhatsApp API Error for ${recipient.phoneNumber}:`, result.error);
         }
 
         await campaign.save();

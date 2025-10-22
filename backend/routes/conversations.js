@@ -44,6 +44,52 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
+// @route   POST /api/conversations
+// @desc    Create a new conversation
+// @access  Private
+router.post('/', auth, async (req, res) => {
+  try {
+    const { phoneNumber, name } = req.body;
+
+    if (!phoneNumber) {
+      return res.status(400).json({ error: 'Phone number is required' });
+    }
+
+    // Check if conversation already exists
+    let conversation = await Conversation.findOne({
+      phoneNumber,
+      userId: req.userId
+    });
+
+    if (conversation) {
+      return res.json({
+        message: 'Conversation already exists',
+        conversation
+      });
+    }
+
+    // Create new conversation
+    conversation = new Conversation({
+      phoneNumber,
+      name: name || phoneNumber,
+      userId: req.userId,
+      metadata: {
+        source: 'manual'
+      }
+    });
+
+    await conversation.save();
+
+    res.status(201).json({
+      message: 'Conversation created successfully',
+      conversation
+    });
+  } catch (error) {
+    console.error('Create conversation error:', error);
+    res.status(500).json({ error: 'Failed to create conversation' });
+  }
+});
+
 // @route   GET /api/conversations/:id
 // @desc    Get conversation by ID
 // @access  Private
