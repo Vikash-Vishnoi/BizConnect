@@ -30,6 +30,12 @@ interface SocketContextValue {
   ) => () => void;
   onNewMessage: (handler: (data: NewMessageNotification) => void) => () => void;
   onMessageUpdate: (handler: (data: MessageUpdate) => void) => () => void;
+  onConversationStatusChanged: (
+    handler: (data: { conversationId: string; status: string; previousStatus?: string }) => void
+  ) => () => void;
+  onConversationNew: (
+    handler: (data: { conversation: any }) => void
+  ) => () => void;
   onTemplateStatusUpdate: (
     handler: (data: TemplateStatusUpdate) => void
   ) => () => void;
@@ -60,16 +66,12 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({children}) => {
     lastSync: null,
   });
 
-  // Initialize services
   useEffect(() => {
     const init = async () => {
-      // Initialize notification service
       await notificationService.initialize();
 
-      // Initialize offline queue
       await offlineQueueService.initialize();
 
-      // Connect socket to backend server
       try {
         await socketService.connect();
         console.log('Socket connection initiated');
@@ -80,17 +82,14 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({children}) => {
 
     init();
 
-    // Subscribe to socket state changes
     const unsubscribeSocket = socketService.subscribeToState(state => {
       setSocketState(state);
     });
 
-    // Subscribe to offline queue changes
     const unsubscribeQueue = offlineQueueService.subscribe(state => {
       setOfflineQueue(state);
     });
 
-    // Handle app state changes (background/foreground)
     const subscription = AppState.addEventListener(
       'change',
       handleAppStateChange
@@ -104,44 +103,32 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({children}) => {
     };
   }, []);
 
-  // Handle app state changes
   const handleAppStateChange = (nextAppState: AppStateStatus) => {
     if (nextAppState === 'active') {
-      // App came to foreground
-      // TODO: Uncomment when backend server is ready
-      // if (!socketService.isConnected()) {
-      //   socketService.connect();
-      // }
-      
-      // Sync offline queue
+
       offlineQueueService.syncQueue();
     } else if (nextAppState === 'background') {
-      // App went to background
       console.log('App went to background');
     }
   };
 
-  // Setup socket event handlers
   useEffect(() => {
     socketService.on({
       onNewMessage: (data: NewMessageNotification) => {
         console.log('New message received:', data);
-        
-        // Show notification
+
         notificationService.notifyNewMessage({
           conversationId: data.conversationId,
           from: data.from,
           message: data.text,
         });
 
-        // Increment badge
         notificationService.incrementBadge();
       },
 
       onCampaignCompleted: (data: {campaignId: string; name?: string; stats?: any}) => {
         console.log('Campaign completed:', data);
-        
-        // Show notification
+
         if (data.name && data.stats) {
           notificationService.notifyCampaignCompleted({
             campaignId: data.campaignId,
@@ -153,12 +140,11 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({children}) => {
 
       onTemplateStatusUpdate: (data: TemplateStatusUpdate) => {
         console.log('Template status updated:', data);
-        
-        // Show notification for status changes
+
         if (data.status === 'approved' || data.status === 'rejected') {
           notificationService.notifyTemplateStatus({
             templateId: data.templateId,
-            templateName: 'Template', // You might want to pass this from the event
+            templateName: 'Template',
             status: data.status,
             reason: data.reason,
           });
@@ -167,8 +153,7 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({children}) => {
 
       onQualityScoreUpdate: (data: {score: number; status: string}) => {
         console.log('Quality score updated:', data);
-        
-        // Show alert if quality is low
+
         if (data.status === 'low') {
           notificationService.notifyQualityScore({
             score: data.score,
@@ -184,7 +169,6 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({children}) => {
     };
   }, []);
 
-  // Connection methods
   const connect = useCallback(() => {
     socketService.connect();
   }, []);
@@ -193,7 +177,6 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({children}) => {
     socketService.disconnect();
   }, []);
 
-  // Event subscription methods
   const onCampaignProgress = useCallback(
     (handler: (data: CampaignProgressUpdate) => void) => {
       socketService.on({onCampaignProgress: handler});
@@ -214,6 +197,22 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({children}) => {
     (handler: (data: MessageUpdate) => void) => {
       socketService.on({onMessageUpdate: handler});
       return () => socketService.off('onMessageUpdate');
+    },
+    []
+  );
+
+  const onConversationStatusChanged = useCallback(
+    (handler: (data: { conversationId: string; status: string; previousStatus?: string }) => void) => {
+      socketService.on({ onConversationStatusChanged: handler as any });
+      return () => socketService.off('onConversationStatusChanged');
+    },
+    []
+  );
+
+  const onConversationNew = useCallback(
+    (handler: (data: { conversation: any }) => void) => {
+      socketService.on({ onConversationNew: handler as any });
+      return () => socketService.off('onConversationNew');
     },
     []
   );
@@ -242,6 +241,8 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({children}) => {
     onCampaignProgress,
     onNewMessage,
     onMessageUpdate,
+    onConversationStatusChanged,
+    onConversationNew,
     onTemplateStatusUpdate,
     onAnalyticsUpdate,
   };

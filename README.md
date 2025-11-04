@@ -69,11 +69,43 @@ npm run ios
 
 ## 📖 Documentation
 
+- **[QUICK_REFERENCE.md](./QUICK_REFERENCE.md)** - Quick reference card for common tasks
+- **[WORKFLOW_GUIDE.md](./WORKFLOW_GUIDE.md)** - Complete workflow from templates to campaigns to inbox
+- **[WORKFLOW_DIAGRAM.md](./WORKFLOW_DIAGRAM.md)** - Visual workflow diagrams and data flow
 - **[SETUP_GUIDE.md](./SETUP_GUIDE.md)** - Detailed setup instructions
 - **[PROJECT_COMPLETE.md](./PROJECT_COMPLETE.md)** - Complete project documentation
 - **[backend/README.md](./backend/README.md)** - Backend API documentation
 
 ## ✨ Features
+
+### Complete Workflow
+
+```
+📝 1. CREATE TEMPLATE
+   ↓ Create message template in Templates screen
+   ↓ Submit for WhatsApp approval
+   ↓ Wait for approval status (webhook notification)
+   ↓
+✅ 2. TEMPLATE APPROVED
+   ↓ Template becomes available for campaigns
+   ↓ Template can be set as welcome message
+   ↓
+🎯 3. CREATE & RUN CAMPAIGN
+   ↓ Select approved template
+   ↓ Add recipients (manually or CSV)
+   ↓ Start campaign → Messages sent to masses
+   ↓
+💬 4. MESSAGES APPEAR IN INBOX
+   ↓ Campaign messages create conversations
+   ↓ Recipients appear in Inbox
+   ↓ Track delivery & read status
+   ↓
+👋 5. NEW CONTACTS GET WELCOME MESSAGE
+   ↓ First-time contacts message you
+   ↓ Auto welcome message sent (template or text)
+   ↓ Reduces redundancy - welcome template can be edited
+   ↓ Appears in Inbox for continued conversation
+```
 
 ### Backend (Node.js)
 - ✅ RESTful API with 50+ endpoints
@@ -84,16 +116,19 @@ npm run ios
 - ✅ Webhook handlers for WhatsApp events
 - ✅ Campaign automation engine
 - ✅ Analytics and reporting
+- ✅ Auto welcome messages (configurable per user)
+- ✅ Template approval workflow
 
 ### Frontend (React Native)
 - ✅ Authentication & user management
 - ✅ Campaign creation & management
-- ✅ Template designer
+- ✅ Template designer with approval tracking
 - ✅ Inbox & conversations
 - ✅ Real-time notifications
 - ✅ Analytics dashboard with charts
 - ✅ Offline support
 - ✅ Push notifications
+- ✅ Welcome message settings (editable)
 
 ## 🔑 Environment Variables
 

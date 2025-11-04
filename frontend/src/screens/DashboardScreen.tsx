@@ -101,28 +101,23 @@ const DashboardScreen = ({navigation, route}: Props) => {
         onPress: async () => {
           try {
             setIsLoggingOut(true);
-            
-            // Call logout API (ignore errors)
+
             try {
               await authAPI.logout();
             } catch (apiError) {
               console.log('Logout API error (continuing anyway):', apiError);
             }
-            
-            // Clear local storage
+
             await storageService.clearAuth();
-            
-            // Small delay to ensure storage is cleared
+
             await new Promise(resolve => setTimeout(resolve, 100));
-            
-            // Navigate to login
+
             navigation.reset({
               index: 0,
               routes: [{name: 'Login'}],
             });
           } catch (error) {
             console.error('Logout error:', error);
-            // Even on error, try to navigate to login
             navigation.reset({
               index: 0,
               routes: [{name: 'Login'}],
@@ -137,7 +132,7 @@ const DashboardScreen = ({navigation, route}: Props) => {
 
   return (
     <View style={styles.container}>
-      {/* Gradient Header */}
+      {}
       <LinearGradient
         colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
         style={styles.header}
@@ -178,7 +173,7 @@ const DashboardScreen = ({navigation, route}: Props) => {
             tintColor={theme.colors.primary}
           />
         }>
-        {/* User Info Card */}
+        {}
         {user?.email && (
           <Card variant="gradient" style={styles.welcomeCard}>
             <View style={styles.welcomeContent}>
@@ -194,7 +189,7 @@ const DashboardScreen = ({navigation, route}: Props) => {
           </Card>
         )}
 
-        {/* Analytics Metrics */}
+        {}
         {isLoadingAnalytics ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={theme.colors.primary} />
@@ -253,7 +248,7 @@ const DashboardScreen = ({navigation, route}: Props) => {
           </>
         )}
 
-        {/* Quick Actions */}
+        {}
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>
         </View>
@@ -342,9 +337,27 @@ const DashboardScreen = ({navigation, route}: Props) => {
             </View>
             <Text style={styles.chevronText}>›</Text>
           </TouchableOpacity>
+
+          <View style={styles.actionDivider} />
+
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => navigation.navigate('WelcomeMessageSettings')}
+            activeOpacity={0.7}>
+            <View style={[styles.actionIconContainer, {backgroundColor: '#FEF3C7'}]}>
+              <Text style={styles.actionIcon}>👋</Text>
+            </View>
+            <View style={styles.actionContent}>
+              <Text style={styles.actionTitle}>Welcome Messages</Text>
+              <Text style={styles.actionSubtitle}>
+                Auto-greet new contacts
+              </Text>
+            </View>
+            <Text style={styles.chevronText}>›</Text>
+          </TouchableOpacity>
         </Card>
 
-        {/* Recent Activity */}
+        {}
         {activities.length > 0 && (
           <>
             <View style={styles.sectionHeader}>
@@ -356,7 +369,7 @@ const DashboardScreen = ({navigation, route}: Props) => {
           </>
         )}
 
-        {/* Bottom Spacing */}
+        {}
         <View style={styles.bottomSpacing} />
       </ScrollView>
     </View>

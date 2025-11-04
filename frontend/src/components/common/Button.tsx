@@ -53,7 +53,7 @@ const Button: React.FC<ButtonProps> = ({
 
   const getTextStyle = (): TextStyle => {
     const baseStyle = size === 'small' ? theme.typography.buttonSmall : theme.typography.button;
-    
+
     switch (variant) {
       case 'primary':
         return {...baseStyle, color: theme.colors.textInverse};
@@ -165,7 +165,6 @@ const Button: React.FC<ButtonProps> = ({
     );
   }
 
-  // Secondary variant
   return (
     <TouchableOpacity
       style={[styles.wrapper, styles.secondaryButton, containerStyle, style]}

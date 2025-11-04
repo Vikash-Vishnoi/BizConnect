@@ -36,24 +36,18 @@ const ActivityFeed: React.FC<ActivityFeedProps> = ({
 
   const displayActivities = activities.slice(0, maxItems);
 
-  // Navigate based on activity type
   const handleActivityPress = (activity: RecentActivity) => {
     try {
-      // Extract ID from description or use entityId if available
       const campaignMatch = activity.description.match(/campaign "([^"]+)"/);
       const conversationMatch = activity.description.match(/conversation with (.+)/);
-      
+
       if (activity.type === 'campaign') {
-        // Navigate to campaigns screen
         navigation.navigate('Campaigns');
       } else if (activity.type === 'template') {
-        // Navigate to templates screen
         navigation.navigate('Templates');
       } else if (activity.type === 'conversation' || activity.type === 'message') {
-        // Navigate to inbox
         navigation.navigate('Inbox');
       } else {
-        // Default to analytics for other types
         navigation.navigate('Analytics');
       }
     } catch (error) {
@@ -61,13 +55,10 @@ const ActivityFeed: React.FC<ActivityFeedProps> = ({
     }
   };
 
-  // Get emoji icon with fallback
   const getActivityIcon = (iconString: string): string => {
-    // If already an emoji, use it directly
     if (iconString && iconString.length <= 2) {
       return iconString;
     }
-    // Fallback icon
     return '📊';
   };
 
@@ -77,7 +68,7 @@ const ActivityFeed: React.FC<ActivityFeedProps> = ({
       <ScrollView style={styles.activityList} showsVerticalScrollIndicator={false}>
         {displayActivities.map((activity, index) => (
           <TouchableOpacity
-            key={activity.id}
+            key={activity.id || `${activity.type}-${activity.timestamp}-${index}`}
             style={[
               styles.activityItem,
               index === displayActivities.length - 1 && styles.lastItem,

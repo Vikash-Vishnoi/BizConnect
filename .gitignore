@@ -86,6 +86,11 @@ backend/node_modules/
 backend/uploads/
 backend/logs/
 
+# Redundant minified files (we don't use minification in source code)
+# These are duplicates and not actually minified
+**/*.min.js
+!**/node_modules/**/*.min.js
+
 # Old structure files at root (if any remain from reorganization)
 /android/
 /ios/
@@ -96,3 +101,4 @@ App.tsx.backup
 index.js
 app.json
 *.ps1
+*.md

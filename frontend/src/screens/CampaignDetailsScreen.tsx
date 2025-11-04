@@ -107,7 +107,6 @@ const CampaignDetailsScreen = ({navigation, route}: Props) => {
         {
           text: 'Resend',
           onPress: () => {
-            // Navigate to create campaign with pre-filled data
             navigation.navigate('CreateCampaign', {
               duplicate: campaign,
             });
@@ -120,15 +119,14 @@ const CampaignDetailsScreen = ({navigation, route}: Props) => {
   const handleEditCampaign = () => {
     if (!campaign) return;
 
-    if (campaign.status === 'running' || campaign.status === 'completed') {
+    if (campaign.status === 'active' || campaign.status === 'completed') {
       Alert.alert(
         'Cannot Edit',
-        'You cannot edit a running or completed campaign. Use "Resend" to create a new campaign with similar settings.',
+        'You cannot edit an active or completed campaign. Use "Resend" to create a new campaign with similar settings.',
       );
       return;
     }
 
-    // Navigate to edit screen (you can create a separate EditCampaignScreen or reuse CreateCampaign)
     navigation.navigate('CreateCampaign', {
       edit: campaign,
     });
@@ -148,7 +146,7 @@ const CampaignDetailsScreen = ({navigation, route}: Props) => {
       );
     }
 
-    if (campaign.status === 'running') {
+    if (campaign.status === 'active') {
       return (
         <TouchableOpacity
           style={[styles.actionButton, styles.pauseButton]}
@@ -192,26 +190,34 @@ const CampaignDetailsScreen = ({navigation, route}: Props) => {
     );
   }
 
+  const stats = campaign.stats || {
+    total: campaign.patientCount || 0,
+    sent: campaign.sentCount || 0,
+    delivered: campaign.deliveredCount || 0,
+    read: 0,
+    failed: campaign.failedCount || 0,
+    pending: 0,
+  };
+
   const progress =
-    (campaign.patientCount || 0) > 0
-      ? Math.round(((campaign.sentCount || 0) / (campaign.patientCount || 0)) * 100)
+    stats.total > 0
+      ? Math.round((stats.sent / stats.total) * 100)
       : 0;
 
   const deliveryRate =
-    (campaign.sentCount || 0) > 0
-      ? Math.round(((campaign.deliveredCount || 0) / (campaign.sentCount || 0)) * 100)
+    stats.sent > 0
+      ? Math.round((stats.delivered / stats.sent) * 100)
       : 0;
 
   const failureRate =
-    (campaign.sentCount || 0) > 0
-      ? Math.round(((campaign.failedCount || 0) / (campaign.sentCount || 0)) * 100)
+    stats.sent > 0
+      ? Math.round((stats.failed / stats.sent) * 100)
       : 0;
 
-  // Safe values with defaults
-  const patientCount = campaign.patientCount || 0;
-  const sentCount = campaign.sentCount || 0;
-  const deliveredCount = campaign.deliveredCount || 0;
-  const failedCount = campaign.failedCount || 0;
+  const patientCount = stats.total;
+  const sentCount = stats.sent;
+  const deliveredCount = stats.delivered;
+  const failedCount = stats.failed;
 
   const formatDate = (dateString: string | undefined) => {
     if (!dateString) return 'Not set';
@@ -226,7 +232,7 @@ const CampaignDetailsScreen = ({navigation, route}: Props) => {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
+      {}
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
@@ -237,7 +243,7 @@ const CampaignDetailsScreen = ({navigation, route}: Props) => {
           Campaign Details
         </Text>
         <View style={styles.headerActions}>
-          {/* Edit Button - only for draft/scheduled campaigns */}
+          {}
           {(campaign.status === 'draft' || campaign.status === 'scheduled' || campaign.status === 'paused') && (
             <TouchableOpacity
               style={styles.headerButton}
@@ -245,7 +251,7 @@ const CampaignDetailsScreen = ({navigation, route}: Props) => {
               <Text style={styles.headerButtonText}>✏️</Text>
             </TouchableOpacity>
           )}
-          {/* Resend Button - for any campaign */}
+          {}
           <TouchableOpacity
             style={styles.headerButton}
             onPress={handleResendCampaign}>
@@ -255,7 +261,7 @@ const CampaignDetailsScreen = ({navigation, route}: Props) => {
       </View>
 
       <ScrollView style={styles.content}>
-        {/* Campaign Info */}
+        {}
         <View style={styles.infoCard}>
           <View style={styles.titleRow}>
             <Text style={styles.title}>{campaign.name}</Text>
@@ -285,7 +291,7 @@ const CampaignDetailsScreen = ({navigation, route}: Props) => {
           </View>
         </View>
 
-        {/* Progress Section */}
+        {}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Campaign Progress</Text>
 
@@ -311,7 +317,7 @@ const CampaignDetailsScreen = ({navigation, route}: Props) => {
           />
         </View>
 
-        {/* Stats Grid */}
+        {}
         <View style={styles.statsGrid}>
           <View style={styles.statBox}>
             <Text style={styles.statValue}>
@@ -327,7 +333,7 @@ const CampaignDetailsScreen = ({navigation, route}: Props) => {
           </View>
         </View>
 
-        {/* Action Button */}
+        {}
         {renderActionButton()}
 
         {actionLoading && (

@@ -22,12 +22,14 @@ interface TemplateBuilderProps {
   initialData?: Partial<CreateTemplatePayload>;
   onSave: (template: CreateTemplatePayload) => void;
   onCancel: () => void;
+  onChange?: (template: CreateTemplatePayload) => void;
 }
 
 const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
   initialData,
   onSave,
   onCancel,
+  onChange,
 }) => {
   const [name, setName] = useState(initialData?.name || '');
   const [category, setCategory] = useState<TemplateCategory>(
@@ -41,25 +43,30 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
   );
   const [errors, setErrors] = useState<string[]>([]);
 
-  const addComponent = (type: TemplateComponentType) => {
-    // Check component order
-    const lastComponent = components[components.length - 1];
+  // Sort components in the correct order: HEADER -> BODY -> FOOTER -> BUTTONS
+  const sortComponents = (comps: TemplateComponent[]): TemplateComponent[] => {
     const order: TemplateComponentType[] = ['HEADER', 'BODY', 'FOOTER', 'BUTTONS'];
-    
-    if (lastComponent) {
-      const lastIndex = order.indexOf(lastComponent.type);
-      const newIndex = order.indexOf(type);
-      
-      if (newIndex <= lastIndex && type !== 'BODY') {
-        Alert.alert(
-          'Invalid Order',
-          'Components must be in order: HEADER, BODY, FOOTER, BUTTONS',
-        );
-        return;
-      }
-    }
+    return [...comps].sort((a, b) => {
+      return order.indexOf(a.type) - order.indexOf(b.type);
+    });
+  };
 
-    // Check for duplicates (except BODY can have multiple)
+  // Notify parent of changes for live preview
+  const notifyChange = (updatedComponents: TemplateComponent[]) => {
+    if (onChange && name) {
+      const sortedComponents = sortComponents(updatedComponents);
+      const template: CreateTemplatePayload = {
+        name: name.toLowerCase().replace(/\s+/g, '_'),
+        category,
+        language,
+        components: sortedComponents,
+      };
+      onChange(template);
+    }
+  };
+
+  const addComponent = (type: TemplateComponentType) => {
+    // Check for duplicates (except BODY which can have multiple)
     if (type !== 'BODY' && components.some(c => c.type === type)) {
       Alert.alert(
         'Duplicate Component',
@@ -75,32 +82,38 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
       ...(type === 'BUTTONS' && {buttons: []}),
     };
 
-    setComponents([...components, newComponent]);
+    const updatedComponents = [...components, newComponent];
+    setComponents(updatedComponents);
+    notifyChange(updatedComponents);
   };
 
   const updateComponent = (index: number, component: TemplateComponent) => {
     const newComponents = [...components];
     newComponents[index] = component;
     setComponents(newComponents);
+    notifyChange(newComponents);
   };
 
   const deleteComponent = (index: number) => {
     const newComponents = [...components];
     newComponents.splice(index, 1);
     setComponents(newComponents);
+    notifyChange(newComponents);
   };
 
   const handleSave = () => {
+    // Sort components in the correct order before saving
+    const sortedComponents = sortComponents(components);
+    
     const template: CreateTemplatePayload = {
       name: name.toLowerCase().replace(/\s+/g, '_'),
       category,
       language,
-      components,
+      components: sortedComponents,
     };
 
-    // Validate template
     const validation = templateService.validateTemplate(template);
-    
+
     if (!validation.isValid) {
       setErrors(validation.errors);
       Alert.alert(
@@ -122,13 +135,16 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scrollView}>
-        {/* Template Name */}
+        {}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Template Name</Text>
           <TextInput
             style={styles.input}
             value={name}
-            onChangeText={setName}
+            onChangeText={(text) => {
+              setName(text);
+              notifyChange(components);
+            }}
             placeholder="e.g., health_reminder"
             autoCapitalize="none"
           />
@@ -137,7 +153,7 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
           </Text>
         </View>
 
-        {/* Category */}
+        {}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Category</Text>
           <View style={styles.optionButtons}>
@@ -149,7 +165,10 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
                     styles.optionButton,
                     category === cat && styles.optionButtonActive,
                   ]}
-                  onPress={() => setCategory(cat)}>
+                  onPress={() => {
+                    setCategory(cat);
+                    notifyChange(components);
+                  }}>
                   <Text
                     style={[
                       styles.optionButtonText,
@@ -163,7 +182,7 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
           </View>
         </View>
 
-        {/* Language */}
+        {}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Language</Text>
           <View style={styles.optionButtons}>
@@ -181,7 +200,10 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
                   styles.optionButton,
                   language === lang.code && styles.optionButtonActive,
                 ]}
-                onPress={() => setLanguage(lang.code)}>
+                onPress={() => {
+                  setLanguage(lang.code);
+                  notifyChange(components);
+                }}>
                 <Text
                   style={[
                     styles.optionButtonText,
@@ -194,10 +216,13 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
           </View>
         </View>
 
-        {/* Components */}
+        {}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Template Components</Text>
-          
+          <Text style={styles.helpText}>
+            💡 Add components in any order. They will be automatically sorted: Header → Body → Footer → Buttons
+          </Text>
+
           {components.length === 0 && (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>
@@ -215,7 +240,7 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
             />
           ))}
 
-          {/* Add Component Buttons */}
+          {}
           <View style={styles.addComponentSection}>
             <Text style={styles.addComponentTitle}>Add Component:</Text>
             <View style={styles.addComponentButtons}>
@@ -258,7 +283,7 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
           </View>
         </View>
 
-        {/* Validation Errors */}
+        {}
         {errors.length > 0 && (
           <View style={styles.errorContainer}>
             <Text style={styles.errorTitle}>⚠️ Validation Errors:</Text>
@@ -271,7 +296,7 @@ const TemplateBuilder: React.FC<TemplateBuilderProps> = ({
         )}
       </ScrollView>
 
-      {/* Action Buttons */}
+      {}
       <View style={styles.footer}>
         <TouchableOpacity
           style={[styles.button, styles.cancelButton]}

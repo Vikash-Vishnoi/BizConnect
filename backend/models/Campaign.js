@@ -20,15 +20,7 @@ const campaignSchema = new mongoose.Schema({
   templateId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Template',
-    default: null
-  },
-  message: {
-    type: String,
-    trim: true
-  },
-  scheduledAt: {
-    type: Date,
-    default: null
+    required: [true, 'Template is required for campaign']
   },
   startedAt: {
     type: Date,
@@ -61,7 +53,17 @@ const campaignSchema = new mongoose.Schema({
     deliveredAt: Date,
     readAt: Date,
     failedReason: String,
-    whatsappMessageId: String
+    whatsappMessageId: String,
+    // ✅ OPTIMIZATION: Store actual message content per recipient (with personalization)
+    messageContent: {
+      text: String,
+      mediaUrl: String,
+      templateName: String
+    },
+    conversationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Conversation'
+    }
   }],
   stats: {
     total: {
@@ -94,7 +96,7 @@ const campaignSchema = new mongoose.Schema({
       type: Number,
       default: 10, // messages per minute
       min: 1,
-      max: 100
+      max: 80 // ✅ FIXED: WhatsApp Business API limit is 80 msg/sec = 4800/min, keeping conservative 80/min
     },
     retryFailed: {
       type: Boolean,
@@ -119,7 +121,6 @@ const campaignSchema = new mongoose.Schema({
 // Index for faster queries
 campaignSchema.index({ status: 1, createdAt: -1 });
 campaignSchema.index({ userId: 1, createdAt: -1 });
-campaignSchema.index({ scheduledAt: 1 });
 
 // Update stats before saving
 campaignSchema.pre('save', function(next) {

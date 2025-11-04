@@ -1,40 +1,34 @@
-// Real-time Socket Events
 export enum SocketEvent {
-  // Connection events
   CONNECT = 'connect',
   DISCONNECT = 'disconnect',
   CONNECT_ERROR = 'connect_error',
   RECONNECT = 'reconnect',
-  
-  // Campaign events
+
   CAMPAIGN_CREATED = 'campaign:created',
   CAMPAIGN_UPDATED = 'campaign:updated',
   CAMPAIGN_PROGRESS = 'campaign:progress',
   CAMPAIGN_COMPLETED = 'campaign:completed',
   CAMPAIGN_FAILED = 'campaign:failed',
-  
-  // Message events
+
   MESSAGE_RECEIVED = 'message:received',
   MESSAGE_SENT = 'message:sent',
   MESSAGE_DELIVERED = 'message:delivered',
   MESSAGE_READ = 'message:read',
   MESSAGE_FAILED = 'message:failed',
-  
-  // Conversation events
+
   CONVERSATION_UPDATED = 'conversation:updated',
+  CONVERSATION_STATUS_CHANGED = 'conversation:statusChanged',
+  CONVERSATION_NEW = 'conversation:new',
   CONVERSATION_UNREAD_COUNT = 'conversation:unread_count',
-  
-  // Template events
+
   TEMPLATE_APPROVED = 'template:approved',
   TEMPLATE_REJECTED = 'template:rejected',
   TEMPLATE_CREATED = 'template:created',
-  
-  // Analytics events
+
   ANALYTICS_UPDATED = 'analytics:updated',
   QUALITY_SCORE_UPDATED = 'quality:updated',
 }
 
-// Socket connection state
 export interface SocketState {
   isConnected: boolean;
   isConnecting: boolean;
@@ -43,7 +37,6 @@ export interface SocketState {
   error: string | null;
 }
 
-// Campaign progress update
 export interface CampaignProgressUpdate {
   campaignId: string;
   totalMessages: number;
@@ -55,7 +48,6 @@ export interface CampaignProgressUpdate {
   timestamp: string;
 }
 
-// Message update
 export interface MessageUpdate {
   messageId: string;
   conversationId: string;
@@ -64,7 +56,6 @@ export interface MessageUpdate {
   error?: string;
 }
 
-// New message notification
 export interface NewMessageNotification {
   messageId: string;
   conversationId: string;
@@ -74,7 +65,6 @@ export interface NewMessageNotification {
   hasMedia: boolean;
 }
 
-// Template status update
 export interface TemplateStatusUpdate {
   templateId: string;
   status: 'approved' | 'rejected' | 'pending';
@@ -82,15 +72,13 @@ export interface TemplateStatusUpdate {
   timestamp: string;
 }
 
-// Analytics update
 export interface AnalyticsUpdate {
   type: 'daily' | 'campaign' | 'conversation' | 'quality';
   data: any;
   timestamp: string;
 }
 
-// Push notification types
-export type NotificationType = 
+export type NotificationType =
   | 'new_message'
   | 'campaign_completed'
   | 'campaign_failed'
@@ -113,7 +101,6 @@ export interface NotificationPermission {
   token?: string;
 }
 
-// Offline queue
 export interface QueuedMessage {
   id: string;
   conversationId: string;
@@ -130,14 +117,12 @@ export interface OfflineQueueState {
   lastSync: string | null;
 }
 
-// Network state
 export interface NetworkState {
   isConnected: boolean;
   isInternetReachable: boolean | null;
   type: string | null;
 }
 
-// Real-time state
 export interface RealtimeState {
   socket: SocketState;
   network: NetworkState;
@@ -148,7 +133,6 @@ export interface RealtimeState {
   };
 }
 
-// Socket event handlers
 export type SocketEventHandler<T = any> = (data: T) => void;
 
 export interface SocketEventHandlers {
@@ -159,6 +143,8 @@ export interface SocketEventHandlers {
   onCampaignCompleted?: SocketEventHandler<{campaignId: string}>;
   onNewMessage?: SocketEventHandler<NewMessageNotification>;
   onMessageUpdate?: SocketEventHandler<MessageUpdate>;
+  onConversationStatusChanged?: SocketEventHandler<{ conversationId: string; status: string; previousStatus?: string }>;
+  onConversationNew?: SocketEventHandler<{ conversation: any }>;
   onTemplateStatusUpdate?: SocketEventHandler<TemplateStatusUpdate>;
   onAnalyticsUpdate?: SocketEventHandler<AnalyticsUpdate>;
   onQualityScoreUpdate?: SocketEventHandler<{score: number; status: string}>;

@@ -24,46 +24,37 @@ const SplashScreen: React.FC<Props> = ({navigation}) => {
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // Fade in animation
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 500,
       useNativeDriver: true,
     }).start();
 
-    // Check authentication status
     checkAuthStatus();
   }, []);
 
   const checkAuthStatus = async () => {
     try {
-      // Get token from storage
       const token = await storageService.getToken();
       const rememberMe = await storageService.getRememberMe();
 
-      // Minimum splash screen display time
       await new Promise(resolve => setTimeout(resolve, 1500));
 
       if (token && rememberMe) {
-        // Validate token with backend
         try {
           const user = await authAPI.me();
-          // Token is valid, go to Dashboard
           navigation.replace('Dashboard', {user});
         } catch (error) {
-          // Token invalid or expired, clear storage and go to login
           console.log('Token validation failed:', error);
           await storageService.clearAuth();
           navigation.replace('Login');
         }
       } else {
-        // No token or user didn't want to be remembered, go to login
         await storageService.clearAuth();
         navigation.replace('Login');
       }
     } catch (error) {
       console.error('Auth check error:', error);
-      // On error, go to login screen
       navigation.replace('Login');
     }
   };
@@ -71,23 +62,23 @@ const SplashScreen: React.FC<Props> = ({navigation}) => {
   return (
     <View style={styles.container}>
       <Animated.View style={[styles.content, {opacity: fadeAnim}]}>
-        {/* Logo/Icon */}
+        {}
         <View style={styles.iconContainer}>
           <Text style={styles.icon}>📱</Text>
         </View>
 
-        {/* App Name */}
+        {}
         <Text style={styles.title}>WhatsApp Marketing</Text>
         <Text style={styles.subtitle}>Business Communication Platform</Text>
 
-        {/* Loading Indicator */}
+        {}
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#25D366" />
           <Text style={styles.loadingText}>Loading...</Text>
         </View>
       </Animated.View>
 
-      {/* Version */}
+      {}
       <Text style={styles.version}>Version 1.0.0</Text>
     </View>
   );

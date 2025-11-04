@@ -12,11 +12,19 @@ interface Props {
 }
 
 const CampaignCard: React.FC<Props> = ({campaign, onPress}) => {
-  // Safely handle undefined values with defaults
-  const patientCount = campaign.patientCount || 0;
-  const sentCount = campaign.sentCount || 0;
-  const deliveredCount = campaign.deliveredCount || 0;
-  
+  const stats = campaign.stats || {
+    total: campaign.patientCount || 0,
+    sent: campaign.sentCount || 0,
+    delivered: campaign.deliveredCount || 0,
+    read: 0,
+    failed: campaign.failedCount || 0,
+    pending: 0,
+  };
+
+  const patientCount = stats.total;
+  const sentCount = stats.sent;
+  const deliveredCount = stats.delivered;
+
   const progress =
     patientCount > 0
       ? Math.round((sentCount / patientCount) * 100)
@@ -59,7 +67,7 @@ const CampaignCard: React.FC<Props> = ({campaign, onPress}) => {
         </Text>
       )}
 
-      {/* Progress Bar */}
+      {}
       {campaign.status !== 'draft' && (
         <View style={styles.progressSection}>
           <View style={styles.progressHeader}>
@@ -77,7 +85,7 @@ const CampaignCard: React.FC<Props> = ({campaign, onPress}) => {
         </View>
       )}
 
-      {/* Stats Grid */}
+      {}
       <View style={styles.statsGrid}>
         <View style={styles.statItem}>
           <View style={[styles.statIconContainer, {backgroundColor: theme.colors.infoLight}]}>
@@ -112,7 +120,7 @@ const CampaignCard: React.FC<Props> = ({campaign, onPress}) => {
         </View>
       </View>
 
-      {/* Footer */}
+      {}
       <View style={styles.footer}>
         <View style={styles.footerItem}>
           <Text style={styles.footerIcon}>📅</Text>

@@ -11,6 +11,8 @@ import {
   Platform,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Feather';
+import DocumentPicker from 'react-native-document-picker';
+import RNFS from 'react-native-fs';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {RootStackParamList} from '../types/navigation';
 import {campaignAPI} from '../services/campaignService';
@@ -27,36 +29,29 @@ const CreateCampaignScreen = ({navigation, route}: Props) => {
 
   const [name, setName] = useState(sourceCampaign?.name || '');
   const [description, setDescription] = useState(sourceCampaign?.description || '');
-  const [message, setMessage] = useState('');
   const [templateId, setTemplateId] = useState('');
   const [recipients, setRecipients] = useState('');
   const [recipientsList, setRecipientsList] = useState<Array<{phone: string; name: string}>>([]);
   const [currentPhone, setCurrentPhone] = useState('');
   const [currentName, setCurrentName] = useState('');
-  const [scheduledDate, setScheduledDate] = useState('');
-  const [scheduledTime, setScheduledTime] = useState('');
   const [loading, setLoading] = useState(false);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(false);
 
-  // Validation errors
   const [nameError, setNameError] = useState('');
   const [descriptionError, setDescriptionError] = useState('');
-  const [messageError, setMessageError] = useState('');
+  const [templateError, setTemplateError] = useState('');
   const [recipientsError, setRecipientsError] = useState('');
   const [phoneError, setPhoneError] = useState('');
 
-  // Load approved templates
   useEffect(() => {
     loadTemplates();
-    
-    // Load source campaign data if editing or duplicating
+
     if (sourceCampaign) {
       if (isDuplicateMode) {
         setName(sourceCampaign.name + ' (Copy)');
       }
-      
-      // Load recipients
+
       if (sourceCampaign.recipients && Array.isArray(sourceCampaign.recipients)) {
         const loadedRecipients = sourceCampaign.recipients.map((r: any) => ({
           phone: r.phoneNumber || r.phone || '',
@@ -71,14 +66,12 @@ const CreateCampaignScreen = ({navigation, route}: Props) => {
     setLoadingTemplates(true);
     try {
       const response = await templateService.getTemplates();
-      // Backend returns {templates: [...]} so extract the array
       const templateArray = Array.isArray(response) ? response : (response as any).templates || [];
-      // Filter only approved templates
       const approvedTemplates = templateArray.filter((t: Template) => t.status === 'approved');
       setTemplates(approvedTemplates);
     } catch (error) {
       console.error('Failed to load templates:', error);
-      setTemplates([]); // Set empty array on error
+      setTemplates([]);
     } finally {
       setLoadingTemplates(false);
     }
@@ -101,11 +94,11 @@ const CreateCampaignScreen = ({navigation, route}: Props) => {
       setDescriptionError('');
     }
 
-    if (!message.trim() && !templateId) {
-      setMessageError('Message or template is required');
+    if (!templateId) {
+      setTemplateError('Template is required');
       isValid = false;
     } else {
-      setMessageError('');
+      setTemplateError('');
     }
 
     if (recipientsList.length === 0 && !recipients.trim()) {
@@ -118,35 +111,45 @@ const CreateCampaignScreen = ({navigation, route}: Props) => {
     return isValid;
   };
 
+  const validatePhoneNumber = (phone: string): boolean => {
+    // Remove all non-digit characters
+    const digits = phone.replace(/\D/g, '');
+    
+    // Must be exactly 10 digits
+    return digits.length === 10;
+  };
+
+  const cleanPhoneNumber = (phone: string): string => {
+    // Just return the 10-digit number, backend will add 91 prefix
+    return phone.replace(/\D/g, '');
+  };
+
   const handleAddRecipient = () => {
     if (!currentPhone.trim()) {
       setPhoneError('Phone number is required');
       return;
     }
 
-    // Simple phone validation (at least 10 digits)
-    const phoneDigits = currentPhone.replace(/\D/g, '');
-    if (phoneDigits.length < 10) {
-      setPhoneError('Phone number must be at least 10 digits');
+    const cleanedPhone = cleanPhoneNumber(currentPhone.trim());
+    
+    if (!validatePhoneNumber(currentPhone)) {
+      setPhoneError('Phone number must be exactly 10 digits');
       return;
     }
 
-    // Check for duplicates
-    if (recipientsList.some(r => r.phone === currentPhone.trim())) {
+    if (recipientsList.some(r => r.phone === cleanedPhone)) {
       setPhoneError('This phone number is already added');
       return;
     }
 
-    // Add to list
     setRecipientsList([
       ...recipientsList,
       {
-        phone: currentPhone.trim(),
+        phone: cleanedPhone,
         name: currentName.trim() || 'Unknown',
       },
     ]);
 
-    // Clear inputs
     setCurrentPhone('');
     setCurrentName('');
     setPhoneError('');
@@ -157,6 +160,88 @@ const CreateCampaignScreen = ({navigation, route}: Props) => {
     setRecipientsList(recipientsList.filter(r => r.phone !== phone));
   };
 
+  const handleImportCSV = async () => {
+    try {
+      const result = await DocumentPicker.pick({
+        type: [DocumentPicker.types.csv, DocumentPicker.types.plainText],
+        copyTo: 'cachesDirectory',
+      });
+
+      if (result && result[0]) {
+        const file = result[0];
+        
+        try {
+          // Read the file content
+          const filePath = file.fileCopyUri || file.uri;
+          const fileContent = await RNFS.readFile(filePath, 'utf8');
+          
+          // Parse CSV
+          const lines = fileContent.split('\n').filter(line => line.trim());
+          
+          // Skip header row if it contains "phone" or "name"
+          const startIndex = lines[0].toLowerCase().includes('phone') ? 1 : 0;
+          
+          const parsedRecipients: Array<{phone: string; name: string}> = [];
+          const errors: string[] = [];
+          
+          for (let i = startIndex; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+            
+            const parts = line.split(',').map(p => p.trim());
+            if (parts.length >= 1) {
+              const phone = parts[0];
+              const name = parts[1] || 'Unknown';
+              
+              // Validate phone number (10 digits)
+              const cleanedPhone = cleanPhoneNumber(phone);
+              if (validatePhoneNumber(phone)) {
+                // Check for duplicates
+                if (!parsedRecipients.some(r => r.phone === cleanedPhone) &&
+                    !recipientsList.some(r => r.phone === cleanedPhone)) {
+                  parsedRecipients.push({
+                    phone: cleanedPhone,
+                    name: name,
+                  });
+                }
+              } else {
+                errors.push(`Line ${i + 1}: Invalid phone number "${phone}"`);
+              }
+            }
+          }
+          
+          if (parsedRecipients.length > 0) {
+            // Add to existing recipients
+            setRecipientsList([...recipientsList, ...parsedRecipients]);
+            
+            let message = `✅ Imported ${parsedRecipients.length} recipient${parsedRecipients.length !== 1 ? 's' : ''}`;
+            if (errors.length > 0) {
+              message += `\n\n⚠️ ${errors.length} error${errors.length !== 1 ? 's' : ''}:\n${errors.slice(0, 3).join('\n')}`;
+              if (errors.length > 3) {
+                message += `\n... and ${errors.length - 3} more`;
+              }
+            }
+            
+            Alert.alert('CSV Import Complete', message);
+          } else {
+            Alert.alert('No Recipients', 'No valid recipients found in CSV file.\n\nExpected format:\nphone,name\n9876543210,Ram Kumar');
+          }
+          
+        } catch (parseError) {
+          console.error('CSV parse error:', parseError);
+          Alert.alert('Parse Error', 'Failed to parse CSV file. Please check the format:\n\nphone,name\n9876543210,Ram Kumar');
+        }
+      }
+    } catch (error) {
+      if (DocumentPicker.isCancel(error)) {
+        // User cancelled
+        return;
+      }
+      console.error('CSV picker error:', error);
+      Alert.alert('Error', 'Failed to pick CSV file');
+    }
+  };
+
   const handleCreate = async () => {
     if (!validateForm()) {
       return;
@@ -165,9 +250,8 @@ const CreateCampaignScreen = ({navigation, route}: Props) => {
     setLoading(true);
 
     try {
-      // Use recipients list if available, otherwise parse comma-separated
       let recipientList;
-      
+
       if (recipientsList.length > 0) {
         recipientList = recipientsList.map(r => ({
           phoneNumber: r.phone,
@@ -175,16 +259,28 @@ const CreateCampaignScreen = ({navigation, route}: Props) => {
           variables: {},
         }));
       } else {
-        // Fallback to comma-separated input
-        recipientList = recipients
+        // Format comma-separated numbers
+        const phoneNumbers = recipients
           .split(',')
           .map(phone => phone.trim())
-          .filter(phone => phone.length > 0)
-          .map(phoneNumber => ({
-            phoneNumber,
+          .filter(phone => phone.length > 0);
+        
+        recipientList = [];
+        for (const phone of phoneNumbers) {
+          const cleanedPhone = cleanPhoneNumber(phone);
+          
+          if (!validatePhoneNumber(phone)) {
+            Alert.alert('Error', `Invalid phone number: ${phone}. Must be exactly 10 digits.`);
+            setLoading(false);
+            return;
+          }
+          
+          recipientList.push({
+            phoneNumber: cleanedPhone,
             name: null,
             variables: {},
-          }));
+          });
+        }
       }
 
       if (recipientList.length === 0) {
@@ -193,28 +289,13 @@ const CreateCampaignScreen = ({navigation, route}: Props) => {
         return;
       }
 
-      // Prepare campaign data
       const campaignData: any = {
         name: name.trim(),
         description: description.trim(),
+        templateId: templateId,
         recipients: recipientList,
         settings: {},
       };
-
-      // Add template or message
-      if (templateId) {
-        campaignData.templateId = templateId;
-      } else {
-        campaignData.message = message.trim();
-      }
-
-      // Add scheduling if provided
-      if (scheduledDate.trim() && scheduledTime.trim()) {
-        const scheduledFor = new Date(
-          `${scheduledDate}T${scheduledTime}:00`,
-        ).toISOString();
-        campaignData.scheduledAt = scheduledFor;
-      }
 
       await campaignAPI.createCampaign(campaignData);
 
@@ -233,7 +314,7 @@ const CreateCampaignScreen = ({navigation, route}: Props) => {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
+      {}
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
@@ -249,7 +330,7 @@ const CreateCampaignScreen = ({navigation, route}: Props) => {
         style={styles.content}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled">
-        {/* Info Banner */}
+        {}
         <View style={styles.infoBanner}>
           <Text style={styles.infoBannerText}>
             📋 Fill in the campaign details below. You can start or schedule it
@@ -257,7 +338,7 @@ const CreateCampaignScreen = ({navigation, route}: Props) => {
           </Text>
         </View>
 
-        {/* Step 1: Basic Info */}
+        {}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>1️⃣ Basic Information</Text>
 
@@ -309,95 +390,100 @@ const CreateCampaignScreen = ({navigation, route}: Props) => {
           </View>
         </View>
 
-        {/* Step 2: Message Content */}
+        {/* Message Content - Template Selection */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>2️⃣ Message Content</Text>
+          <Text style={styles.sectionTitle}>2️⃣ Select Template</Text>
 
           {loadingTemplates ? (
             <ActivityIndicator color="#25D366" />
           ) : (
             <>
-              {templates.length > 0 && (
-                <View style={styles.inputContainer}>
-                  <Text style={styles.label}>Template (Optional)</Text>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={styles.templatesScroll}>
-                    <TouchableOpacity
-                      style={[
-                        styles.templateChip,
-                        !templateId && styles.templateChipActive,
-                      ]}
-                      onPress={() => setTemplateId('')}>
-                      <Text
-                        style={[
-                          styles.templateChipText,
-                          !templateId && styles.templateChipTextActive,
-                        ]}>
-                        No Template
+              <View style={styles.inputContainer}>
+                <Text style={styles.label}>
+                  Template <Text style={styles.required}>*</Text>
+                </Text>
+                {templates.length > 0 ? (
+                  <>
+                    <View style={styles.templateInfoBanner}>
+                      <Text style={styles.templateInfoIcon}>✅</Text>
+                      <Text style={styles.templateInfoText}>
+                        {templates.length} approved template{templates.length !== 1 ? 's' : ''} available
                       </Text>
-                    </TouchableOpacity>
-                    {templates.map(template => (
-                      <TouchableOpacity
-                        key={template._id}
-                        style={[
-                          styles.templateChip,
-                          templateId === template._id &&
-                            styles.templateChipActive,
-                        ]}
-                        onPress={() => setTemplateId(template._id)}>
-                        <Text
+                    </View>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      style={styles.templatesScroll}>
+                      {templates.map(template => (
+                        <TouchableOpacity
+                          key={template._id}
                           style={[
-                            styles.templateChipText,
+                            styles.templateChip,
                             templateId === template._id &&
-                              styles.templateChipTextActive,
-                          ]}>
-                          {template.name}
-                        </Text>
+                              styles.templateChipActive,
+                          ]}
+                          onPress={() => {
+                            setTemplateId(template._id);
+                            setTemplateError('');
+                          }}>
+                          <Text
+                            style={[
+                              styles.templateChipText,
+                              templateId === template._id &&
+                                styles.templateChipTextActive,
+                            ]}>
+                            ✅ {template.name}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </>
+                ) : (
+                  <View style={styles.noTemplatesWarning}>
+                    <Text style={styles.noTemplatesIcon}>⚠️</Text>
+                    <View style={styles.noTemplatesTextContainer}>
+                      <Text style={styles.noTemplatesTitle}>No Approved Templates</Text>
+                      <Text style={styles.noTemplatesMessage}>
+                        You need to create and get templates approved before creating campaigns.
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.createTemplateButton}
+                        onPress={() => {
+                          Alert.alert(
+                            'Create Template',
+                            'Go to Templates screen to create and submit templates for approval.',
+                            [
+                              {text: 'Later', style: 'cancel'},
+                              {text: 'Go to Templates', onPress: () => navigation.navigate('Templates')},
+                            ]
+                          );
+                        }}>
+                        <Text style={styles.createTemplateButtonText}>+ Create Template</Text>
                       </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
-              )}
-
-              {!templateId && (
-                <View style={styles.inputContainer}>
-                  <Text style={styles.label}>
-                    Message Text <Text style={styles.required}>*</Text>
-                  </Text>
-                  <TextInput
-                    style={[
-                      styles.input,
-                      styles.textArea,
-                      messageError ? styles.inputError : null,
-                    ]}
-                    value={message}
-                    onChangeText={text => {
-                      setMessage(text);
-                      setMessageError('');
-                    }}
-                    placeholder="Type your message here..."
-                    placeholderTextColor="#999"
-                    multiline
-                    numberOfLines={4}
-                    textAlignVertical="top"
-                    editable={!loading}
-                  />
-                  {messageError ? (
-                    <Text style={styles.errorText}>{messageError}</Text>
-                  ) : null}
-                </View>
-              )}
+                    </View>
+                  </View>
+                )}
+                {templateError ? (
+                  <Text style={styles.errorText}>{templateError}</Text>
+                ) : null}
+              </View>
             </>
           )}
+        </View>
+
+        {/* Recipients Section */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>3️⃣ Add Recipients</Text>
 
           <View style={styles.inputContainer}>
             <Text style={styles.label}>
               Recipients <Text style={styles.required}>*</Text>
             </Text>
-            
-            {/* Add Recipient Form */}
+            <Text style={styles.helperText}>
+              📱 Enter 10-digit phone numbers only. Backend will add 91 prefix automatically.
+            </Text>
+
+            {}
             <View style={styles.addRecipientContainer}>
               <View style={styles.recipientInputRow}>
                 <TextInput
@@ -407,7 +493,7 @@ const CreateCampaignScreen = ({navigation, route}: Props) => {
                     setCurrentPhone(text);
                     setPhoneError('');
                   }}
-                  placeholder="Phone number (e.g., +1234567890)"
+                  placeholder="10-digit number (e.g., 9876543210)"
                   placeholderTextColor="#999"
                   keyboardType="phone-pad"
                   editable={!loading}
@@ -424,15 +510,24 @@ const CreateCampaignScreen = ({navigation, route}: Props) => {
               {phoneError ? (
                 <Text style={styles.errorText}>{phoneError}</Text>
               ) : null}
-              <TouchableOpacity
-                style={styles.addRecipientButton}
-                onPress={handleAddRecipient}
-                disabled={loading}>
-                <Text style={styles.addRecipientButtonText}>+ Add Recipient</Text>
-              </TouchableOpacity>
+              <View style={styles.recipientButtonsRow}>
+                <TouchableOpacity
+                  style={styles.addRecipientButton}
+                  onPress={handleAddRecipient}
+                  disabled={loading}>
+                  <Text style={styles.addRecipientButtonText}>+ Add Recipient</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.csvImportButton}
+                  onPress={handleImportCSV}
+                  disabled={loading}>
+                  <Icon name="upload" size={16} color="#25D366" />
+                  <Text style={styles.csvImportButtonText}>Import CSV</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
-            {/* Recipients List */}
+            {}
             {recipientsList.length > 0 && (
               <View style={styles.recipientsListContainer}>
                 <Text style={styles.recipientsListTitle}>
@@ -457,7 +552,7 @@ const CreateCampaignScreen = ({navigation, route}: Props) => {
               </View>
             )}
 
-            {/* Fallback: Comma-separated input */}
+            {}
             {recipientsList.length === 0 && (
               <View style={styles.inputContainer}>
                 <Text style={styles.orText}>OR enter comma-separated numbers:</Text>
@@ -472,7 +567,7 @@ const CreateCampaignScreen = ({navigation, route}: Props) => {
                     setRecipients(text);
                     setRecipientsError('');
                   }}
-                  placeholder="e.g., +1234567890, +9876543210"
+                  placeholder="e.g., 9876543210, 9123456789"
                   placeholderTextColor="#999"
                   multiline
                   numberOfLines={3}
@@ -481,44 +576,11 @@ const CreateCampaignScreen = ({navigation, route}: Props) => {
                 />
               </View>
             )}
-            
+
             {recipientsError ? (
               <Text style={styles.errorText}>{recipientsError}</Text>
             ) : null}
           </View>
-        </View>
-
-        {/* Step 3: Scheduling (Optional) */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>3️⃣ Schedule (Optional)</Text>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Date</Text>
-            <TextInput
-              style={styles.input}
-              value={scheduledDate}
-              onChangeText={setScheduledDate}
-              placeholder="YYYY-MM-DD (e.g., 2025-01-25)"
-              placeholderTextColor="#999"
-              editable={!loading}
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Time</Text>
-            <TextInput
-              style={styles.input}
-              value={scheduledTime}
-              onChangeText={setScheduledTime}
-              placeholder="HH:MM (e.g., 09:00)"
-              placeholderTextColor="#999"
-              editable={!loading}
-            />
-          </View>
-
-          <Text style={styles.helperText}>
-            💡 Leave empty to save as draft. You can start the campaign manually later.
-          </Text>
         </View>
 
         {/* Create Button */}
@@ -707,7 +769,12 @@ const styles = StyleSheet.create({
   nameInput: {
     flex: 1,
   },
+  recipientButtonsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
   addRecipientButton: {
+    flex: 1,
     backgroundColor: '#25D366',
     borderRadius: 8,
     padding: 12,
@@ -715,6 +782,23 @@ const styles = StyleSheet.create({
   },
   addRecipientButtonText: {
     color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  csvImportButton: {
+    flex: 1,
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 2,
+    borderColor: '#25D366',
+  },
+  csvImportButtonText: {
+    color: '#25D366',
     fontSize: 14,
     fontWeight: '600',
   },
@@ -785,6 +869,63 @@ const styles = StyleSheet.create({
     color: '#999',
     textAlign: 'center',
     marginVertical: 8,
+  },
+  templateInfoBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F5E9',
+    borderRadius: 8,
+    padding: 10,
+    marginBottom: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: '#4CAF50',
+  },
+  templateInfoIcon: {
+    fontSize: 16,
+    marginRight: 8,
+  },
+  templateInfoText: {
+    fontSize: 13,
+    color: '#2E7D32',
+    fontWeight: '600',
+  },
+  noTemplatesWarning: {
+    flexDirection: 'row',
+    backgroundColor: '#FFF3E0',
+    borderRadius: 8,
+    padding: 16,
+    borderLeftWidth: 3,
+    borderLeftColor: '#FF9800',
+  },
+  noTemplatesIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  noTemplatesTextContainer: {
+    flex: 1,
+  },
+  noTemplatesTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#E65100',
+    marginBottom: 4,
+  },
+  noTemplatesMessage: {
+    fontSize: 12,
+    color: '#EF6C00',
+    marginBottom: 12,
+  },
+  createTemplateButton: {
+    backgroundColor: '#FF9800',
+    borderRadius: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignSelf: 'flex-start',
+  },
+  createTemplateButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
 

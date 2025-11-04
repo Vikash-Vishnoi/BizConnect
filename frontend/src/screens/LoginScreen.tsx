@@ -30,7 +30,6 @@ const LoginScreen = ({navigation}: Props) => {
   const [passwordError, setPasswordError] = useState('');
 
   useEffect(() => {
-    // Load saved email if remember me was checked
     loadSavedCredentials();
   }, []);
 
@@ -77,11 +76,9 @@ const LoginScreen = ({navigation}: Props) => {
   };
 
   const handleLogin = async () => {
-    // Clear previous errors
     setEmailError('');
     setPasswordError('');
 
-    // Validate inputs
     const isEmailValid = validateEmail(email);
     const isPasswordValid = validatePassword(password);
 
@@ -92,18 +89,15 @@ const LoginScreen = ({navigation}: Props) => {
     setIsLoading(true);
 
     try {
-      // Call real API
       const response = await authAPI.login({
         email: email.trim(),
         password: password.trim(),
       });
 
-      // Save token and user data
       await storageService.saveToken(response.token);
       await storageService.saveUser(response.user);
       await storageService.saveRememberMe(rememberMe);
 
-      // Navigate to Dashboard
       navigation.replace('Dashboard', {user: response.user});
     } catch (error: any) {
       Alert.alert('Login Failed', error.message || 'Invalid credentials. Please check your email and password.');
@@ -124,7 +118,7 @@ const LoginScreen = ({navigation}: Props) => {
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      {/* Gradient Background */}
+      {}
       <LinearGradient
         colors={[theme.colors.gradientStart, theme.colors.gradientMiddle, theme.colors.gradientEnd]}
         style={styles.gradientBackground}
@@ -134,7 +128,7 @@ const LoginScreen = ({navigation}: Props) => {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
-          {/* Header with Logo */}
+          {}
           <View style={styles.header}>
             <View style={styles.logoContainer}>
               <LinearGradient
@@ -147,9 +141,9 @@ const LoginScreen = ({navigation}: Props) => {
             <Text style={styles.subtitle}>Sign in to manage your campaigns</Text>
           </View>
 
-          {/* Login Form Card */}
+          {}
           <View style={styles.formCard}>
-            {/* Email Input */}
+            {}
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Email Address</Text>
               <View style={[styles.inputWrapper, emailError && styles.inputWrapperError]}>
@@ -177,7 +171,7 @@ const LoginScreen = ({navigation}: Props) => {
               ) : null}
             </View>
 
-            {/* Password Input */}
+            {}
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Password</Text>
               <View style={[styles.inputWrapper, passwordError && styles.inputWrapperError]}>
@@ -204,7 +198,7 @@ const LoginScreen = ({navigation}: Props) => {
               ) : null}
             </View>
 
-            {/* Remember Me & Forgot Password Row */}
+            {}
             <View style={styles.optionsRow}>
               <TouchableOpacity
                 style={styles.rememberMeContainer}
@@ -225,7 +219,7 @@ const LoginScreen = ({navigation}: Props) => {
               </TouchableOpacity>
             </View>
 
-            {/* Login Button */}
+            {}
             <TouchableOpacity
               style={styles.loginButtonWrapper}
               onPress={handleLogin}
@@ -246,14 +240,14 @@ const LoginScreen = ({navigation}: Props) => {
               </LinearGradient>
             </TouchableOpacity>
 
-            {/* Divider */}
+            {}
             <View style={styles.divider}>
               <View style={styles.dividerLine} />
               <Text style={styles.dividerText}>or</Text>
               <View style={styles.dividerLine} />
             </View>
 
-            {/* Social Login Placeholder */}
+            {}
             <View style={styles.socialContainer}>
               <TouchableOpacity style={styles.socialButton} activeOpacity={0.7}>
                 <Text style={styles.socialIcon}>G</Text>
@@ -267,7 +261,7 @@ const LoginScreen = ({navigation}: Props) => {
             </View>
           </View>
 
-          {/* Sign Up Link */}
+          {}
           <View style={styles.signupContainer}>
             <Text style={styles.signupText}>Don't have an account? </Text>
             <TouchableOpacity

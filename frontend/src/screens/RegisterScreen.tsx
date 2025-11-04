@@ -33,20 +33,20 @@ const RegisterScreen = ({navigation}: Props) => {
 
   const getPasswordStrength = (password: string): {strength: string; color: string; width: number} => {
     if (!password) return {strength: '', color: '', width: 0};
-    
+
     const length = password.length;
     const hasUpper = /[A-Z]/.test(password);
     const hasLower = /[a-z]/.test(password);
     const hasNumber = /[0-9]/.test(password);
     const hasSpecial = /[!@#$%^&*]/.test(password);
-    
+
     let score = 0;
     if (length >= 6) score++;
     if (length >= 8) score++;
     if (hasUpper && hasLower) score++;
     if (hasNumber) score++;
     if (hasSpecial) score++;
-    
+
     if (score <= 2) return {strength: 'Weak', color: theme.colors.error, width: 33};
     if (score <= 3) return {strength: 'Medium', color: theme.colors.warning, width: 66};
     return {strength: 'Strong', color: theme.colors.success, width: 100};
@@ -108,13 +108,11 @@ const RegisterScreen = ({navigation}: Props) => {
   };
 
   const handleRegister = async () => {
-    // Clear previous errors
     setNameError('');
     setEmailError('');
     setPasswordError('');
     setConfirmPasswordError('');
 
-    // Validate inputs
     const isNameValid = validateName(name);
     const isEmailValid = validateEmail(email);
     const isPasswordValid = validatePassword(password);
@@ -127,18 +125,15 @@ const RegisterScreen = ({navigation}: Props) => {
     setIsLoading(true);
 
     try {
-      // Call register API
       const response = await authAPI.register({
         name: name.trim(),
         email: email.trim(),
         password: password.trim(),
       });
 
-      // Save token and user data
       await storageService.saveToken(response.token);
       await storageService.saveUser(response.user);
 
-      // Show success message
       Alert.alert(
         'Success',
         'Account created successfully!',
@@ -163,7 +158,7 @@ const RegisterScreen = ({navigation}: Props) => {
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-      {/* Gradient Background */}
+      {}
       <LinearGradient
         colors={[theme.colors.gradientStart, theme.colors.gradientMiddle, theme.colors.gradientEnd]}
         style={styles.gradientBackground}
@@ -173,7 +168,7 @@ const RegisterScreen = ({navigation}: Props) => {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
-          {/* Header with Logo */}
+          {}
           <View style={styles.header}>
             <View style={styles.logoContainer}>
               <LinearGradient
@@ -186,9 +181,9 @@ const RegisterScreen = ({navigation}: Props) => {
             <Text style={styles.subtitle}>Create your account to get started</Text>
           </View>
 
-          {/* Registration Form Card */}
+          {}
           <View style={styles.formCard}>
-            {/* Name Input */}
+            {}
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Full Name</Text>
               <View style={[styles.inputWrapper, nameError && styles.inputWrapperError]}>
@@ -215,7 +210,7 @@ const RegisterScreen = ({navigation}: Props) => {
               ) : null}
             </View>
 
-            {/* Email Input */}
+            {}
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Email Address</Text>
               <View style={[styles.inputWrapper, emailError && styles.inputWrapperError]}>
@@ -243,7 +238,7 @@ const RegisterScreen = ({navigation}: Props) => {
               ) : null}
             </View>
 
-            {/* Password Input */}
+            {}
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Password</Text>
               <View style={[styles.inputWrapper, passwordError && styles.inputWrapperError]}>
@@ -267,7 +262,7 @@ const RegisterScreen = ({navigation}: Props) => {
                   editable={!isLoading}
                 />
               </View>
-              {/* Password Strength Indicator */}
+              {}
               {password.length > 0 && (
                 <View style={styles.passwordStrengthContainer}>
                   <View style={styles.passwordStrengthBar}>
@@ -286,7 +281,7 @@ const RegisterScreen = ({navigation}: Props) => {
               ) : null}
             </View>
 
-            {/* Confirm Password Input */}
+            {}
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Confirm Password</Text>
               <View style={[styles.inputWrapper, confirmPasswordError && styles.inputWrapperError]}>
@@ -313,7 +308,7 @@ const RegisterScreen = ({navigation}: Props) => {
               ) : null}
             </View>
 
-            {/* Register Button */}
+            {}
             <TouchableOpacity
               style={styles.registerButtonWrapper}
               onPress={handleRegister}
@@ -335,7 +330,7 @@ const RegisterScreen = ({navigation}: Props) => {
             </TouchableOpacity>
           </View>
 
-          {/* Login Link */}
+          {}
           <View style={styles.loginContainer}>
             <Text style={styles.loginText}>Already have an account? </Text>
             <TouchableOpacity

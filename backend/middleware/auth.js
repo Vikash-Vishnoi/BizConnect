@@ -17,8 +17,8 @@ const auth = async (req, res, next) => {
     // Find user
     const user = await User.findById(decoded.userId);
     
-    if (!user || !user.isActive) {
-      return res.status(401).json({ error: 'User not found or inactive' });
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
     }
     
     // Attach user to request
@@ -50,7 +50,7 @@ const isAdmin = (req, res, next) => {
 // Generate JWT token
 const generateToken = (userId) => {
   return jwt.sign({ userId }, process.env.JWT_SECRET, {
-    expiresIn: '30d'
+    expiresIn: process.env.JWT_EXPIRE || '30d'
   });
 };
 

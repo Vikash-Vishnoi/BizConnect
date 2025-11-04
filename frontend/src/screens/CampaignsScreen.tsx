@@ -43,7 +43,6 @@ const CampaignsScreen = ({navigation}: Props) => {
   const loadCampaigns = async () => {
     try {
       const response = await campaignAPI.getCampaigns();
-      // Backend might return {campaigns: [...]} or just [...]
       const campaignArray = Array.isArray(response) ? response : (response as any).campaigns || [];
       setCampaigns(campaignArray);
     } catch (error) {
@@ -63,7 +62,6 @@ const CampaignsScreen = ({navigation}: Props) => {
   const filterCampaigns = () => {
     let filtered = [...campaigns];
 
-    // Apply search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(
@@ -73,7 +71,6 @@ const CampaignsScreen = ({navigation}: Props) => {
       );
     }
 
-    // Apply status filter
     if (statusFilter !== 'all') {
       filtered = filtered.filter(campaign => campaign.status === statusFilter);
     }
@@ -157,7 +154,7 @@ const CampaignsScreen = ({navigation}: Props) => {
 
   return (
     <View style={styles.container}>
-      {/* Gradient Header */}
+      {}
       <LinearGradient
         colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
         style={styles.header}
@@ -172,40 +169,44 @@ const CampaignsScreen = ({navigation}: Props) => {
             <Text style={styles.iconText}>←</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Campaigns</Text>
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={handleCreateCampaign}
-            activeOpacity={0.7}
-            accessibilityLabel="Create Campaign">
-            <Text style={styles.iconText}>＋</Text>
-          </TouchableOpacity>
+          {campaigns.length > 0 && (
+            <TouchableOpacity
+              style={styles.addButton}
+              onPress={handleCreateCampaign}
+              activeOpacity={0.7}
+              accessibilityLabel="Create Campaign">
+              <Text style={styles.iconText}>＋</Text>
+            </TouchableOpacity>
+          )}
+          {campaigns.length === 0 && <View style={{width: 44}} />}
         </View>
       </LinearGradient>
 
-      {/* Content */}
+      {}
       <View style={styles.content}>
-        {/* Search Bar */}
+        {}
         <SearchBar
           value={searchQuery}
           onChangeText={setSearchQuery}
           placeholder="Search campaigns..."
         />
 
-        {/* Status Filter Chips */}
+        {}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.filtersContainer}
           contentContainerStyle={styles.filtersContent}>
           {renderFilterButton('All', 'all', '📋')}
-          {renderFilterButton('Active', 'running', '▶️')}
+          {renderFilterButton('Active', 'active', '▶️')}
           {renderFilterButton('Scheduled', 'scheduled', '⏰')}
           {renderFilterButton('Paused', 'paused', '⏸️')}
           {renderFilterButton('Completed', 'completed', '✅')}
           {renderFilterButton('Draft', 'draft', '✏️')}
+          {renderFilterButton('Failed', 'failed', '❌')}
         </ScrollView>
 
-        {/* Stats Summary */}
+        {}
         {filteredCampaigns.length > 0 && (
           <View style={styles.statsBar}>
             <Text style={styles.statsIcon}>🎯</Text>
@@ -215,7 +216,7 @@ const CampaignsScreen = ({navigation}: Props) => {
           </View>
         )}
 
-        {/* Campaign List */}
+        {}
         <FlatList
           data={filteredCampaigns}
           keyExtractor={item => item._id}
@@ -241,20 +242,22 @@ const CampaignsScreen = ({navigation}: Props) => {
         />
       </View>
 
-      {/* Floating Action Button */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={handleCreateCampaign}
-        activeOpacity={0.8}
-        accessibilityLabel="Create New Campaign">
-        <LinearGradient
-          colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
-          style={styles.fabGradient}
-          start={{x: 0, y: 0}}
-          end={{x: 1, y: 1}}>
-          <Text style={styles.fabIcon}>＋</Text>
-        </LinearGradient>
-      </TouchableOpacity>
+      {}
+      {campaigns.length > 0 && (
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={handleCreateCampaign}
+          activeOpacity={0.8}
+          accessibilityLabel="Create New Campaign">
+          <LinearGradient
+            colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
+            style={styles.fabGradient}
+            start={{x: 0, y: 0}}
+            end={{x: 1, y: 1}}>
+            <Text style={styles.fabIcon}>＋</Text>
+          </LinearGradient>
+        </TouchableOpacity>
+      )}
     </View>
   );
 };

@@ -23,7 +23,7 @@ export interface CampaignAnalytics {
 export interface ConversationAnalytics {
   totalConversations: number;
   activeConversations: number;
-  averageResponseTime: number; // in minutes
+  averageResponseTime: number;
   conversationsByStatus: {
     unread: number;
     read: number;

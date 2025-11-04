@@ -1,16 +1,17 @@
 const express = require('express');
 const router = express.Router();
 const Campaign = require('../models/Campaign');
-const Message = require('../models/Message');
+// ✅ REMOVED: Message model no longer exists - using Conversation.messages
 const Conversation = require('../models/Conversation');
 const Template = require('../models/Template');
 const { auth } = require('../middleware/auth');
+const { validateCreateCampaign, validateUpdateCampaign, validateCampaignId, validatePagination } = require('../middleware/validation');
 const whatsappService = require('../services/whatsappService');
 
 // @route   GET /api/campaigns
 // @desc    Get all campaigns for user
 // @access  Private
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, validatePagination, async (req, res) => {
   try {
     const { status, page = 1, limit = 20 } = req.query;
     
@@ -43,7 +44,7 @@ router.get('/', auth, async (req, res) => {
 // @route   GET /api/campaigns/:id
 // @desc    Get campaign by ID
 // @access  Private
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', auth, validateCampaignId, async (req, res) => {
   try {
     const campaign = await Campaign.findOne({
       _id: req.params.id,
@@ -64,19 +65,34 @@ router.get('/:id', auth, async (req, res) => {
 // @route   POST /api/campaigns
 // @desc    Create new campaign
 // @access  Private
-router.post('/', auth, async (req, res) => {
+router.post('/', auth, validateCreateCampaign, async (req, res) => {
   try {
-    const { name, description, templateId, message, scheduledAt, recipients, settings } = req.body;
+    const { name, description, templateId, recipients, settings } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: 'Campaign name is required' });
+    }
+
+    if (!templateId) {
+      return res.status(400).json({ error: 'Template is required' });
+    }
+
+    // Verify template exists and is approved
+    const template = await Template.findOne({
+      _id: templateId,
+      userId: req.userId,
+      status: 'approved'
+    });
+
+    if (!template) {
+      return res.status(400).json({ error: 'Template not found or not approved' });
     }
 
     if (!recipients || recipients.length === 0) {
       return res.status(400).json({ error: 'At least one recipient is required' });
     }
 
-    // Format recipients
+    // Format recipients with +91 prefix validation
     const formattedRecipients = recipients.map(r => ({
       phoneNumber: whatsappService.formatPhoneNumber(r.phoneNumber),
       name: r.name || null,
@@ -87,19 +103,17 @@ router.post('/', auth, async (req, res) => {
     const campaign = new Campaign({
       name,
       description,
-      templateId: templateId || null,
-      message,
-      scheduledAt: scheduledAt || null,
+      templateId,
       recipients: formattedRecipients,
       settings: settings || {},
       userId: req.userId,
-      status: scheduledAt ? 'scheduled' : 'draft'
+      status: 'draft'
     });
 
     await campaign.save();
 
-    // If not scheduled, can start immediately if requested
-    if (!scheduledAt && req.body.startNow) {
+    // If startNow is requested, start campaign immediately
+    if (req.body.startNow) {
       // Start campaign in background
       startCampaign(campaign._id, req.app.get('io'));
     }
@@ -117,7 +131,7 @@ router.post('/', auth, async (req, res) => {
 // @route   PUT /api/campaigns/:id
 // @desc    Update campaign
 // @access  Private
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', auth, validateUpdateCampaign, async (req, res) => {
   try {
     const campaign = await Campaign.findOne({
       _id: req.params.id,
@@ -166,7 +180,7 @@ router.put('/:id', auth, async (req, res) => {
 // @route   POST /api/campaigns/:id/start
 // @desc    Start a campaign
 // @access  Private
-router.post('/:id/start', auth, async (req, res) => {
+router.post('/:id/start', auth, validateCampaignId, async (req, res) => {
   try {
     const campaign = await Campaign.findOne({
       _id: req.params.id,
@@ -205,7 +219,7 @@ router.post('/:id/start', auth, async (req, res) => {
 // @route   POST /api/campaigns/:id/pause
 // @desc    Pause a campaign
 // @access  Private
-router.post('/:id/pause', auth, async (req, res) => {
+router.post('/:id/pause', auth, validateCampaignId, async (req, res) => {
   try {
     const campaign = await Campaign.findOne({
       _id: req.params.id,
@@ -236,7 +250,7 @@ router.post('/:id/pause', auth, async (req, res) => {
 // @route   DELETE /api/campaigns/:id
 // @desc    Delete campaign
 // @access  Private
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', auth, validateCampaignId, async (req, res) => {
   try {
     const campaign = await Campaign.findOne({
       _id: req.params.id,
@@ -332,21 +346,39 @@ async function startCampaign(campaignId, io) {
           campaign.recipients[i].sentAt = new Date();
           campaign.recipients[i].whatsappMessageId = result.messageId;
 
-          // Create message record
-          await Message.create({
-            conversationId: await getOrCreateConversation(recipient.phoneNumber, campaign.userId),
-            whatsappMessageId: result.messageId,
-            from: process.env.WHATSAPP_PHONE_NUMBER_ID,
-            to: recipient.phoneNumber,
+          // Get or create conversation (but don't store full message)
+          const conversation = await getOrCreateConversation(recipient.phoneNumber, campaign.userId);
+          
+          // ✅ OPTIMIZATION: Store message content in campaign, only reference in conversation
+          campaign.recipients[i].messageContent = {
+            text: campaign.message,
+            templateName: campaign.templateId?.name
+          };
+          campaign.recipients[i].conversationId = conversation._id;
+
+          // Link conversation to campaign (if not already linked)
+          if (!conversation.campaignId) {
+            conversation.campaignId = campaign._id;
+            conversation.source = 'campaign';
+          }
+
+          // Update conversation metadata only (no message duplication)
+          conversation.lastMessageAt = new Date();
+          conversation.lastMessage = {
+            text: campaign.message.substring(0, 100), // Preview only
+            timestamp: new Date(),
             direction: 'outgoing',
-            type: campaign.templateId ? 'template' : 'text',
-            content: {
-              text: campaign.message,
-              templateName: campaign.templateId?.name
-            },
-            status: 'sent',
+            isCampaignMessage: true // ✅ Flag to identify campaign messages
+          };
+          
+          await conversation.save();
+
+          // Emit campaign message event
+          io.to(`user:${campaign.userId}`).emit('campaign:message:sent', {
             campaignId: campaign._id,
-            userId: campaign.userId
+            conversationId: conversation._id,
+            recipientPhone: recipient.phoneNumber,
+            messageId: result.messageId
           });
         } else {
           campaign.recipients[i].status = 'failed';
@@ -392,18 +424,30 @@ async function startCampaign(campaignId, io) {
 
 // Helper function to get or create conversation
 async function getOrCreateConversation(phoneNumber, userId) {
-  let conversation = await Conversation.findOne({ phoneNumber, userId });
+  // Normalize phone number
+  const normalizedPhone = Conversation.normalizePhone(phoneNumber);
+  
+  // Find existing conversation
+  let conversation = await Conversation.findOne({ 
+    'contact.phoneNumber': normalizedPhone,
+    userId 
+  });
   
   if (!conversation) {
+    // Create new conversation with proper contact structure
     conversation = await Conversation.create({
-      phoneNumber,
+      contact: {
+        phoneNumber: normalizedPhone,
+        name: null // Will be updated if we get name from WhatsApp
+      },
       userId,
-      name: phoneNumber,
-      metadata: { source: 'campaign' }
+      source: 'campaign',
+      lastMessageAt: new Date()
     });
   }
   
-  return conversation._id;
+  // ✅ FIXED: Return full conversation object, not just ID
+  return conversation;
 }
 
 module.exports = router;

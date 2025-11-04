@@ -6,7 +6,6 @@ const USER_KEY = 'userData';
 const REMEMBER_ME_KEY = 'rememberMe';
 
 export const storageService = {
-  // Save auth token
   saveToken: async (token: string): Promise<void> => {
     try {
       await AsyncStorage.setItem(TOKEN_KEY, token);
@@ -16,7 +15,6 @@ export const storageService = {
     }
   },
 
-  // Get auth token
   getToken: async (): Promise<string | null> => {
     try {
       return await AsyncStorage.getItem(TOKEN_KEY);
@@ -26,7 +24,6 @@ export const storageService = {
     }
   },
 
-  // Remove auth token
   removeToken: async (): Promise<void> => {
     try {
       await AsyncStorage.removeItem(TOKEN_KEY);
@@ -35,7 +32,6 @@ export const storageService = {
     }
   },
 
-  // Save user data
   saveUser: async (user: User): Promise<void> => {
     try {
       await AsyncStorage.setItem(USER_KEY, JSON.stringify(user));
@@ -45,7 +41,6 @@ export const storageService = {
     }
   },
 
-  // Get user data
   getUser: async (): Promise<User | null> => {
     try {
       const userData = await AsyncStorage.getItem(USER_KEY);
@@ -56,7 +51,6 @@ export const storageService = {
     }
   },
 
-  // Remove user data
   removeUser: async (): Promise<void> => {
     try {
       await AsyncStorage.removeItem(USER_KEY);
@@ -65,7 +59,6 @@ export const storageService = {
     }
   },
 
-  // Save remember me preference
   saveRememberMe: async (remember: boolean): Promise<void> => {
     try {
       await AsyncStorage.setItem(REMEMBER_ME_KEY, remember.toString());
@@ -74,7 +67,6 @@ export const storageService = {
     }
   },
 
-  // Get remember me preference
   getRememberMe: async (): Promise<boolean> => {
     try {
       const value = await AsyncStorage.getItem(REMEMBER_ME_KEY);
@@ -85,7 +77,6 @@ export const storageService = {
     }
   },
 
-  // Clear all auth data
   clearAuth: async (): Promise<void> => {
     try {
       await AsyncStorage.multiRemove([TOKEN_KEY, USER_KEY, REMEMBER_ME_KEY]);

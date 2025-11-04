@@ -16,4 +16,5 @@ export type RootStackParamList = {
   CreateTemplate: {templateToEdit?: Template} | undefined;
   TemplateDetails: {templateId: string};
   Analytics: undefined;
+  WelcomeMessageSettings: undefined;
 };

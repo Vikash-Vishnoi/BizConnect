@@ -1,9 +1,7 @@
 import api from './api';
 import type {Campaign, CreateCampaignData, CampaignStats} from '../types/campaign';
 
-// Campaign API - all real backend calls, no mock data
 export const campaignAPI = {
-  // Get all campaigns
   getCampaigns: async (): Promise<Campaign[]> => {
     try {
       const response = await api.get('/campaigns');
@@ -14,7 +12,6 @@ export const campaignAPI = {
     }
   },
 
-  // Get single campaign
   getCampaign: async (id: string): Promise<Campaign> => {
     try {
       const response = await api.get(`/campaigns/${id}`);
@@ -25,7 +22,6 @@ export const campaignAPI = {
     }
   },
 
-  // Create campaign
   createCampaign: async (data: CreateCampaignData): Promise<Campaign> => {
     try {
       const response = await api.post('/campaigns', data);
@@ -36,7 +32,6 @@ export const campaignAPI = {
     }
   },
 
-  // Start campaign
   startCampaign: async (id: string): Promise<Campaign> => {
     try {
       const response = await api.post(`/campaigns/${id}/start`);
@@ -47,7 +42,6 @@ export const campaignAPI = {
     }
   },
 
-  // Pause campaign
   pauseCampaign: async (id: string): Promise<Campaign> => {
     try {
       const response = await api.post(`/campaigns/${id}/pause`);
@@ -58,7 +52,16 @@ export const campaignAPI = {
     }
   },
 
-  // Delete campaign
+  updateCampaign: async (id: string, data: Partial<CreateCampaignData>): Promise<Campaign> => {
+    try {
+      const response = await api.put(`/campaigns/${id}`, data);
+      return response.data.campaign;
+    } catch (error: any) {
+      console.error('Failed to update campaign:', error);
+      throw new Error(error.response?.data?.error || 'Failed to update campaign');
+    }
+  },
+
   deleteCampaign: async (id: string): Promise<void> => {
     try {
       await api.delete(`/campaigns/${id}`);
@@ -68,12 +71,11 @@ export const campaignAPI = {
     }
   },
 
-  // Get campaign stats
   getStats: async (): Promise<CampaignStats> => {
     try {
       const response = await api.get('/analytics/dashboard');
       const data = response.data.overview;
-      
+
       return {
         totalCampaigns: data.totalCampaigns || 0,
         activeCampaigns: data.activeCampaigns || 0,

@@ -6,6 +6,15 @@ class WhatsAppService {
     this.phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
     this.accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
     this.businessAccountId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
+    
+    // Warn about token expiration
+    if (this.accessToken && !process.env.WHATSAPP_SYSTEM_USER_TOKEN) {
+      console.warn('⚠️  WARNING: Using temporary WhatsApp access token!');
+      console.warn('⚠️  This token will expire. For production:');
+      console.warn('⚠️  1. Create a System User in Meta Business Settings');
+      console.warn('⚠️  2. Generate a permanent token with System User');
+      console.warn('⚠️  3. Set WHATSAPP_SYSTEM_USER_TOKEN in .env');
+    }
   }
 
   // Send a text message
@@ -37,6 +46,14 @@ class WhatsAppService {
         data: response.data
       };
     } catch (error) {
+      // Check if error is due to expired/invalid token
+      if (error.response?.data?.error?.code === 190 || 
+          error.response?.data?.error?.message?.includes('token') ||
+          error.response?.status === 401) {
+        console.error('❌ WhatsApp Token Error: Access token is invalid or expired!');
+        console.error('   Please update WHATSAPP_ACCESS_TOKEN in .env file');
+        console.error('   Get new token from: https://developers.facebook.com/apps/');
+      }
       console.error('WhatsApp API Error:', error.response?.data || error.message);
       return {
         success: false,
@@ -235,25 +252,289 @@ class WhatsAppService {
   // Verify webhook signature
   verifyWebhookSignature(payload, signature) {
     const crypto = require('crypto');
+    const appSecret = process.env.WHATSAPP_APP_SECRET || process.env.APP_SECRET;
+    if (!appSecret) {
+      console.warn('⚠️  WHATSAPP_APP_SECRET or APP_SECRET not configured');
+      return false;
+    }
     const expectedSignature = crypto
-      .createHmac('sha256', process.env.WHATSAPP_APP_SECRET)
+      .createHmac('sha256', appSecret)
       .update(payload)
       .digest('hex');
     
     return signature === `sha256=${expectedSignature}`;
   }
 
-  // Format phone number (ensure it's in E.164 format)
+  // Send reaction to a message (WhatsApp Business API)
+  async sendReaction(to, messageId, emoji) {
+    try {
+      const response = await axios.post(
+        `${this.apiUrl}/${this.phoneNumberId}/messages`,
+        {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: to,
+          type: 'reaction',
+          reaction: {
+            message_id: messageId,
+            emoji: emoji
+          }
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      return {
+        success: true,
+        messageId: response.data.messages[0].id,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Send Reaction Error:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message
+      };
+    }
+  }
+
+  // Send interactive button message
+  async sendButtonMessage(to, bodyText, buttons) {
+    try {
+      const response = await axios.post(
+        `${this.apiUrl}/${this.phoneNumberId}/messages`,
+        {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: to,
+          type: 'interactive',
+          interactive: {
+            type: 'button',
+            body: {
+              text: bodyText
+            },
+            action: {
+              buttons: buttons.map((btn, idx) => ({
+                type: 'reply',
+                reply: {
+                  id: btn.id || `btn_${idx}`,
+                  title: btn.title.substring(0, 20) // Max 20 chars
+                }
+              }))
+            }
+          }
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      return {
+        success: true,
+        messageId: response.data.messages[0].id,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Send Button Message Error:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message
+      };
+    }
+  }
+
+  // Send interactive list message
+  async sendListMessage(to, bodyText, buttonText, sections) {
+    try {
+      const response = await axios.post(
+        `${this.apiUrl}/${this.phoneNumberId}/messages`,
+        {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: to,
+          type: 'interactive',
+          interactive: {
+            type: 'list',
+            body: {
+              text: bodyText
+            },
+            action: {
+              button: buttonText,
+              sections: sections
+            }
+          }
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      return {
+        success: true,
+        messageId: response.data.messages[0].id,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Send List Message Error:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message
+      };
+    }
+  }
+
+  // Send location message
+  async sendLocationMessage(to, latitude, longitude, name, address) {
+    try {
+      const response = await axios.post(
+        `${this.apiUrl}/${this.phoneNumberId}/messages`,
+        {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: to,
+          type: 'location',
+          location: {
+            latitude: latitude,
+            longitude: longitude,
+            name: name,
+            address: address
+          }
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      return {
+        success: true,
+        messageId: response.data.messages[0].id,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Send Location Error:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message
+      };
+    }
+  }
+
+  // Send contact card
+  async sendContactMessage(to, contacts) {
+    try {
+      const response = await axios.post(
+        `${this.apiUrl}/${this.phoneNumberId}/messages`,
+        {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: to,
+          type: 'contacts',
+          contacts: contacts
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      return {
+        success: true,
+        messageId: response.data.messages[0].id,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Send Contact Error:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message
+      };
+    }
+  }
+
+  // Get media URL from media ID
+  async getMediaUrl(mediaId) {
+    try {
+      const response = await axios.get(
+        `${this.apiUrl}/${mediaId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`
+          }
+        }
+      );
+
+      return {
+        success: true,
+        url: response.data.url,
+        mimeType: response.data.mime_type,
+        sha256: response.data.sha256,
+        fileSize: response.data.file_size
+      };
+    } catch (error) {
+      console.error('Get Media URL Error:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message
+      };
+    }
+  }
+
+  // Download media file
+  async downloadMedia(mediaUrl) {
+    try {
+      const response = await axios.get(mediaUrl, {
+        headers: {
+          'Authorization': `Bearer ${this.accessToken}`
+        },
+        responseType: 'arraybuffer'
+      });
+
+      return {
+        success: true,
+        data: response.data,
+        contentType: response.headers['content-type']
+      };
+    } catch (error) {
+      console.error('Download Media Error:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message
+      };
+    }
+  }
+
+  // Format phone number (add 91 prefix to 10-digit Indian numbers)
   formatPhoneNumber(phoneNumber) {
     // Remove all non-numeric characters
     let formatted = phoneNumber.replace(/\D/g, '');
     
-    // Add country code if not present (assuming +1 for US/Canada)
-    if (!formatted.startsWith('1') && formatted.length === 10) {
-      formatted = '1' + formatted;
+    // If already has 91 prefix and 12 digits total, return as-is
+    if (formatted.startsWith('91') && formatted.length === 12) {
+      return formatted;
     }
     
-    return formatted;
+    // If exactly 10 digits, add 91 prefix
+    if (formatted.length === 10) {
+      return '91' + formatted;
+    }
+    
+    // If other format, throw error
+    throw new Error(`Invalid phone number: ${phoneNumber}. Expected 10 digits, will add 91 prefix automatically.`);
   }
 }
 

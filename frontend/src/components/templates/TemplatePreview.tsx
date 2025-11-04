@@ -11,36 +11,31 @@ const TemplatePreview: React.FC<TemplatePreviewProps> = ({
   template,
   sampleData = {},
 }) => {
-  // Replace placeholders with sample data
   const replacePlaceholders = (text: string, examples?: string[][]): string => {
     if (!text) return '';
-    
+
     let result = text;
-    
-    // Replace {{1}}, {{2}}, etc. with sample data or examples
+
     const matches = text.match(/\{\{(\d+)\}\}/g);
     if (matches) {
       matches.forEach((match, index) => {
         const num = match.replace(/\{\{|\}\}/g, '');
         let replacement = '';
-        
-        // Try to get from examples first
+
         if (examples && examples[0] && examples[0][index]) {
           replacement = examples[0][index];
         }
-        // Otherwise use sample data
         else if (sampleData[num]) {
           replacement = sampleData[num];
         }
-        // Default placeholder
         else {
           replacement = `[Value ${num}]`;
         }
-        
+
         result = result.replace(match, replacement);
       });
     }
-    
+
     return result;
   };
 

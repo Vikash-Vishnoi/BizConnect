@@ -10,13 +10,59 @@ interface Props {
 const MessageBubble: React.FC<Props> = ({message}) => {
   const isIncoming = message.direction === 'incoming';
 
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
+  const formatTime = (dateString: string | Date) => {
+    const date = typeof dateString === 'string' ? new Date(dateString) : dateString;
     return date.toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
       hour12: true,
     });
+  };
+
+  const getMessageText = () => {
+    // Handle different message content types
+    if (typeof message.content === 'string') {
+      return message.content;
+    }
+    
+    if (message.content?.text) {
+      return message.content.text;
+    }
+    
+    if (message.content?.interactive?.body) {
+      return message.content.interactive.body;
+    }
+    
+    if (message.content?.template?.name) {
+      return `Template: ${message.content.template.name}`;
+    }
+    
+    if (message.content?.contacts) {
+      return `👤 Contact shared`;
+    }
+
+    if (message.type === 'location' && message.content?.location) {
+      return `📍 Location: ${message.content.location.name || 'Shared location'}`;
+    }
+
+    if (message.type === 'document' && message.content?.filename) {
+      return `📎 ${message.content.filename}`;
+    }
+
+    if (message.type === 'image') {
+      return message.content?.caption || '📷 Image';
+    }
+
+    if (message.type === 'video') {
+      return message.content?.caption || '🎥 Video';
+    }
+
+    if (message.type === 'audio') {
+      return '🎵 Audio message';
+    }
+    
+    // Fallback for other message types
+    return `[${message.type || 'Message'}]`;
   };
 
   const getStatusIcon = () => {
@@ -45,20 +91,22 @@ const MessageBubble: React.FC<Props> = ({message}) => {
         styles.container,
         isIncoming ? styles.incomingContainer : styles.outgoingContainer,
       ]}>
-      {isIncoming && message.senderName && (
-        <Text style={styles.senderName}>{message.senderName}</Text>
-      )}
       <View
         style={[
           styles.bubble,
           isIncoming ? styles.incomingBubble : styles.outgoingBubble,
         ]}>
+        {message.type === 'image' && message.content?.mediaUrl && (
+          <Text style={[styles.text, isIncoming ? styles.incomingText : styles.outgoingText]}>
+            🖼️ [Image preview not available in this view]
+          </Text>
+        )}
         <Text
           style={[
             styles.text,
             isIncoming ? styles.incomingText : styles.outgoingText,
           ]}>
-          {message.content}
+          {getMessageText()}
         </Text>
         <View style={styles.footer}>
           <Text

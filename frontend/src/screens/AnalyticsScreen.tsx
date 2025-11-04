@@ -43,7 +43,6 @@ const AnalyticsScreen = ({navigation}: Props) => {
     endDate: '',
   });
 
-  // Analytics data
   const [dailyMetrics, setDailyMetrics] = useState<DailyMetrics | null>(null);
   const [campaignAnalytics, setCampaignAnalytics] = useState<
     CampaignAnalytics[]
@@ -58,6 +57,8 @@ const AnalyticsScreen = ({navigation}: Props) => {
   const [statusDistribution, setStatusDistribution] = useState<
     StatusDistribution[]
   >([]);
+  const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  const [templateAnalytics, setTemplateAnalytics] = useState<any[]>([]);
 
   useEffect(() => {
     loadAnalytics();
@@ -73,6 +74,8 @@ const AnalyticsScreen = ({navigation}: Props) => {
       setMessageTrends(data.messageTrends);
       setCampaignPerformance(data.campaignPerformance);
       setStatusDistribution(data.statusDistribution);
+      setRecentActivity(data.recentActivity || []);
+      setTemplateAnalytics(data.templateAnalytics || []);
     } catch (error) {
       console.error('Failed to load analytics:', error);
     } finally {
@@ -129,7 +132,7 @@ const AnalyticsScreen = ({navigation}: Props) => {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
+      {}
       <LinearGradient
         colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
         start={{x: 0, y: 0}}
@@ -153,20 +156,20 @@ const AnalyticsScreen = ({navigation}: Props) => {
         style={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl 
-            refreshing={isRefreshing} 
+          <RefreshControl
+            refreshing={isRefreshing}
             onRefresh={handleRefresh}
             colors={[theme.colors.primary]}
             tintColor={theme.colors.primary}
           />
         }>
-        {/* Date Range Selector */}
+        {}
         <DateRangeSelector
           selectedRange={selectedRange}
           onRangeChange={handleRangeChange}
         />
 
-        {/* Quality Score */}
+        {}
         {qualityScore && (
           <View style={styles.qualityScoreCard}>
             <View style={styles.qualityScoreHeader}>
@@ -205,7 +208,7 @@ const AnalyticsScreen = ({navigation}: Props) => {
           </View>
         )}
 
-        {/* Key Metrics */}
+        {}
         {dailyMetrics && (
           <>
             <Text style={styles.sectionTitle}>Overview</Text>
@@ -241,7 +244,7 @@ const AnalyticsScreen = ({navigation}: Props) => {
                 style={styles.metricCard}
               />
               <MetricCard
-                title="Unread"
+                title="Unread Messages"
                 value={dailyMetrics.unreadConversations}
                 icon="message-circle"
                 iconColor={theme.colors.warning}
@@ -249,10 +252,30 @@ const AnalyticsScreen = ({navigation}: Props) => {
                 style={styles.metricCard}
               />
             </View>
+
+            <View style={styles.metricsGrid}>
+              <MetricCard
+                title="Templates"
+                value={templateAnalytics.length}
+                icon="file-text"
+                iconColor={theme.colors.info}
+                backgroundColor={theme.colors.infoLight}
+                subtitle={`${templateAnalytics.filter((t: any) => t.status === 'approved').length} approved`}
+                style={styles.metricCard}
+              />
+              <MetricCard
+                title="Total Messages"
+                value={dailyMetrics.messagesSent}
+                icon="mail"
+                iconColor={theme.colors.secondary}
+                backgroundColor={theme.colors.accent}
+                style={styles.metricCard}
+              />
+            </View>
           </>
         )}
 
-        {/* Message Trends Line Chart */}
+        {}
         {messageTrends.length > 0 && (
           <View style={styles.chartSection}>
             <LineChart
@@ -264,7 +287,7 @@ const AnalyticsScreen = ({navigation}: Props) => {
           </View>
         )}
 
-        {/* Campaign Performance */}
+        {}
         {campaignPerformance.length > 0 && (
           <View style={styles.chartSection}>
             <BarChart
@@ -275,7 +298,7 @@ const AnalyticsScreen = ({navigation}: Props) => {
           </View>
         )}
 
-        {/* Campaign Analytics Table */}
+        {}
         {campaignAnalytics.length > 0 && (
           <View style={styles.tableSection}>
             <View style={styles.tableTitleRow}>
@@ -312,7 +335,7 @@ const AnalyticsScreen = ({navigation}: Props) => {
           </View>
         )}
 
-        {/* Status Distribution */}
+        {}
         {statusDistribution.length > 0 && (
           <View style={styles.chartSection}>
             <PieChart
@@ -323,7 +346,7 @@ const AnalyticsScreen = ({navigation}: Props) => {
           </View>
         )}
 
-        {/* Conversation Analytics */}
+        {}
         {conversationAnalytics && (
           <View style={styles.conversationSection}>
             <View style={styles.conversationTitleRow}>
@@ -382,7 +405,41 @@ const AnalyticsScreen = ({navigation}: Props) => {
           </View>
         )}
 
-        {/* Bottom Spacing */}
+        {}
+        {recentActivity.length > 0 && (
+          <View style={styles.recentActivitySection}>
+            <View style={styles.activityTitleRow}>
+              <Text style={styles.activityIcon}>🕐</Text>
+              <Text style={styles.sectionTitle}>Recent Activity</Text>
+            </View>
+            {recentActivity.slice(0, 10).map((activity: any, index: number) => (
+              <View key={index} style={styles.activityItem}>
+                <View style={styles.activityIconContainer}>
+                  <Text style={styles.activityEmoji}>
+                    {activity.type === 'message' ? '💬' : activity.type === 'campaign' ? '🎯' : '📄'}
+                  </Text>
+                </View>
+                <View style={styles.activityDetails}>
+                  <Text style={styles.activityTitle}>
+                    {activity.type === 'message' && (activity.contactName || activity.contactPhone || 'Unknown')}
+                    {activity.type === 'campaign' && (activity.campaignName || 'Campaign')}
+                    {activity.type === 'template' && (activity.templateName || 'Template')}
+                  </Text>
+                  <Text style={styles.activityDescription}>
+                    {activity.type === 'message' && `Message ${activity.direction || 'received'}`}
+                    {activity.type === 'campaign' && `${activity.status || 'Status update'}`}
+                    {activity.type === 'template' && `${activity.status || 'Updated'}`}
+                  </Text>
+                </View>
+                <Text style={styles.activityTime}>
+                  {activity.timestamp ? new Date(activity.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : 'Now'}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {}
         <View style={styles.bottomSpacing} />
       </ScrollView>
     </View>
@@ -685,6 +742,59 @@ const styles = StyleSheet.create({
   statusIconText: {
     fontSize: 14,
     marginRight: -4,
+  },
+  recentActivitySection: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.md,
+    marginHorizontal: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+    ...theme.shadows.sm,
+  },
+  activityTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: theme.spacing.md,
+  },
+  activityIcon: {
+    fontSize: 20,
+    marginRight: theme.spacing.xs,
+  },
+  activityItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: theme.spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+  activityIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: theme.borderRadius.full,
+    backgroundColor: theme.colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: theme.spacing.sm,
+  },
+  activityEmoji: {
+    fontSize: 18,
+  },
+  activityDetails: {
+    flex: 1,
+  },
+  activityTitle: {
+    ...theme.typography.bodySmall,
+    color: theme.colors.text,
+    fontWeight: '600',
+  },
+  activityDescription: {
+    ...theme.typography.caption,
+    color: theme.colors.textSecondary,
+    marginTop: 2,
+  },
+  activityTime: {
+    ...theme.typography.caption,
+    color: theme.colors.textTertiary,
   },
 });
 

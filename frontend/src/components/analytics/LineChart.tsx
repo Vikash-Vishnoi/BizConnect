@@ -19,7 +19,6 @@ const LineChart: React.FC<LineChartProps> = ({
   const chartHeight = height - 80;
   const padding = 16;
 
-  // Find max value for scaling
   const maxValue = Math.max(
     ...data.flatMap(d => [d.sent, d.delivered, d.read, d.failed])
   );
@@ -51,7 +50,7 @@ const LineChart: React.FC<LineChartProps> = ({
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View style={styles.chartContainer}>
           <View style={[styles.chart, {width: chartWidth, height: chartHeight}]}>
-            {/* Grid lines */}
+            {}
             {[0, 0.25, 0.5, 0.75, 1].map((fraction, i) => (
               <View
                 key={i}
@@ -62,7 +61,7 @@ const LineChart: React.FC<LineChartProps> = ({
               />
             ))}
 
-            {/* Y-axis labels */}
+            {}
             {[0, 0.25, 0.5, 0.75, 1].map((fraction, i) => (
               <Text
                 key={i}
@@ -74,7 +73,7 @@ const LineChart: React.FC<LineChartProps> = ({
               </Text>
             ))}
 
-            {/* Data points and lines */}
+            {}
             {lines.map(line => (
               <View key={line.key}>
                 {data.map((point, index) => {
@@ -108,7 +107,7 @@ const LineChart: React.FC<LineChartProps> = ({
                   );
                 })}
 
-                {/* Data points */}
+                {}
                 {data.map((point, index) => (
                   <View
                     key={`point-${index}`}
@@ -126,7 +125,7 @@ const LineChart: React.FC<LineChartProps> = ({
             ))}
           </View>
 
-          {/* X-axis labels */}
+          {}
           <View style={[styles.xAxis, {width: chartWidth}]}>
             {data.map((point, index) => (
               <Text key={index} style={styles.xAxisLabel}>
@@ -137,7 +136,7 @@ const LineChart: React.FC<LineChartProps> = ({
         </View>
       </ScrollView>
 
-      {/* Legend */}
+      {}
       {showLegend && (
         <View style={styles.legend}>
           {lines.map(line => (

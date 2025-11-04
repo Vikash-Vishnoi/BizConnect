@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Analytics = require('../models/Analytics');
 const Campaign = require('../models/Campaign');
-const Message = require('../models/Message');
+// ✅ REMOVED: Message model no longer exists - using Conversation.messages
 const Conversation = require('../models/Conversation');
 const Template = require('../models/Template');
 const { auth } = require('../middleware/auth');
@@ -21,6 +21,10 @@ router.get('/dashboard', auth, async (req, res) => {
     const summary = await Analytics.getSummary(req.userId, start, end);
 
     // Get real-time counts
+    // ✅ FIXED: Calculate totalMessages from embedded messages in conversations
+    const conversations = await Conversation.find({ userId: req.userId }, 'messages');
+    const totalMessages = conversations.reduce((sum, conv) => sum + (conv.messages?.length || 0), 0);
+
     const [
       totalCampaigns,
       activeCampaigns,
@@ -28,8 +32,7 @@ router.get('/dashboard', auth, async (req, res) => {
       totalTemplates,
       approvedTemplates,
       totalConversations,
-      activeConversations,
-      totalMessages
+      activeConversations
     ] = await Promise.all([
       Campaign.countDocuments({ userId: req.userId }),
       Campaign.countDocuments({ userId: req.userId, status: 'active' }),
@@ -37,8 +40,7 @@ router.get('/dashboard', auth, async (req, res) => {
       Template.countDocuments({ userId: req.userId }),
       Template.countDocuments({ userId: req.userId, status: 'approved' }),
       Conversation.countDocuments({ userId: req.userId }),
-      Conversation.countDocuments({ userId: req.userId, status: 'active' }),
-      Message.countDocuments({ userId: req.userId })
+      Conversation.countDocuments({ userId: req.userId, status: 'active' })
     ]);
 
     // Calculate growth rates (compare with previous period)
@@ -135,14 +137,17 @@ router.get('/campaigns', auth, async (req, res) => {
       id: campaign._id,
       name: campaign.name,
       status: campaign.status,
-      stats: campaign.stats,
-      deliveryRate: campaign.stats.total > 0 
+      messagesSent: campaign.stats?.sent || campaign.stats?.total || 0,
+      deliveryRate: campaign.stats?.total > 0 
         ? Math.round((campaign.stats.delivered / campaign.stats.total) * 100)
         : 0,
-      readRate: campaign.stats.total > 0
+      readRate: campaign.stats?.total > 0
         ? Math.round((campaign.stats.read / campaign.stats.total) * 100)
         : 0,
-      failureRate: campaign.stats.total > 0
+      replyRate: campaign.stats?.total > 0
+        ? Math.round(((campaign.stats.replied || 0) / campaign.stats.total) * 100)
+        : 0,
+      failureRate: campaign.stats?.total > 0
         ? Math.round((campaign.stats.failed / campaign.stats.total) * 100)
         : 0,
       createdAt: campaign.createdAt,
@@ -161,13 +166,10 @@ router.get('/campaigns', auth, async (req, res) => {
 // @access  Private
 router.get('/templates', auth, async (req, res) => {
   try {
-    const templates = await Template.find({
-      userId: req.userId,
-      status: 'approved'
-    })
-    .select('name category usage')
-    .sort({ 'usage.messagesSent': -1 })
-    .limit(10);
+    const templates = await Template.find({ userId: req.userId })
+      .select('name category status usage')
+      .sort({ 'usage.messagesSent': -1 })
+      .limit(20);
 
     res.json({ templates });
   } catch (error) {
@@ -181,48 +183,45 @@ router.get('/templates', auth, async (req, res) => {
 // @access  Private
 router.get('/conversations', auth, async (req, res) => {
   try {
+    // ✅ FIXED: Get analytics from embedded messages in conversations
     const [
       totalConversations,
       activeConversations,
-      archivedConversations,
-      avgMessagesPerConversation
+      archivedConversations
     ] = await Promise.all([
       Conversation.countDocuments({ userId: req.userId }),
       Conversation.countDocuments({ userId: req.userId, status: 'active' }),
-      Conversation.countDocuments({ userId: req.userId, status: 'archived' }),
-      Message.aggregate([
-        { $match: { userId: req.userId } },
-        { $group: {
-          _id: '$conversationId',
-          count: { $sum: 1 }
-        }},
-        { $group: {
-          _id: null,
-          avgMessages: { $avg: '$count' }
-        }}
-      ])
+      Conversation.countDocuments({ userId: req.userId, status: 'archived' })
     ]);
 
-    // Get response rate
-    const incomingCount = await Message.countDocuments({
-      userId: req.userId,
-      direction: 'incoming'
+    // Calculate average messages per conversation and response rates from embedded messages
+    const conversations = await Conversation.find({ userId: req.userId }, 'messages');
+    
+    let totalMessagesCount = 0;
+    let incomingCount = 0;
+    let outgoingCount = 0;
+
+    conversations.forEach(conv => {
+      if (conv.messages) {
+        totalMessagesCount += conv.messages.length;
+        incomingCount += conv.messages.filter(m => m.direction === 'incoming').length;
+        outgoingCount += conv.messages.filter(m => m.direction === 'outgoing').length;
+      }
     });
 
-    const outgoingCount = await Message.countDocuments({
-      userId: req.userId,
-      direction: 'outgoing'
-    });
+    const avgMessagesPerConversation = conversations.length > 0 
+      ? Math.round(totalMessagesCount / conversations.length) 
+      : 0;
 
-    const responseRate = incomingCount > 0
-      ? Math.round((outgoingCount / incomingCount) * 100)
+    const responseRate = incomingCount > 0 
+      ? Math.round((outgoingCount / incomingCount) * 100) 
       : 0;
 
     res.json({
       totalConversations,
       activeConversations,
       archivedConversations,
-      avgMessagesPerConversation: Math.round(avgMessagesPerConversation[0]?.avgMessages || 0),
+      avgMessagesPerConversation,
       responseRate,
       incomingMessages: incomingCount,
       outgoingMessages: outgoingCount
@@ -241,50 +240,28 @@ router.post('/update', auth, async (req, res) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    // Get today's statistics
-    const todayStats = await Message.aggregate([
-      {
-        $match: {
-          userId: req.userId,
-          timestamp: { $gte: today }
-        }
-      },
-      {
-        $group: {
-          _id: null,
-          sent: {
-            $sum: {
-              $cond: [
-                { $in: ['$status', ['sent', 'delivered', 'read']] },
-                1,
-                0
-              ]
-            }
-          },
-          delivered: {
-            $sum: {
-              $cond: [
-                { $in: ['$status', ['delivered', 'read']] },
-                1,
-                0
-              ]
-            }
-          },
-          read: {
-            $sum: {
-              $cond: [{ $eq: ['$status', 'read'] }, 1, 0]
-            }
-          },
-          failed: {
-            $sum: {
-              $cond: [{ $eq: ['$status', 'failed'] }, 1, 0]
-            }
-          }
-        }
-      }
-    ]);
+    // ✅ FIXED: Get today's statistics from embedded messages
+    const conversations = await Conversation.find({
+      userId: req.userId,
+      'messages.timestamp': { $gte: today }
+    }, 'messages');
 
-    const stats = todayStats[0] || { sent: 0, delivered: 0, read: 0, failed: 0 };
+    let sent = 0, delivered = 0, read = 0, failed = 0;
+
+    conversations.forEach(conv => {
+      if (conv.messages) {
+        conv.messages
+          .filter(m => m.timestamp >= today)
+          .forEach(msg => {
+            if (['sent', 'delivered', 'read'].includes(msg.status)) sent++;
+            if (['delivered', 'read'].includes(msg.status)) delivered++;
+            if (msg.status === 'read') read++;
+            if (msg.status === 'failed') failed++;
+          });
+      }
+    });
+
+    const stats = { sent, delivered, read, failed };
 
     // Get campaign stats
     const [activeCampaigns, completedCampaigns] = await Promise.all([
@@ -366,60 +343,64 @@ router.get('/recent-activity', auth, async (req, res) => {
   try {
     const { limit = 10 } = req.query;
     
-    // Get recent campaigns, messages, and conversations
-    const [recentCampaigns, recentMessages, recentConversations] = await Promise.all([
+    // Get recent campaigns, conversations, and templates
+    const [recentCampaigns, recentConversations, recentTemplates] = await Promise.all([
       Campaign.find({ userId: req.userId })
-        .sort({ createdAt: -1 })
-        .limit(3)
-        .select('name status createdAt'),
-      Message.find({ userId: req.userId })
-        .sort({ createdAt: -1 })
-        .limit(3)
-        .select('status createdAt'),
+        .sort({ updatedAt: -1 })
+        .limit(5)
+        .select('name status updatedAt'),
       Conversation.find({ userId: req.userId })
         .sort({ updatedAt: -1 })
+        .limit(10)
+        .select('contact messages updatedAt'),
+      Template.find({ userId: req.userId })
+        .sort({ updatedAt: -1 })
         .limit(3)
-        .select('customerName status updatedAt')
+        .select('name status updatedAt')
     ]);
 
     // Format activities
     const activities = [];
 
+    // Add recent messages from conversations
+    recentConversations.forEach(conv => {
+      if (conv.messages && conv.messages.length > 0) {
+        const lastMessage = conv.messages[conv.messages.length - 1];
+        const displayName = conv.contact?.name || conv.contact?.phoneNumber || 'Unknown';
+        activities.push({
+          id: `msg-${conv._id}-${lastMessage._id}`,
+          type: 'message',
+          title: displayName,
+          description: `Message ${lastMessage.direction === 'outgoing' ? 'sent' : 'received'}`,
+          timestamp: lastMessage.timestamp || conv.updatedAt,
+          icon: '💬',
+          iconColor: '#10B981'
+        });
+      }
+    });
+
     // Add campaigns
     recentCampaigns.forEach(campaign => {
       activities.push({
-        id: campaign._id,
+        id: `campaign-${campaign._id}`,
         type: 'campaign',
-        title: `Campaign "${campaign.name}" ${campaign.status}`,
-        description: `Campaign status: ${campaign.status}`,
-        timestamp: campaign.createdAt,
-        icon: '📢',
+        title: campaign.name,
+        description: `Campaign ${campaign.status}`,
+        timestamp: campaign.updatedAt,
+        icon: '🎯',
         iconColor: '#8B5CF6'
       });
     });
 
-    // Add messages
-    recentMessages.forEach(message => {
+    // Add templates
+    recentTemplates.forEach(template => {
       activities.push({
-        id: message._id,
-        type: 'message',
-        title: `Message ${message.status}`,
-        description: `Message status: ${message.status}`,
-        timestamp: message.createdAt,
-        icon: '💬',
-        iconColor: '#10B981'
-      });
-    });
-
-    // Add conversations
-    recentConversations.forEach(conversation => {
-      activities.push({
-        id: conversation._id,
-        type: 'conversation',
-        title: `Conversation with ${conversation.customerName || 'Unknown'}`,
-        description: `Status: ${conversation.status}`,
-        timestamp: conversation.updatedAt,
-        icon: '👤',
+        id: `template-${template._id}`,
+        type: 'template',
+        title: template.name,
+        description: `Template ${template.status}`,
+        timestamp: template.updatedAt,
+        icon: '📄',
         iconColor: '#3B82F6'
       });
     });
@@ -494,15 +475,29 @@ router.get('/trends', auth, async (req, res) => {
     const start = startDate ? new Date(startDate) : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const end = endDate ? new Date(endDate) : new Date();
 
-    const messages = await Message.find({
+    // ✅ FIXED: Get messages from embedded conversation messages
+    const conversations = await Conversation.find({
       userId: req.userId,
-      createdAt: { $gte: start, $lte: end }
-    }).sort({ createdAt: 1 });
+      'messages.timestamp': { $gte: start, $lte: end }
+    }, 'messages');
+
+    const messages = [];
+    conversations.forEach(conv => {
+      if (conv.messages) {
+        const filteredMessages = conv.messages.filter(m => 
+          m.timestamp >= start && m.timestamp <= end
+        );
+        messages.push(...filteredMessages);
+      }
+    });
+
+    // Sort by timestamp
+    messages.sort((a, b) => a.timestamp - b.timestamp);
 
     // Group by date
     const trendsMap = new Map();
     messages.forEach(msg => {
-      const date = msg.createdAt.toISOString().split('T')[0];
+      const date = msg.timestamp.toISOString().split('T')[0];
       if (!trendsMap.has(date)) {
         trendsMap.set(date, { sent: 0, delivered: 0, read: 0, failed: 0 });
       }
@@ -530,7 +525,8 @@ router.get('/trends', auth, async (req, res) => {
 // @access  Private
 router.get('/status-distribution', auth, async (req, res) => {
   try {
-    const messages = await Message.find({ userId: req.userId });
+    // ✅ FIXED: Get messages from embedded conversation messages
+    const conversations = await Conversation.find({ userId: req.userId }, 'messages');
     
     const distribution = {
       sent: 0,
@@ -539,13 +535,19 @@ router.get('/status-distribution', auth, async (req, res) => {
       failed: 0,
     };
 
-    messages.forEach(msg => {
-      if (distribution.hasOwnProperty(msg.status)) {
-        distribution[msg.status]++;
+    let total = 0;
+    conversations.forEach(conv => {
+      if (conv.messages) {
+        conv.messages.forEach(msg => {
+          if (distribution.hasOwnProperty(msg.status)) {
+            distribution[msg.status]++;
+            total++;
+          }
+        });
       }
     });
 
-    const total = messages.length || 1;
+    total = total || 1;
     const statusDistribution = Object.entries(distribution).map(([status, count]) => ({
       status,
       count,

@@ -2,13 +2,14 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 const { auth, generateToken } = require('../middleware/auth');
+const { validateRegister, validateLogin } = require('../middleware/validation');
 
 // @route   POST /api/auth/register
 // @desc    Register a new user
 // @access  Public
-router.post('/register', async (req, res) => {
+router.post('/register', validateRegister, async (req, res) => {
   try {
-    const { name, email, password, phone } = req.body;
+    const { name, email, password } = req.body;
 
     // Validate required fields
     if (!name || !email || !password) {
@@ -25,8 +26,7 @@ router.post('/register', async (req, res) => {
     const user = new User({
       name,
       email: email.toLowerCase(),
-      password,
-      phone
+      password
     });
 
     await user.save();
@@ -40,7 +40,6 @@ router.post('/register', async (req, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
-        phone: user.phone,
         role: user.role
       },
       token
@@ -54,7 +53,7 @@ router.post('/register', async (req, res) => {
 // @route   POST /api/auth/login
 // @desc    Login user
 // @access  Public
-router.post('/login', async (req, res) => {
+router.post('/login', validateLogin, async (req, res) => {
   try {
     const { email, password } = req.body;
 
@@ -67,11 +66,6 @@ router.post('/login', async (req, res) => {
     const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password' });
-    }
-
-    // Check if user is active
-    if (!user.isActive) {
-      return res.status(401).json({ error: 'Account is deactivated' });
     }
 
     // Verify password
@@ -93,9 +87,7 @@ router.post('/login', async (req, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
-        phone: user.phone,
-        role: user.role,
-        avatar: user.avatar
+        role: user.role
       },
       token
     });
@@ -121,10 +113,7 @@ router.get('/me', auth, async (req, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
-        phone: user.phone,
         role: user.role,
-        avatar: user.avatar,
-        isActive: user.isActive,
         lastLogin: user.lastLogin,
         createdAt: user.createdAt
       }
@@ -140,7 +129,7 @@ router.get('/me', auth, async (req, res) => {
 // @access  Private
 router.put('/profile', auth, async (req, res) => {
   try {
-    const { name, phone, avatar } = req.body;
+    const { name } = req.body;
     
     const user = await User.findById(req.userId);
     if (!user) {
@@ -149,8 +138,6 @@ router.put('/profile', auth, async (req, res) => {
 
     // Update fields
     if (name) user.name = name;
-    if (phone) user.phone = phone;
-    if (avatar) user.avatar = avatar;
 
     await user.save();
 
@@ -160,9 +147,7 @@ router.put('/profile', auth, async (req, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
-        phone: user.phone,
-        role: user.role,
-        avatar: user.avatar
+        role: user.role
       }
     });
   } catch (error) {

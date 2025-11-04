@@ -16,13 +16,16 @@ import type {RootStackParamList} from '../types/navigation';
 import type {Conversation} from '../types/conversation';
 import {conversationAPI} from '../services/conversationService';
 import ConversationCard from '../components/conversations/ConversationCard';
+import ConnectionStatus from '../components/ConnectionStatus';
+import {useSocket} from '../contexts/SocketProvider';
 import theme from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Inbox'>;
 
-type FilterType = 'all' | 'open' | 'assigned' | 'closed';
+type FilterType = 'all' | 'active' | 'archived' | 'blocked' | 'closed';
 
 const InboxScreen: React.FC<Props> = ({navigation}) => {
+  const {onNewMessage, onConversationStatusChanged, onConversationNew, socketState} = useSocket();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [filteredConversations, setFilteredConversations] = useState<
     Conversation[]
@@ -30,8 +33,18 @@ const InboxScreen: React.FC<Props> = ({navigation}) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState<FilterType>('all');
+  const [activeFilter, setActiveFilter] = useState<FilterType>('active');
   const [unreadCount, setUnreadCount] = useState(0);
+
+  // Debug: Log socket state on mount and when it changes
+  useEffect(() => {
+    console.log('🔍 Inbox: Socket state updated:', {
+      isConnected: socketState.isConnected,
+      isConnecting: socketState.isConnecting,
+      error: socketState.error,
+      lastConnected: socketState.lastConnected,
+    });
+  }, [socketState]);
 
   useEffect(() => {
     loadConversations();
@@ -42,25 +55,90 @@ const InboxScreen: React.FC<Props> = ({navigation}) => {
     filterConversations();
   }, [conversations, searchQuery, activeFilter]);
 
+  useEffect(() => {
+    // Refetch from server when filter changes to stay in sync with status on backend
+    loadConversations();
+  }, [activeFilter]);
+
+  useEffect(() => {
+    console.log('📡 Inbox: Subscribing to real-time message updates');
+
+    const unsubscribe = onNewMessage((data) => {
+      console.log('🆕 Inbox: New message received via socket:', data);
+      console.log('   Conversation ID:', data.conversationId);
+      console.log('   Message:', data.text?.substring(0, 50));
+
+      // Update the conversation in the list instead of reloading everything
+      setConversations(prev => {
+        const existingIndex = prev.findIndex(c => c._id === data.conversationId);
+        
+        if (existingIndex >= 0) {
+          // Update existing conversation
+          const updated = [...prev];
+          updated[existingIndex] = {
+            ...updated[existingIndex],
+            lastMessage: {
+              text: data.text,
+              timestamp: data.timestamp,
+              type: 'text',
+              direction: 'incoming',
+              status: 'delivered',
+            },
+            unreadCount: (updated[existingIndex].unreadCount || 0) + 1,
+          };
+          
+          // Move to top of list
+          const [updatedConv] = updated.splice(existingIndex, 1);
+          return [updatedConv, ...updated];
+        } else {
+          // New conversation - reload from server
+          console.log('🔄 New conversation detected, reloading list');
+          loadConversations();
+          return prev;
+        }
+      });
+      
+      loadUnreadCount();
+    });
+
+    const unsubscribeStatus = onConversationStatusChanged?.((data) => {
+      console.log('🔄 Inbox: Conversation status changed:', data);
+      
+      // Update status in the list
+      setConversations(prev => prev.map(conv => 
+        conv._id === data.conversationId 
+          ? { ...conv, status: data.status as any }
+          : conv
+      ));
+    });
+
+    const unsubscribeNewConv = onConversationNew?.((data) => {
+      console.log('🆕 Inbox: New conversation event');
+      loadConversations();
+      loadUnreadCount();
+    });
+
+    return () => {
+      console.log('🔌 Inbox: Unsubscribing from real-time messages');
+      unsubscribe();
+      unsubscribeStatus && unsubscribeStatus();
+      unsubscribeNewConv && unsubscribeNewConv();
+    };
+  }, [onNewMessage, onConversationStatusChanged, onConversationNew]);
+
   const loadConversations = async () => {
     try {
-      const response = await conversationAPI.getConversations();
-      // Backend might return {conversations: [...]} or just [...]
+      const statusParam = activeFilter === 'all' ? 'all' : activeFilter;
+      const response = await conversationAPI.getConversations(statusParam as any);
       const conversationArray = Array.isArray(response) ? response : (response as any).conversations || [];
-      
-      // Map backend format to frontend format
+
       const mappedConversations = conversationArray.map((conv: any) => ({
-        _id: conv._id,
-        patientName: conv.name || conv.phoneNumber,
-        patientPhone: conv.phoneNumber,
-        lastMessage: conv.lastMessage || '',
-        lastActivity: conv.lastMessageAt || conv.updatedAt || new Date().toISOString(),
-        status: conv.status === 'active' ? 'open' : conv.status === 'archived' ? 'closed' : 'open',
+        ...conv,
+        _id: String(conv._id),
+        status: conv.status || 'active',
         unreadCount: conv.unreadCount || 0,
-        assignedTo: conv.assignedTo,
-        assignedToName: conv.assignedToName,
       }));
-      
+
       setConversations(mappedConversations);
     } catch (error) {
       console.error('Failed to load conversations:', error);
@@ -83,18 +161,17 @@ const InboxScreen: React.FC<Props> = ({navigation}) => {
   const filterConversations = () => {
     let filtered = [...conversations];
 
-    // Apply status filter
     if (activeFilter !== 'all') {
       filtered = filtered.filter(conv => conv.status === activeFilter);
     }
 
-    // Apply search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(
         conv =>
-          (conv.patientName || '').toLowerCase().includes(query) ||
-          (conv.patientPhone || '').includes(query),
+          (conv.contact?.name || '').toLowerCase().includes(query) ||
+          (conv.contact?.phoneNumber || '').includes(query) ||
+          (conv.lastMessage?.text || '').toLowerCase().includes(query),
       );
     }
 
@@ -109,12 +186,6 @@ const InboxScreen: React.FC<Props> = ({navigation}) => {
 
   const handleConversationPress = (conversation: Conversation) => {
     navigation.navigate('Conversation', {conversationId: conversation._id});
-  };
-
-  const handleNewConversation = () => {
-    // Navigate to a screen where user can start a new conversation
-    // For now, we'll navigate to Conversation screen with a special flag
-    navigation.navigate('Conversation', {conversationId: 'new'});
   };
 
   const handleFilterPress = (filter: FilterType) => {
@@ -159,6 +230,9 @@ const InboxScreen: React.FC<Props> = ({navigation}) => {
 
   return (
     <View style={styles.container}>
+      {/* Connection Status */}
+      <ConnectionStatus socketState={socketState} />
+      
       {/* Header */}
       <LinearGradient
         colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
@@ -166,14 +240,14 @@ const InboxScreen: React.FC<Props> = ({navigation}) => {
         end={{x: 1, y: 1}}
         style={styles.header}>
         <View style={styles.headerContent}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-            activeOpacity={0.7}
-            accessibilityLabel="Back">
-            <Text style={styles.iconText}>←</Text>
-          </TouchableOpacity>
           <View style={styles.headerLeft}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => navigation.goBack()}
+              activeOpacity={0.7}
+              accessibilityLabel="Go Back">
+              <Icon name="arrow-left" size={20} color={theme.colors.textInverse} />
+            </TouchableOpacity>
             <Text style={styles.headerIcon}>💬</Text>
             <Text style={styles.title}>Inbox</Text>
           </View>
@@ -184,17 +258,17 @@ const InboxScreen: React.FC<Props> = ({navigation}) => {
               </View>
             )}
             <TouchableOpacity
-              style={styles.newConversationButton}
-              onPress={handleNewConversation}
+              style={styles.refreshButton}
+              onPress={handleRefresh}
               activeOpacity={0.7}
-              accessibilityLabel="New Conversation">
-              <Text style={styles.newConversationIcon}>✏️</Text>
+              accessibilityLabel="Refresh">
+              <Icon name="refresh-cw" size={20} color={theme.colors.textInverse} />
             </TouchableOpacity>
           </View>
         </View>
       </LinearGradient>
 
-      {/* Search */}
+      {}
       <View style={styles.searchContainer}>
         <Text style={styles.searchIcon}>🔍</Text>
         <TextInput
@@ -211,7 +285,7 @@ const InboxScreen: React.FC<Props> = ({navigation}) => {
         )}
       </View>
 
-      {/* Stats Bar */}
+      {}
       <View style={styles.statsBar}>
         <Text style={styles.statsIcon}>👥</Text>
         <Text style={styles.statsText}>
@@ -219,18 +293,19 @@ const InboxScreen: React.FC<Props> = ({navigation}) => {
         </Text>
       </View>
 
-      {/* Filters */}
+      {}
       <View style={styles.filtersContainer}>
         {renderFilter('all', 'All', '📋')}
-        {renderFilter('open', 'Open', '📂')}
-        {renderFilter('assigned', 'Assigned', '✓')}
+        {renderFilter('active', 'Active', '📂')}
+        {renderFilter('archived', 'Archived', '📦')}
+        {renderFilter('blocked', 'Blocked', '🚫')}
         {renderFilter('closed', 'Closed', '✅')}
       </View>
 
-      {/* Conversations List */}
+      {}
       <FlatList
         data={filteredConversations}
-        keyExtractor={item => item._id}
+        keyExtractor={item => String(item._id)}
         renderItem={({item}) => (
           <ConversationCard
             conversation={item}
@@ -251,20 +326,6 @@ const InboxScreen: React.FC<Props> = ({navigation}) => {
         }
       />
 
-      {/* Floating Action Button */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={handleNewConversation}
-        activeOpacity={0.8}
-        accessibilityLabel="New Conversation">
-        <LinearGradient
-          colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
-          start={{x: 0, y: 0}}
-          end={{x: 1, y: 1}}
-          style={styles.fabGradient}>
-          <Text style={styles.fabIcon}>✏️</Text>
-        </LinearGradient>
-      </TouchableOpacity>
     </View>
   );
 };
@@ -314,17 +375,6 @@ const styles = StyleSheet.create({
     ...theme.typography.h2,
     color: theme.colors.textInverse,
   },
-  newConversationButton: {
-    width: 40,
-    height: 40,
-    borderRadius: theme.borderRadius.full,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  newConversationIcon: {
-    fontSize: 20,
-  },
   unreadBadge: {
     backgroundColor: theme.colors.textInverse,
     borderRadius: theme.borderRadius.full,
@@ -338,6 +388,15 @@ const styles = StyleSheet.create({
     color: theme.colors.primary,
     ...theme.typography.caption,
     fontWeight: 'bold',
+  },
+  refreshButton: {
+    width: 40,
+    height: 40,
+    borderRadius: theme.borderRadius.full,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: theme.spacing.sm,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -445,24 +504,6 @@ const styles = StyleSheet.create({
   iconText: {
     fontSize: 20,
     color: theme.colors.textInverse,
-  },
-  fab: {
-    position: 'absolute',
-    right: theme.spacing.md,
-    bottom: theme.spacing.md,
-    borderRadius: theme.borderRadius.full,
-    ...theme.shadows.lg,
-    elevation: 8,
-  },
-  fabGradient: {
-    width: 56,
-    height: 56,
-    borderRadius: theme.borderRadius.full,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  fabIcon: {
-    fontSize: 24,
   },
 });
 

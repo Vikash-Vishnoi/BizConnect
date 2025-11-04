@@ -41,7 +41,6 @@ const TemplatesScreen: React.FC<Props> = ({navigation}) => {
     'all',
   );
 
-  // Load templates
   const loadTemplates = async (isRefreshing = false) => {
     try {
       if (isRefreshing) {
@@ -50,7 +49,6 @@ const TemplatesScreen: React.FC<Props> = ({navigation}) => {
         setLoading(true);
       }
       const response = await templateService.getTemplates();
-      // Backend returns {templates: [...]} so extract the array
       const templateArray = Array.isArray(response) ? response : (response as any).templates || [];
       setTemplates(templateArray);
       applyFilters(templateArray, searchQuery, statusFilter, categoryFilter);
@@ -64,7 +62,6 @@ const TemplatesScreen: React.FC<Props> = ({navigation}) => {
     }
   };
 
-  // Apply filters
   const applyFilters = (
     data: Template[],
     search: string,
@@ -73,7 +70,6 @@ const TemplatesScreen: React.FC<Props> = ({navigation}) => {
   ) => {
     let filtered = [...data];
 
-    // Search filter
     if (search.trim()) {
       const searchLower = search.toLowerCase();
       filtered = filtered.filter(
@@ -85,12 +81,10 @@ const TemplatesScreen: React.FC<Props> = ({navigation}) => {
       );
     }
 
-    // Status filter
     if (status !== 'all') {
       filtered = filtered.filter(t => t.status === status);
     }
 
-    // Category filter
     if (category !== 'all') {
       filtered = filtered.filter(t => t.category === category);
     }
@@ -98,7 +92,6 @@ const TemplatesScreen: React.FC<Props> = ({navigation}) => {
     setFilteredTemplates(filtered);
   };
 
-  // Handle filter changes
   const handleSearchChange = (text: string) => {
     setSearchQuery(text);
     applyFilters(templates, text, statusFilter, categoryFilter);
@@ -114,14 +107,12 @@ const TemplatesScreen: React.FC<Props> = ({navigation}) => {
     applyFilters(templates, searchQuery, statusFilter, category);
   };
 
-  // Load templates on mount and when screen is focused
   useFocusEffect(
     useCallback(() => {
       loadTemplates();
     }, []),
   );
 
-  // Navigate to template details
   const handleTemplatePress = (template: Template) => {
     if (!template._id) {
       console.error('Template ID is undefined:', template);
@@ -130,12 +121,10 @@ const TemplatesScreen: React.FC<Props> = ({navigation}) => {
     navigation.navigate('TemplateDetails', {templateId: template._id});
   };
 
-  // Navigate to create template
   const handleCreateTemplate = () => {
     navigation.navigate('CreateTemplate');
   };
 
-  // Render filter chip with emoji
   const FilterChip = ({
     label,
     active,
@@ -184,7 +173,7 @@ const TemplatesScreen: React.FC<Props> = ({navigation}) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
+      {}
       <LinearGradient
         colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
         start={{x: 0, y: 0}}
@@ -196,15 +185,10 @@ const TemplatesScreen: React.FC<Props> = ({navigation}) => {
           <Text style={styles.iconText}>←</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Templates</Text>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={handleCreateTemplate}
-          accessibilityLabel="Create Template">
-          <Text style={styles.iconText}>＋</Text>
-        </TouchableOpacity>
+        <View style={styles.placeholder} />
       </LinearGradient>
 
-      {/* Search Bar */}
+      {}
       <View style={styles.searchContainer}>
         <Text style={styles.searchIcon}>🔍</Text>
         <TextInput
@@ -221,7 +205,7 @@ const TemplatesScreen: React.FC<Props> = ({navigation}) => {
         )}
       </View>
 
-      {/* Stats Bar */}
+      {}
       <View style={styles.statsBar}>
         <Text style={styles.statsIcon}>📄</Text>
         <Text style={styles.statsText}>
@@ -229,7 +213,7 @@ const TemplatesScreen: React.FC<Props> = ({navigation}) => {
         </Text>
       </View>
 
-      {/* Status Filter */}
+      {}
       <View style={styles.filterSection}>
         <Text style={styles.filterLabel}>Status:</Text>
         <View style={styles.filterChips}>
@@ -266,7 +250,7 @@ const TemplatesScreen: React.FC<Props> = ({navigation}) => {
         </View>
       </View>
 
-      {/* Category Filter */}
+      {}
       <View style={styles.filterSection}>
         <Text style={styles.filterLabel}>Category:</Text>
         <View style={styles.filterChips}>
@@ -297,7 +281,7 @@ const TemplatesScreen: React.FC<Props> = ({navigation}) => {
         </View>
       </View>
 
-      {/* Templates List */}
+      {}
       <FlatList
         data={filteredTemplates}
         keyExtractor={item => item._id}
@@ -333,7 +317,7 @@ const TemplatesScreen: React.FC<Props> = ({navigation}) => {
         }
       />
 
-      {/* Floating Action Button */}
+      {}
       {filteredTemplates.length > 0 && (
         <TouchableOpacity
           style={styles.fab}

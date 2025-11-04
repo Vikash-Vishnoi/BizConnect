@@ -3,7 +3,6 @@ import {View, Text, StyleSheet, ViewStyle} from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import theme from '../../theme';
 
-// Icon to emoji mapping
 const iconToEmoji: Record<string, string> = {
   'target': '🎯',
   'activity': '📊',

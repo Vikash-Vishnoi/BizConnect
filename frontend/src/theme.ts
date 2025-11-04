@@ -1,72 +1,58 @@
-/**
- * Design System - WhatsApp Marketing Platform
- * Centralized theme configuration for consistent UI/UX
- */
+
 
 export const colors = {
-  // Primary Colors
-  primary: '#128C7E',      // WhatsApp Dark Green
-  primaryLight: '#25D366', // WhatsApp Light Green
-  primaryDark: '#075E54',  // WhatsApp Darker Green
-  
-  // Secondary Colors
-  secondary: '#34B7F1',    // WhatsApp Blue
-  accent: '#DCF8C6',       // WhatsApp Light Green Bubble
-  
-  // Background Colors
-  background: '#F8FAFC',   // Light Gray Background
-  surface: '#FFFFFF',      // White Surface
-  card: '#FFFFFF',         // Card Background
-  overlay: 'rgba(0, 0, 0, 0.5)', // Modal Overlay
-  
-  // Text Colors
-  text: '#1F2937',         // Primary Text (Dark Gray)
-  textSecondary: '#6B7280',// Secondary Text (Medium Gray)
-  textTertiary: '#9CA3AF', // Tertiary Text (Light Gray)
-  textInverse: '#FFFFFF',  // Text on Dark Background
-  
-  // Border & Divider
-  border: '#E5E7EB',       // Border Color
-  divider: '#F3F4F6',      // Divider Color
-  input: '#D1D5DB',        // Input Border
-  
-  // Status Colors
-  success: '#10B981',      // Success Green
-  successLight: '#D1FAE5', // Success Light Background
-  
-  warning: '#F59E0B',      // Warning Orange
-  warningLight: '#FEF3C7', // Warning Light Background
-  
-  error: '#EF4444',        // Error Red
-  errorLight: '#FEE2E2',   // Error Light Background
-  
-  info: '#3B82F6',         // Info Blue
-  infoLight: '#DBEAFE',    // Info Light Background
-  
-  // Campaign Status
+  primary: '#128C7E',
+  primaryLight: '#25D366',
+  primaryDark: '#075E54',
+
+  secondary: '#34B7F1',
+  accent: '#DCF8C6',
+
+  background: '#F8FAFC',
+  surface: '#FFFFFF',
+  card: '#FFFFFF',
+  overlay: 'rgba(0, 0, 0, 0.5)',
+
+  text: '#1F2937',
+  textSecondary: '#6B7280',
+  textTertiary: '#9CA3AF',
+  textInverse: '#FFFFFF',
+
+  border: '#E5E7EB',
+  divider: '#F3F4F6',
+  input: '#D1D5DB',
+
+  success: '#10B981',
+  successLight: '#D1FAE5',
+
+  warning: '#F59E0B',
+  warningLight: '#FEF3C7',
+
+  error: '#EF4444',
+  errorLight: '#FEE2E2',
+
+  info: '#3B82F6',
+  infoLight: '#DBEAFE',
+
   campaignActive: '#10B981',
   campaignScheduled: '#3B82F6',
   campaignPaused: '#F59E0B',
   campaignCompleted: '#6B7280',
-  
-  // Message Status
+
   messageSent: '#DCF8C6',
   messageReceived: '#FFFFFF',
   messageDelivered: '#34B7F1',
   messageRead: '#25D366',
   messageFailed: '#EF4444',
-  
-  // Template Status
+
   templateApproved: '#10B981',
   templatePending: '#F59E0B',
   templateRejected: '#EF4444',
-  
-  // Gradients
+
   gradientStart: '#128C7E',
   gradientMiddle: '#1AA260',
   gradientEnd: '#25D366',
-  
-  // Chart Colors
+
   chart: {
     primary: '#128C7E',
     secondary: '#34B7F1',
@@ -80,7 +66,6 @@ export const colors = {
 };
 
 export const typography = {
-  // Headings
   h1: {
     fontSize: 32,
     fontWeight: '700' as const,
@@ -110,8 +95,7 @@ export const typography = {
     fontWeight: '600' as const,
     lineHeight: 22,
   },
-  
-  // Body Text
+
   body: {
     fontSize: 16,
     fontWeight: '400' as const,
@@ -132,8 +116,7 @@ export const typography = {
     fontWeight: '500' as const,
     lineHeight: 20,
   },
-  
-  // Caption & Labels
+
   caption: {
     fontSize: 12,
     fontWeight: '400' as const,
@@ -144,8 +127,7 @@ export const typography = {
     fontWeight: '500' as const,
     lineHeight: 16,
   },
-  
-  // Button Text
+
   button: {
     fontSize: 16,
     fontWeight: '600' as const,
@@ -158,8 +140,7 @@ export const typography = {
     lineHeight: 20,
     letterSpacing: 0.2,
   },
-  
-  // Input Labels
+
   label: {
     fontSize: 14,
     fontWeight: '500' as const,
@@ -249,32 +230,26 @@ export const animation = {
 };
 
 export const layout = {
-  // Screen Padding
   screenPadding: spacing.base,
-  
-  // Card Spacing
+
   cardMargin: spacing.md,
   cardPadding: spacing.base,
-  
-  // List Item
+
   listItemPadding: spacing.base,
   listItemSpacing: spacing.sm,
-  
-  // Button Heights
+
   buttonHeight: {
     small: 36,
     medium: 44,
     large: 52,
   },
-  
-  // Input Heights
+
   inputHeight: {
     small: 36,
     medium: 44,
     large: 52,
   },
-  
-  // Icon Sizes
+
   iconSize: {
     xs: 16,
     sm: 20,
@@ -283,8 +258,7 @@ export const layout = {
     lg: 32,
     xl: 40,
   },
-  
-  // Avatar Sizes
+
   avatarSize: {
     xs: 24,
     sm: 32,
@@ -296,27 +270,23 @@ export const layout = {
 };
 
 export const accessibility = {
-  // Minimum touch target size (iOS/Android guidelines)
   minTouchTarget: 44,
-  
-  // Color contrast ratios (WCAG AA)
+
   contrastRatio: {
     normal: 4.5,
     large: 3,
   },
 };
 
-// Utility function to get gradient style
 export const getGradient = () => ({
   colors: [colors.gradientStart, colors.gradientMiddle, colors.gradientEnd],
   start: { x: 0, y: 0 },
   end: { x: 1, y: 1 },
 });
 
-// Utility function to get status color
 export const getStatusColor = (status: string): string => {
   const statusLower = status?.toLowerCase() || '';
-  
+
   if (statusLower === 'active' || statusLower === 'approved' || statusLower === 'delivered' || statusLower === 'read') {
     return colors.success;
   }
@@ -332,14 +302,13 @@ export const getStatusColor = (status: string): string => {
   if (statusLower === 'failed' || statusLower === 'rejected' || statusLower === 'error') {
     return colors.error;
   }
-  
+
   return colors.textSecondary;
 };
 
-// Utility function to get status background color
 export const getStatusBackgroundColor = (status: string): string => {
   const statusLower = status?.toLowerCase() || '';
-  
+
   if (statusLower === 'active' || statusLower === 'approved' || statusLower === 'delivered' || statusLower === 'read') {
     return colors.successLight;
   }
@@ -352,7 +321,7 @@ export const getStatusBackgroundColor = (status: string): string => {
   if (statusLower === 'failed' || statusLower === 'rejected' || statusLower === 'error') {
     return colors.errorLight;
   }
-  
+
   return colors.divider;
 };
 

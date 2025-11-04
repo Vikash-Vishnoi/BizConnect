@@ -1,41 +1,39 @@
-// Template component types based on WhatsApp Business API
-export type TemplateComponentType = 
-  | 'HEADER' 
-  | 'BODY' 
-  | 'FOOTER' 
+export type TemplateComponentType =
+  | 'HEADER'
+  | 'BODY'
+  | 'FOOTER'
   | 'BUTTONS';
 
-export type TemplateHeaderFormat = 
-  | 'TEXT' 
-  | 'IMAGE' 
-  | 'VIDEO' 
+export type TemplateHeaderFormat =
+  | 'TEXT'
+  | 'IMAGE'
+  | 'VIDEO'
   | 'DOCUMENT';
 
-export type TemplateButtonType = 
-  | 'QUICK_REPLY' 
-  | 'PHONE_NUMBER' 
+export type TemplateButtonType =
+  | 'QUICK_REPLY'
+  | 'PHONE_NUMBER'
   | 'URL';
 
-export type TemplateCategory = 
-  | 'UTILITY' 
-  | 'MARKETING' 
+export type TemplateCategory =
+  | 'UTILITY'
+  | 'MARKETING'
   | 'AUTHENTICATION';
 
-export type TemplateStatus = 
-  | 'draft' 
-  | 'pending' 
-  | 'approved' 
+export type TemplateStatus =
+  | 'draft'
+  | 'pending'
+  | 'approved'
   | 'rejected';
 
-export type TemplateLanguage = 
-  | 'en' 
-  | 'en_US' 
-  | 'hi' 
-  | 'es' 
-  | 'fr' 
+export type TemplateLanguage =
+  | 'en'
+  | 'en_US'
+  | 'hi'
+  | 'es'
+  | 'fr'
   | 'pt_BR';
 
-// Template button interface
 export interface TemplateButton {
   type: TemplateButtonType;
   text: string;
@@ -44,7 +42,6 @@ export interface TemplateButton {
   example?: string[];
 }
 
-// Template component interface
 export interface TemplateComponent {
   type: TemplateComponentType;
   format?: TemplateHeaderFormat;
@@ -56,7 +53,6 @@ export interface TemplateComponent {
   buttons?: TemplateButton[];
 }
 
-// Main template interface
 export interface Template {
   _id: string;
   name: string;
@@ -69,7 +65,6 @@ export interface Template {
   rejectionReason?: string;
 }
 
-// Template creation/update payload
 export interface CreateTemplatePayload {
   name: string;
   category: TemplateCategory;
@@ -81,7 +76,6 @@ export interface UpdateTemplatePayload extends Partial<CreateTemplatePayload> {
   status?: TemplateStatus;
 }
 
-// Template state management
 export interface TemplatesState {
   list: Template[];
   selected: Template | null;
@@ -94,13 +88,11 @@ export interface TemplatesState {
   };
 }
 
-// Template validation result
 export interface TemplateValidationResult {
   isValid: boolean;
   errors: string[];
 }
 
-// Template statistics
 export interface TemplateStats {
   total: number;
   draft: number;

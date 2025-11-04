@@ -21,7 +21,6 @@ const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
   const [showStatus, setShowStatus] = useState(false);
 
   useEffect(() => {
-    // Subscribe to network state
     const unsubscribe = NetInfo.addEventListener(state => {
       setNetworkState({
         isConnected: state.isConnected ?? false,
@@ -34,7 +33,6 @@ const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
   }, []);
 
   useEffect(() => {
-    // Show status bar when offline or socket disconnected
     const shouldShow =
       !networkState.isConnected ||
       (!socketState.isConnected && !socketState.isConnecting);

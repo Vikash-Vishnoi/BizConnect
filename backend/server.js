@@ -55,25 +55,115 @@ connectDB();
 // Socket.io connection handling
 io.on('connection', (socket) => {
   console.log('📱 New client connected:', socket.id);
+  console.log('   Time:', new Date().toLocaleTimeString());
+  console.log('   Transport:', socket.conn.transport.name);
 
   socket.on('authenticate', (data) => {
     // Store user info with socket
     socket.userId = data.userId;
     socket.join(`user:${data.userId}`);
-    console.log(`✅ User ${data.userId} authenticated`);
+    console.log(`✅ User authenticated: ${data.userId}`);
+    console.log(`   Socket ID: ${socket.id}`);
+    console.log(`   Joined room: user:${data.userId}`);
+    console.log(`   Time: ${new Date().toLocaleTimeString()}`);
+    
+    // Get all sockets in the room to verify
+    const socketsInRoom = io.sockets.adapter.rooms.get(`user:${data.userId}`);
+    console.log(`   Sockets in room user:${data.userId}:`, socketsInRoom ? socketsInRoom.size : 0);
+  });
+
+  // Join conversation room
+  socket.on('joinConversation', (conversationId) => {
+    socket.join(`conversation:${conversationId}`);
+    console.log(`💬 Joined conversation: ${conversationId}`);
+  });
+
+  // Leave conversation room
+  socket.on('leaveConversation', (conversationId) => {
+    socket.leave(`conversation:${conversationId}`);
+    console.log(`👋 Left conversation: ${conversationId}`);
+  });
+
+  // Typing indicator
+  socket.on('typing', (data) => {
+    socket.to(`conversation:${data.conversationId}`).emit('userTyping', {
+      userId: socket.userId,
+      conversationId: data.conversationId,
+      isTyping: data.isTyping
+    });
   });
 
   socket.on('disconnect', () => {
     console.log('📴 Client disconnected:', socket.id);
+    if (socket.userId) {
+      console.log(`   User: ${socket.userId}`);
+    }
+    console.log('   Time:', new Date().toLocaleTimeString());
   });
 });
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
+// Health check endpoint - Enhanced
+app.get('/health', async (req, res) => {
+  const mongoStatus = mongoose.connection.readyState;
+  const mongoStates = {
+    0: 'disconnected',
+    1: 'connected',
+    2: 'connecting',
+    3: 'disconnecting'
+  };
+
+  const health = {
+    status: mongoStatus === 1 ? 'healthy' : 'unhealthy',
     timestamp: new Date().toISOString(),
-    mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+    uptime: process.uptime(),
+    services: {
+      mongodb: {
+        status: mongoStates[mongoStatus],
+        connected: mongoStatus === 1
+      },
+      whatsapp: {
+        configured: !!(process.env.WHATSAPP_ACCESS_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID),
+        hasAccessToken: !!process.env.WHATSAPP_ACCESS_TOKEN,
+        hasPhoneNumber: !!process.env.WHATSAPP_PHONE_NUMBER_ID
+      }
+    },
+    version: '2.0.0',
+    environment: process.env.NODE_ENV || 'development'
+  };
+
+  const statusCode = health.status === 'healthy' ? 200 : 503;
+  res.status(statusCode).json(health);
+});
+
+// Debug endpoint for socket connections
+app.get('/debug/sockets', (req, res) => {
+  const sockets = [];
+  const rooms = [];
+  
+  io.sockets.sockets.forEach((socket) => {
+    sockets.push({
+      id: socket.id,
+      userId: socket.userId,
+      connected: socket.connected,
+      rooms: Array.from(socket.rooms),
+    });
+  });
+  
+  io.sockets.adapter.rooms.forEach((value, key) => {
+    if (!key.startsWith('/')) { // Skip socket.io internal rooms
+      rooms.push({
+        name: key,
+        size: value.size,
+        sockets: Array.from(value),
+      });
+    }
+  });
+  
+  res.json({
+    totalSockets: io.sockets.sockets.size,
+    sockets,
+    rooms,
+    timestamp: new Date().toISOString(),
   });
 });
 
@@ -81,25 +171,37 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/campaigns', require('./routes/campaigns'));
 app.use('/api/templates', require('./routes/templates'));
-app.use('/api/conversations', require('./routes/conversations'));
-app.use('/api/messages', require('./routes/messages'));
 app.use('/api/analytics', require('./routes/analytics'));
 app.use('/api/webhooks', require('./routes/webhooks'));
+app.use('/api/settings', require('./routes/settings'));
+
+// ✅ UNIFIED INBOX ROUTE (Replaces /conversations, /messages, and old /inbox)
+// This route handles all conversation and message operations with embedded messages
+app.use('/api/inbox', require('./routes/inbox'));
+
+// ❌ OLD ROUTES REMOVED (Replaced by unified inbox):
+// app.use('/api/conversations', require('./routes/conversations'));
+// app.use('/api/messages', require('./routes/messages'));
+// app.use('/api/inbox', require('./routes/inbox'));
 
 // Root endpoint
 app.get('/', (req, res) => {
   res.json({
     message: 'WhatsApp Marketing API',
-    version: '1.0.0',
+    version: '2.0.0',
+    note: 'Using unified conversation model with embedded messages',
     endpoints: {
       health: '/health',
       auth: '/api/auth',
       campaigns: '/api/campaigns',
       templates: '/api/templates',
-      conversations: '/api/conversations',
-      messages: '/api/messages',
+      inbox: '/api/inbox (unified - includes conversations & messages)',
       analytics: '/api/analytics',
       webhooks: '/api/webhooks'
+    },
+    deprecated: {
+      note: 'These routes have been removed and replaced by /api/inbox',
+      removed: ['/api/conversations', '/api/messages', '/api/inbox (old)']
     }
   });
 });

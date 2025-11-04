@@ -11,7 +11,6 @@ class OfflineQueueService {
   private isSyncing = false;
   private listeners: Array<(state: OfflineQueueState) => void> = [];
 
-  // Initialize the queue from storage
   async initialize(): Promise<void> {
     try {
       const stored = await AsyncStorage.getItem(QUEUE_STORAGE_KEY);
@@ -20,7 +19,6 @@ class OfflineQueueService {
         this.notifyListeners();
       }
 
-      // Listen to network changes
       NetInfo.addEventListener(state => {
         if (state.isConnected && this.queue.length > 0) {
           this.syncQueue();
@@ -31,7 +29,6 @@ class OfflineQueueService {
     }
   }
 
-  // Add message to queue
   async addToQueue(
     conversationId: string,
     text: string
@@ -49,7 +46,6 @@ class OfflineQueueService {
     await this.saveQueue();
     this.notifyListeners();
 
-    // Try to send immediately if online
     const netInfo = await NetInfo.fetch();
     if (netInfo.isConnected) {
       this.syncQueue();
@@ -58,7 +54,6 @@ class OfflineQueueService {
     return message;
   }
 
-  // Sync queue when online
   async syncQueue(): Promise<void> {
     if (this.isSyncing || this.queue.length === 0) {
       return;
@@ -77,43 +72,36 @@ class OfflineQueueService {
 
     console.log(`Syncing ${this.queue.length} queued messages...`);
 
-    // Process each message
     for (let i = this.queue.length - 1; i >= 0; i--) {
       const message = this.queue[i];
 
       if (message.status === 'sending') {
-        continue; // Skip already processing messages
+        continue;
       }
 
       try {
-        // Update status to sending
         message.status = 'sending';
         await this.saveQueue();
         this.notifyListeners();
 
-        // Attempt to send message
         await conversationAPI.sendMessage({
           conversationId: message.conversationId,
           content: message.text,
         });
 
-        // Success - remove from queue
         this.queue.splice(i, 1);
         console.log(`Message ${message.id} sent successfully`);
       } catch (error) {
         console.error(`Failed to send message ${message.id}:`, error);
 
-        // Increment retry count
         message.retryCount++;
         message.status = 'failed';
 
-        // Remove if max retries exceeded
         if (message.retryCount >= MAX_RETRY_ATTEMPTS) {
           console.log(`Message ${message.id} exceeded max retries, removing from queue`);
           message.error = 'Max retry attempts exceeded';
           this.queue.splice(i, 1);
         } else {
-          // Reset to pending for next retry
           message.status = 'pending';
         }
       }
@@ -126,7 +114,6 @@ class OfflineQueueService {
     console.log(`Sync complete. ${this.queue.length} messages remaining in queue`);
   }
 
-  // Remove message from queue
   async removeFromQueue(messageId: string): Promise<void> {
     const index = this.queue.findIndex(m => m.id === messageId);
     if (index !== -1) {
@@ -136,14 +123,12 @@ class OfflineQueueService {
     }
   }
 
-  // Clear entire queue
   async clearQueue(): Promise<void> {
     this.queue = [];
     await this.saveQueue();
     this.notifyListeners();
   }
 
-  // Get queue state
   getState(): OfflineQueueState {
     return {
       messages: [...this.queue],
@@ -152,17 +137,14 @@ class OfflineQueueService {
     };
   }
 
-  // Get pending message count
   getPendingCount(): number {
     return this.queue.filter(m => m.status === 'pending').length;
   }
 
-  // Get failed message count
   getFailedCount(): number {
     return this.queue.filter(m => m.status === 'failed').length;
   }
 
-  // Subscribe to queue changes
   subscribe(listener: (state: OfflineQueueState) => void): () => void {
     this.listeners.push(listener);
     listener(this.getState());
@@ -172,7 +154,6 @@ class OfflineQueueService {
     };
   }
 
-  // Save queue to storage
   private async saveQueue(): Promise<void> {
     try {
       await AsyncStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(this.queue));
@@ -181,13 +162,11 @@ class OfflineQueueService {
     }
   }
 
-  // Notify all listeners
   private notifyListeners(): void {
     const state = this.getState();
     this.listeners.forEach(listener => listener(state));
   }
 
-  // Retry failed messages
   async retryFailed(): Promise<void> {
     const failedMessages = this.queue.filter(m => m.status === 'failed');
     failedMessages.forEach(m => {
@@ -199,7 +178,6 @@ class OfflineQueueService {
     await this.syncQueue();
   }
 
-  // Check if message is in queue
   isInQueue(conversationId: string, text: string): boolean {
     return this.queue.some(
       m => m.conversationId === conversationId && m.text === text
@@ -207,6 +185,5 @@ class OfflineQueueService {
   }
 }
 
-// Export singleton instance
 export const offlineQueueService = new OfflineQueueService();
 export default offlineQueueService;

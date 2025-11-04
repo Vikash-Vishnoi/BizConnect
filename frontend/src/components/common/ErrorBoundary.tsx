@@ -25,12 +25,10 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   static getDerivedStateFromError(error: Error): Partial<State> {
-    // Update state so the next render will show the fallback UI
     return {hasError: true, error};
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-    // Log error details (only in development)
     if (__DEV__) {
       console.error('Error Boundary caught an error:', error);
       console.error('Error Info:', errorInfo);
@@ -41,8 +39,6 @@ class ErrorBoundary extends Component<Props, State> {
       errorInfo,
     });
 
-    // You can also log the error to an error reporting service here
-    // Example: Sentry.captureException(error);
   }
 
   handleReset = (): void => {
@@ -55,12 +51,10 @@ class ErrorBoundary extends Component<Props, State> {
 
   render(): ReactNode {
     if (this.state.hasError) {
-      // Custom fallback UI
       if (this.props.fallback) {
         return this.props.fallback;
       }
 
-      // Default error UI
       return (
         <View style={styles.container}>
           <ScrollView
@@ -99,8 +93,6 @@ class ErrorBoundary extends Component<Props, State> {
             <TouchableOpacity
               style={styles.secondaryButton}
               onPress={() => {
-                // Navigate to home or login
-                // This would require navigation prop
                 this.handleReset();
               }}
               activeOpacity={0.7}>

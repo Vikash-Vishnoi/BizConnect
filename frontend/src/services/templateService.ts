@@ -7,30 +7,22 @@ import type {
   TemplateStats,
 } from '../types/template';
 
-// Template service with API integration
 export const templateService = {
-  // Get all templates
   getTemplates: async (): Promise<Template[]> => {
     const response = await api.get<{ templates: Template[] }>('/templates');
-    // Backend might return { templates: [...] } or just [...]
     return Array.isArray(response.data) ? response.data : response.data.templates || [];
   },
 
-  // Get template by ID
   getTemplateById: async (id: string): Promise<Template> => {
     const response = await api.get<{ template: Template }>(`/templates/${id}`);
-    // Backend returns { template: {...} }
     return response.data.template || response.data as any;
   },
 
-  // Create new template
   createTemplate: async (payload: CreateTemplatePayload): Promise<Template> => {
     const response = await api.post<{ template: Template; message?: string }>('/templates', payload);
-    // Backend returns { template: {...}, message: '...' }
     return response.data.template || response.data as any;
   },
 
-  // Update template
   updateTemplate: async (
     id: string,
     payload: UpdateTemplatePayload,
@@ -39,46 +31,43 @@ export const templateService = {
     return response.data;
   },
 
-  // Delete template
   deleteTemplate: async (id: string): Promise<void> => {
     await api.delete(`/templates/${id}`);
   },
 
-  // Submit template for approval
   submitTemplate: async (id: string): Promise<Template> => {
     const response = await api.post<Template>(`/templates/${id}/submit`);
     return response.data;
   },
 
-  // Get template statistics
+  checkTemplateStatus: async (id: string): Promise<Template> => {
+    const response = await api.get<{ template: Template }>(`/templates/${id}/status`);
+    return response.data.template || response.data as any;
+  },
+
   getTemplateStats: async (): Promise<TemplateStats> => {
     const response = await api.get<TemplateStats>('/templates/stats');
     return response.data;
   },
 
-  // Validate template against WhatsApp rules
   validateTemplate: (template: CreateTemplatePayload): TemplateValidationResult => {
     const errors: string[] = [];
 
-    // Validate template name
     if (!template.name || template.name.trim() === '') {
       errors.push('Template name is required');
     } else if (!/^[a-z0-9_]+$/.test(template.name)) {
       errors.push('Template name must be lowercase and contain only letters, numbers, and underscores');
     }
 
-    // Validate components
     if (!template.components || template.components.length === 0) {
       errors.push('Template must have at least one component');
     }
 
-    // Check for BODY component (required)
     const hasBody = template.components.some(c => c.type === 'BODY');
     if (!hasBody) {
       errors.push('Template must have a BODY component');
     }
 
-    // Validate component order
     const componentOrder = ['HEADER', 'BODY', 'FOOTER', 'BUTTONS'];
     let lastIndex = -1;
     for (const component of template.components) {
@@ -90,7 +79,6 @@ export const templateService = {
       lastIndex = currentIndex;
     }
 
-    // Validate each component
     for (const component of template.components) {
       if (component.type === 'BODY' && !component.text) {
         errors.push('BODY component must have text');
@@ -118,7 +106,6 @@ export const templateService = {
         }
       }
 
-      // Validate button text length
       if (component.buttons) {
         for (const button of component.buttons) {
           if (button.text.length > 20) {
@@ -127,7 +114,6 @@ export const templateService = {
         }
       }
 
-      // Validate text length
       if (component.text) {
         if (component.type === 'HEADER' && component.text.length > 60) {
           errors.push('HEADER text must not exceed 60 characters');

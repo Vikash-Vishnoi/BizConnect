@@ -9,11 +9,11 @@ interface Props {
 }
 
 const ConversationCard: React.FC<Props> = ({conversation, onPress}) => {
-  const formatTime = (dateString: string | undefined) => {
-    if (!dateString) return 'Unknown';
+  const formatTime = (dateInput: string | Date | undefined) => {
+    if (!dateInput) return 'Unknown';
     try {
-      const date = new Date(dateString);
-      if (isNaN(date.getTime())) return 'Invalid date';
+      const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
+      if (isNaN(date.getTime())) return 'Unknown';
       const now = new Date();
       const diffMs = now.getTime() - date.getTime();
       const diffMins = Math.floor(diffMs / 60000);
@@ -32,10 +32,12 @@ const ConversationCard: React.FC<Props> = ({conversation, onPress}) => {
 
   const getStatusColor = () => {
     switch (conversation.status) {
-      case 'open':
+      case 'active':
         return theme.colors.success;
-      case 'assigned':
-        return theme.colors.info;
+      case 'archived':
+        return theme.colors.textTertiary;
+      case 'blocked':
+        return theme.colors.error;
       case 'closed':
         return theme.colors.textSecondary;
       default:
@@ -45,14 +47,16 @@ const ConversationCard: React.FC<Props> = ({conversation, onPress}) => {
 
   const getStatusIcon = () => {
     switch (conversation.status) {
-      case 'open':
+      case 'active':
         return '💬';
-      case 'assigned':
-        return '👤';
+      case 'archived':
+        return '📦';
+      case 'blocked':
+        return '🚫';
       case 'closed':
         return '✓';
       default:
-        return '?';
+        return '❔';
     }
   };
 
@@ -60,24 +64,28 @@ const ConversationCard: React.FC<Props> = ({conversation, onPress}) => {
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
       <View style={[styles.avatar, {backgroundColor: getStatusColor()}]}>
         <Text style={styles.avatarText}>
-          {(conversation.patientName || '?').charAt(0).toUpperCase()}
+          {(
+            (conversation.contact?.name || conversation.contact?.phoneNumber || '?')
+              .charAt(0)
+              .toUpperCase()
+          )}
         </Text>
       </View>
 
       <View style={styles.content}>
         <View style={styles.header}>
           <Text style={styles.name} numberOfLines={1}>
-            {conversation.patientName || 'Unknown'}
+            {conversation.contact?.name || conversation.contact?.phoneNumber || 'Unknown'}
           </Text>
           <View style={styles.timeContainer}>
             <Text style={styles.clockIcon}>🕐</Text>
-            <Text style={styles.time}>{formatTime(conversation.lastActivity)}</Text>
+            <Text style={styles.time}>{formatTime(conversation.lastMessageAt)}</Text>
           </View>
         </View>
 
         <View style={styles.messageRow}>
           <Text style={styles.lastMessage} numberOfLines={2}>
-            {conversation.lastMessage || 'No messages'}
+            {conversation.lastMessage?.text || 'No messages'}
           </Text>
           {(conversation.unreadCount || 0) > 0 && (
             <View style={styles.badge}>

@@ -22,9 +22,9 @@ const StatusBadge: React.FC<Props> = ({status, size = 'medium'}) => {
           color: '#1976D2',
           backgroundColor: '#E3F2FD',
         };
-      case 'running':
+      case 'active':
         return {
-          label: 'Running',
+          label: 'Active',
           color: '#388E3C',
           backgroundColor: '#E8F5E9',
         };
@@ -39,6 +39,12 @@ const StatusBadge: React.FC<Props> = ({status, size = 'medium'}) => {
           label: 'Completed',
           color: '#7B1FA2',
           backgroundColor: '#F3E5F5',
+        };
+      case 'failed':
+        return {
+          label: 'Failed',
+          color: '#D32F2F',
+          backgroundColor: '#FFEBEE',
         };
       default:
         return {

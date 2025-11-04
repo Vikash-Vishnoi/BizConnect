@@ -9,7 +9,6 @@ import {
 import LinearGradient from 'react-native-linear-gradient';
 import theme from '../../theme';
 
-// Icon to emoji mapping
 const iconToEmoji: Record<string, string> = {
   'info': 'ℹ️',
   'alert-circle': '⚠️',
@@ -106,7 +105,7 @@ const Card: React.FC<CardProps> = ({
           </View>
         </View>
         {header.action && actionEmoji && (
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={header.action.onPress}
             hitSlop={{top: 10, bottom: 10, left: 10, right: 10}}>
             <Text style={[
@@ -255,7 +254,6 @@ const styles = StyleSheet.create({
     color: theme.colors.textInverse,
   },
   contentWithHeader: {
-    // Additional spacing if needed
   },
   footer: {
     marginTop: theme.spacing.md,

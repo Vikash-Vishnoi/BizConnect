@@ -28,21 +28,53 @@ const userSchema = new mongoose.Schema({
     enum: ['user', 'admin'],
     default: 'user'
   },
-  phone: {
-    type: String,
-    trim: true
-  },
-  avatar: {
-    type: String,
-    default: null
-  },
-  isActive: {
-    type: Boolean,
-    default: true
-  },
   lastLogin: {
     type: Date,
     default: null
+  },
+  // Welcome message configuration per user
+  welcomeMessageConfig: {
+    enabled: {
+      type: Boolean,
+      default: true
+    },
+    strategy: {
+      type: String,
+      enum: ['template', 'text'],
+      default: 'template'
+    },
+    templateId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Template',
+      default: null
+    },
+    textMessage: {
+      type: String,
+      default: 'Hello! 👋 Thank you for contacting us. We\'ve received your message and will respond shortly.'
+    },
+    delay: {
+      type: Number,
+      default: 2000,
+      min: 0,
+      max: 60000
+    },
+    businessHoursEnabled: {
+      type: Boolean,
+      default: false
+    },
+    businessHours: {
+      monday: { start: String, end: String },
+      tuesday: { start: String, end: String },
+      wednesday: { start: String, end: String },
+      thursday: { start: String, end: String },
+      friday: { start: String, end: String },
+      saturday: { start: String, end: String },
+      sunday: { start: String, end: String }
+    },
+    outsideHoursMessage: {
+      type: String,
+      default: 'Hello! 👋 Thank you for contacting us. We\'re currently outside business hours but will respond when we\'re back.'
+    }
   }
 }, {
   timestamps: true

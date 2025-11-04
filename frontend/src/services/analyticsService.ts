@@ -12,12 +12,11 @@ import {
 } from '../types/analytics';
 
 export const analyticsService = {
-  // Get daily metrics
   getDailyMetrics: async (): Promise<DailyMetrics> => {
     try {
       const response = await api.get('/analytics/dashboard');
       const data = response.data;
-      
+
       return {
         totalCampaigns: data.overview?.totalCampaigns || 0,
         activeCampaigns: data.overview?.activeCampaigns || 0,
@@ -33,7 +32,6 @@ export const analyticsService = {
     }
   },
 
-  // Get campaign analytics
   getCampaignAnalytics: async (
     dateRange?: DateRange
   ): Promise<CampaignAnalytics[]> => {
@@ -48,7 +46,6 @@ export const analyticsService = {
     }
   },
 
-  // Get conversation analytics
   getConversationAnalytics: async (
     dateRange?: DateRange
   ): Promise<ConversationAnalytics> => {
@@ -63,14 +60,12 @@ export const analyticsService = {
     }
   },
 
-  // Get quality score
   getQualityScore: async (): Promise<QualityScore> => {
     try {
       const response = await api.get('/analytics/quality');
       return response.data;
     } catch (error) {
       console.error('Failed to fetch quality score:', error);
-      // Return default score if API fails
       return {
         score: 0,
         status: 'low' as const,
@@ -80,7 +75,6 @@ export const analyticsService = {
     }
   },
 
-  // Get message trends
   getMessageTrends: async (dateRange?: DateRange): Promise<MessageTrend[]> => {
     try {
       const response = await api.get('/analytics/trends', {
@@ -93,7 +87,6 @@ export const analyticsService = {
     }
   },
 
-  // Get campaign performance
   getCampaignPerformance: async (
     dateRange?: DateRange
   ): Promise<CampaignPerformance[]> => {
@@ -108,7 +101,6 @@ export const analyticsService = {
     }
   },
 
-  // Get status distribution
   getStatusDistribution: async (): Promise<StatusDistribution[]> => {
     try {
       const response = await api.get('/analytics/status-distribution');
@@ -119,7 +111,6 @@ export const analyticsService = {
     }
   },
 
-  // Get recent activity
   getRecentActivity: async (limit: number = 10): Promise<RecentActivity[]> => {
     try {
       const response = await api.get('/analytics/recent-activity', {
@@ -132,7 +123,28 @@ export const analyticsService = {
     }
   },
 
-  // Get all analytics data
+  getDailyAnalytics: async (dateRange?: DateRange): Promise<any[]> => {
+    try {
+      const response = await api.get('/analytics/daily', {
+        params: dateRange,
+      });
+      return response.data.analytics || [];
+    } catch (error) {
+      console.error('Failed to fetch daily analytics:', error);
+      return [];
+    }
+  },
+
+  getTemplateAnalytics: async (): Promise<any[]> => {
+    try {
+      const response = await api.get('/analytics/templates');
+      return response.data.templates || [];
+    } catch (error) {
+      console.error('Failed to fetch template analytics:', error);
+      return [];
+    }
+  },
+
   getAllAnalytics: async (dateRange?: DateRange) => {
     try {
       const [
@@ -144,6 +156,8 @@ export const analyticsService = {
         campaignPerformance,
         statusDistribution,
         recentActivity,
+        dailyAnalytics,
+        templateAnalytics,
       ] = await Promise.all([
         analyticsService.getDailyMetrics(),
         analyticsService.getCampaignAnalytics(dateRange),
@@ -153,6 +167,8 @@ export const analyticsService = {
         analyticsService.getCampaignPerformance(dateRange),
         analyticsService.getStatusDistribution(),
         analyticsService.getRecentActivity(),
+        analyticsService.getDailyAnalytics(dateRange),
+        analyticsService.getTemplateAnalytics(),
       ]);
 
       return {
@@ -164,6 +180,8 @@ export const analyticsService = {
         campaignPerformance,
         statusDistribution,
         recentActivity,
+        dailyAnalytics,
+        templateAnalytics,
       };
     } catch (error) {
       console.error('Failed to fetch analytics:', error);

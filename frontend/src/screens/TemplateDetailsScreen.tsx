@@ -38,7 +38,6 @@ const TemplateDetailsScreen: React.FC<Props> = ({navigation, route}) => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  // Load template details
   const loadTemplate = useCallback(async () => {
     try {
       setLoading(true);
@@ -64,7 +63,6 @@ const TemplateDetailsScreen: React.FC<Props> = ({navigation, route}) => {
     loadTemplate();
   }, [loadTemplate]);
 
-  // Submit template for approval
   const handleSubmitForApproval = () => {
     Alert.alert(
       'Submit for Approval',
@@ -98,14 +96,11 @@ const TemplateDetailsScreen: React.FC<Props> = ({navigation, route}) => {
     );
   };
 
-  // Edit template (only for drafts)
   const handleEdit = () => {
     if (!template) return;
-    // Navigate to CreateTemplate with template data to edit
     navigation.navigate('CreateTemplate', {templateToEdit: template});
   };
 
-  // Delete template
   const handleDelete = () => {
     Alert.alert(
       'Delete Template',
@@ -135,7 +130,6 @@ const TemplateDetailsScreen: React.FC<Props> = ({navigation, route}) => {
     );
   };
 
-  // Format date
   const formatDate = (dateString?: string) => {
     if (!dateString) return '';
     const date = new Date(dateString);
@@ -192,7 +186,7 @@ const TemplateDetailsScreen: React.FC<Props> = ({navigation, route}) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
+      {}
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
@@ -205,7 +199,7 @@ const TemplateDetailsScreen: React.FC<Props> = ({navigation, route}) => {
         </TouchableOpacity>
       </View>
 
-      {/* Template Info Card */}
+      {}
       <View style={styles.infoCard}>
         <View style={styles.infoRow}>
           <Text style={styles.templateName}>{template.name}</Text>
@@ -233,7 +227,7 @@ const TemplateDetailsScreen: React.FC<Props> = ({navigation, route}) => {
         )}
       </View>
 
-      {/* Rejection Reason */}
+      {}
       {template.status === 'rejected' && template.rejectionReason && (
         <View style={styles.rejectionCard}>
           <Text style={styles.rejectionTitle}>❌ Rejection Reason</Text>
@@ -244,13 +238,13 @@ const TemplateDetailsScreen: React.FC<Props> = ({navigation, route}) => {
         </View>
       )}
 
-      {/* Preview */}
+      {}
       <View style={styles.previewSection}>
         <Text style={styles.sectionTitle}>Template Preview</Text>
         <TemplatePreview template={template} />
       </View>
 
-      {/* Action Buttons */}
+      {}
       <View style={styles.actionButtons}>
         {template.status === 'draft' && (
           <>

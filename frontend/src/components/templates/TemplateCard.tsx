@@ -10,10 +10,8 @@ interface TemplateCardProps {
 }
 
 const TemplateCard: React.FC<TemplateCardProps> = ({template, onPress}) => {
-  // Safely get components array
   const components = template.components || [];
-  
-  // Get component counts
+
   const componentCounts = {
     header: components.filter(c => c.type === 'HEADER').length > 0,
     body: components.filter(c => c.type === 'BODY').length > 0,
@@ -21,11 +19,9 @@ const TemplateCard: React.FC<TemplateCardProps> = ({template, onPress}) => {
     buttons: components.filter(c => c.type === 'BUTTONS').length > 0,
   };
 
-  // Get body text preview
   const bodyComponent = components.find(c => c.type === 'BODY');
   const bodyPreview = bodyComponent?.text?.substring(0, 80) || '';
 
-  // Format date
   const formatDate = (dateString?: string) => {
     if (!dateString) return '';
     try {

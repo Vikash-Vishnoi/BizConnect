@@ -14,14 +14,14 @@ const PieChart: React.FC<PieChartProps> = ({data, title, size = 200}) => {
   const innerRadius = radius - strokeWidth;
   const circumference = 2 * Math.PI * innerRadius;
 
-  let currentAngle = -90; // Start from top
+  let currentAngle = -90;
 
   return (
     <View style={styles.container}>
       {title && <Text style={styles.title}>{title}</Text>}
 
       <View style={styles.chartContainer}>
-        {/* Simple ring chart representation */}
+        {}
         <View style={[styles.chart, {width: size, height: size}]}>
           <View style={styles.centerCircle}>
             <Text style={styles.centerText}>Status</Text>
@@ -57,7 +57,7 @@ const PieChart: React.FC<PieChartProps> = ({data, title, size = 200}) => {
           })}
         </View>
 
-        {/* Legend */}
+        {}
         <View style={styles.legend}>
           {data.map((item, index) => (
             <View key={index} style={styles.legendItem}>

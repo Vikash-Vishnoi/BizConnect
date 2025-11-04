@@ -36,13 +36,13 @@ const CreateTemplateScreen: React.FC<Props> = ({navigation}) => {
     try {
       setSaving(true);
       const savedTemplate = await templateService.createTemplate(template);
-      
+
       if (!savedTemplate || !savedTemplate._id) {
         Alert.alert('Error', 'Template created but ID not returned. Please refresh the templates list.');
         navigation.navigate('Templates');
         return;
       }
-      
+
       Alert.alert(
         'Success',
         'Template created successfully!',
@@ -97,6 +97,10 @@ const CreateTemplateScreen: React.FC<Props> = ({navigation}) => {
     setActiveTab('preview');
   };
 
+  const handleTemplateChange = (template: CreateTemplatePayload) => {
+    setTemplateData(template);
+  };
+
   if (saving) {
     return (
       <SafeAreaView style={styles.container}>
@@ -110,7 +114,7 @@ const CreateTemplateScreen: React.FC<Props> = ({navigation}) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
+      {}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={handleCancel}>
           <Text style={styles.backButtonText}>←</Text>
@@ -119,7 +123,7 @@ const CreateTemplateScreen: React.FC<Props> = ({navigation}) => {
         <View style={styles.placeholder} />
       </View>
 
-      {/* Tabs */}
+      {}
       <View style={styles.tabs}>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'build' && styles.tabActive]}
@@ -156,12 +160,13 @@ const CreateTemplateScreen: React.FC<Props> = ({navigation}) => {
         </TouchableOpacity>
       </View>
 
-      {/* Content */}
+      {}
       {activeTab === 'build' ? (
         <TemplateBuilder
           initialData={templateData || undefined}
           onSave={handleSaveTemplate}
           onCancel={handleCancel}
+          onChange={handleTemplateChange}
         />
       ) : templateData ? (
         <View style={styles.previewContainer}>

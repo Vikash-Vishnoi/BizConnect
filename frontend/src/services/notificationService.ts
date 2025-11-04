@@ -15,28 +15,22 @@ class NotificationService {
   private channelId = 'whatsapp-marketing-channel';
   private listeners: Array<(notification: PushNotification) => void> = [];
 
-  // Initialize notification service
   async initialize(): Promise<void> {
     try {
-      // Create notification channel for Android
       if (Platform.OS === 'android') {
         await this.createChannel();
       }
 
-      // Request permissions
       await this.requestPermission();
 
-      // Setup foreground notification handler
       this.setupForegroundHandler();
 
-      // Setup background notification handler
       this.setupBackgroundHandler();
     } catch (error) {
       console.error('Failed to initialize notifications:', error);
     }
   }
 
-  // Create Android notification channel
   private async createChannel(): Promise<void> {
     await notifee.createChannel({
       id: this.channelId,
@@ -47,11 +41,10 @@ class NotificationService {
     });
   }
 
-  // Request notification permission
   async requestPermission(): Promise<NotificationPermission> {
     try {
       const settings = await notifee.requestPermission();
-      
+
       const status =
         settings.authorizationStatus === 1
           ? 'granted'
@@ -61,8 +54,6 @@ class NotificationService {
 
       const permission: NotificationPermission = {status};
 
-      // Store permission status would go here if needed
-
       return permission;
     } catch (error) {
       console.error('Failed to request permission:', error);
@@ -70,7 +61,6 @@ class NotificationService {
     }
   }
 
-  // Check permission status
   async getPermission(): Promise<NotificationPermission> {
     try {
       const settings = await notifee.getNotificationSettings();
@@ -88,13 +78,12 @@ class NotificationService {
     }
   }
 
-  // Display local notification
   async displayNotification(
     notification: Partial<PushNotification>
   ): Promise<string | void> {
     try {
       const permission = await this.getPermission();
-      
+
       if (permission.status !== 'granted') {
         console.warn('Notification permission not granted');
         return;
@@ -117,7 +106,6 @@ class NotificationService {
         data: notification.data,
       });
 
-      // Notify listeners
       this.notifyListeners({
         id: notificationId,
         type: (notification.type as NotificationType) || 'new_message',
@@ -134,7 +122,6 @@ class NotificationService {
     }
   }
 
-  // Setup foreground notification handler
   private setupForegroundHandler(): void {
     notifee.onForegroundEvent(async ({type, detail}) => {
       switch (type) {
@@ -143,50 +130,42 @@ class NotificationService {
           break;
         case EventType.PRESS:
           console.log('Notification pressed', detail.notification);
-          // Handle notification tap
           this.handleNotificationPress(detail.notification);
           break;
       }
     });
   }
 
-  // Setup background notification handler
   private setupBackgroundHandler(): void {
     notifee.onBackgroundEvent(async ({type, detail}) => {
       console.log('Background notification event:', type, detail);
-      
+
       if (type === EventType.PRESS) {
         this.handleNotificationPress(detail.notification);
       }
     });
   }
 
-  // Handle notification press
   private handleNotificationPress(notification?: Notification): void {
     if (!notification?.data) return;
 
     const data = notification.data;
     console.log('Handle notification press:', data);
 
-    // You can navigate to specific screens based on notification type
-    // This will be implemented in the SocketProvider
   }
 
-  // Subscribe to notifications
   subscribe(listener: (notification: PushNotification) => void): () => void {
     this.listeners.push(listener);
-    
+
     return () => {
       this.listeners = this.listeners.filter(l => l !== listener);
     };
   }
 
-  // Notify all listeners
   private notifyListeners(notification: PushNotification): void {
     this.listeners.forEach(listener => listener(notification));
   }
 
-  // Show new message notification
   async notifyNewMessage(data: {
     conversationId: string;
     from: string;
@@ -203,7 +182,6 @@ class NotificationService {
     });
   }
 
-  // Show campaign completed notification
   async notifyCampaignCompleted(data: {
     campaignId: string;
     campaignName: string;
@@ -220,7 +198,6 @@ class NotificationService {
     });
   }
 
-  // Show template status notification
   async notifyTemplateStatus(data: {
     templateId: string;
     templateName: string;
@@ -240,7 +217,6 @@ class NotificationService {
     });
   }
 
-  // Show quality score alert
   async notifyQualityScore(data: {
     score: number;
     status: string;
@@ -259,7 +235,6 @@ class NotificationService {
     }
   }
 
-  // Cancel notification
   async cancelNotification(notificationId: string): Promise<void> {
     try {
       await notifee.cancelNotification(notificationId);
@@ -268,7 +243,6 @@ class NotificationService {
     }
   }
 
-  // Cancel all notifications
   async cancelAllNotifications(): Promise<void> {
     try {
       await notifee.cancelAllNotifications();
@@ -277,7 +251,6 @@ class NotificationService {
     }
   }
 
-  // Get badge count
   async getBadgeCount(): Promise<number> {
     try {
       if (Platform.OS === 'ios') {
@@ -290,7 +263,6 @@ class NotificationService {
     }
   }
 
-  // Set badge count
   async setBadgeCount(count: number): Promise<void> {
     try {
       if (Platform.OS === 'ios') {
@@ -301,19 +273,16 @@ class NotificationService {
     }
   }
 
-  // Increment badge count
   async incrementBadge(): Promise<void> {
     const current = await this.getBadgeCount();
     await this.setBadgeCount(current + 1);
   }
 
-  // Decrement badge count
   async decrementBadge(): Promise<void> {
     const current = await this.getBadgeCount();
     await this.setBadgeCount(Math.max(0, current - 1));
   }
 }
 
-// Export singleton instance
 export const notificationService = new NotificationService();
 export default notificationService;

@@ -9,7 +9,6 @@ interface BarChartProps {
 }
 
 const BarChart: React.FC<BarChartProps> = ({data, title, height = 300}) => {
-  // Safety check for empty data
   if (!data || data.length === 0) {
     return (
       <View style={[styles.container, {height}]}>
@@ -22,15 +21,15 @@ const BarChart: React.FC<BarChartProps> = ({data, title, height = 300}) => {
   }
 
   const chartHeight = height - 120;
-  const maxValue = Math.max(...data.map(d => d.messagesCount || 0), 1); // Ensure at least 1 to avoid division by zero
+  const maxValue = Math.max(...data.map(d => d.messagesCount || 0), 1);
 
   const getBarHeight = (value: number) => {
     return (value / maxValue) * chartHeight;
   };
 
   const getStatusColor = (status: string) => {
-    if (!status) return '#8B5CF6'; // Default color if status is undefined
-    
+    if (!status) return '#8B5CF6';
+
     switch (status.toLowerCase()) {
       case 'active':
       case 'running':
@@ -54,7 +53,7 @@ const BarChart: React.FC<BarChartProps> = ({data, title, height = 300}) => {
 
       <View style={styles.chartContainer}>
         <View style={[styles.chart, {height: chartHeight}]}>
-          {/* Grid lines with labels */}
+          {}
           {[0, 0.25, 0.5, 0.75, 1].map((fraction, i) => (
             <View key={i} style={styles.gridRow}>
               <Text style={styles.yAxisLabel}>
@@ -64,7 +63,7 @@ const BarChart: React.FC<BarChartProps> = ({data, title, height = 300}) => {
             </View>
           ))}
 
-          {/* Bars */}
+          {}
           <View style={styles.barsContainer}>
             {data.map((item, index) => (
               <View key={index} style={styles.barWrapper}>
@@ -94,7 +93,7 @@ const BarChart: React.FC<BarChartProps> = ({data, title, height = 300}) => {
         </View>
       </View>
 
-      {/* Status legend */}
+      {}
       <View style={styles.legend}>
         {[
           {status: 'Active', color: '#10B981'},
