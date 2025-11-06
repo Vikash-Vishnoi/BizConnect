@@ -15,6 +15,9 @@ export enum SocketEvent {
   MESSAGE_DELIVERED = 'message:delivered',
   MESSAGE_READ = 'message:read',
   MESSAGE_FAILED = 'message:failed',
+  MESSAGE_STATUS = 'message:status', // ✅ NEW: Unified status update (sent, delivered, read)
+  MESSAGE_REACTED = 'message:reacted',
+  MESSAGE_DELETED = 'message:deleted',
 
   CONVERSATION_UPDATED = 'conversation:updated',
   CONVERSATION_STATUS_CHANGED = 'conversation:statusChanged',
@@ -27,6 +30,12 @@ export enum SocketEvent {
 
   ANALYTICS_UPDATED = 'analytics:updated',
   QUALITY_SCORE_UPDATED = 'quality:updated',
+
+  // ✅ NEW: Push Notifications
+  NOTIFICATION_NEW_MESSAGE = 'notification:new_message',
+  NOTIFICATION_MESSAGE_STATUS = 'notification:message_status',
+  NOTIFICATION_PROFILE_UPDATE = 'notification:profile_update',
+  NOTIFICATION_ACCOUNT_ALERT = 'notification:account_alert',
 }
 
 export interface SocketState {
@@ -63,6 +72,28 @@ export interface NewMessageNotification {
   text: string;
   timestamp: string;
   hasMedia: boolean;
+}
+
+export interface MessageReaction {
+  conversationId: string;
+  messageId: string;
+  whatsappMessageId: string;
+  from: string;
+  emoji: string;
+  timestamp: string;
+  reactedToMessage?: {
+    _id: string;
+    text?: string;
+    type: string;
+    direction: 'incoming' | 'outgoing';
+    timestamp: Date | string;
+  };
+}
+
+export interface MessageDeleted {
+  conversationId: string;
+  messageId: string;
+  deletedAt: string;
 }
 
 export interface TemplateStatusUpdate {
@@ -143,9 +174,51 @@ export interface SocketEventHandlers {
   onCampaignCompleted?: SocketEventHandler<{campaignId: string}>;
   onNewMessage?: SocketEventHandler<NewMessageNotification>;
   onMessageUpdate?: SocketEventHandler<MessageUpdate>;
+  onMessageReacted?: SocketEventHandler<MessageReaction>;
+  onMessageDeleted?: SocketEventHandler<MessageDeleted>;
   onConversationStatusChanged?: SocketEventHandler<{ conversationId: string; status: string; previousStatus?: string }>;
   onConversationNew?: SocketEventHandler<{ conversation: any }>;
   onTemplateStatusUpdate?: SocketEventHandler<TemplateStatusUpdate>;
   onAnalyticsUpdate?: SocketEventHandler<AnalyticsUpdate>;
   onQualityScoreUpdate?: SocketEventHandler<{score: number; status: string}>;
+  // ✅ NEW: Notification handlers
+  onNotificationNewMessage?: SocketEventHandler<{
+    title: string;
+    body: string;
+    data: {
+      conversationId: string;
+      messageId: string;
+      contactName: string;
+      contactPhone: string;
+      messageType: string;
+      timestamp: string;
+    };
+    userId: string;
+    badge: number;
+  }>;
+  onNotificationMessageStatus?: SocketEventHandler<{
+    userId: string;
+    conversationId: string;
+    messageId: string;
+    status: 'sent' | 'delivered' | 'read' | 'failed';
+    timestamp: string;
+  }>;
+  onNotificationProfileUpdate?: SocketEventHandler<{
+    userId: string;
+    conversationId: string;
+    contactName: string;
+    contactPhone: string;
+    changes: {
+      name?: { old: string; new: string };
+      profilePicture?: { old: string; new: string };
+    };
+    timestamp: string;
+  }>;
+  onNotificationAccountAlert?: SocketEventHandler<{
+    userId: string;
+    type: string;
+    severity: 'info' | 'warning' | 'critical';
+    message: string;
+    timestamp: string;
+  }>;
 }

@@ -15,7 +15,9 @@ import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '../types/navigation';
 import type {Conversation} from '../types/conversation';
 import {conversationAPI} from '../services/conversationService';
+import {draftService, type Draft} from '../services/draftService';
 import ConversationCard from '../components/conversations/ConversationCard';
+import FilterModal, { type ConversationFilters } from '../components/common/FilterModal';
 import ConnectionStatus from '../components/ConnectionStatus';
 import {useSocket} from '../contexts/SocketProvider';
 import theme from '../theme';
@@ -35,6 +37,17 @@ const InboxScreen: React.FC<Props> = ({navigation}) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<FilterType>('active');
   const [unreadCount, setUnreadCount] = useState(0);
+  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [showFilterModal, setShowFilterModal] = useState(false);
+  const [advancedFilters, setAdvancedFilters] = useState<ConversationFilters>({
+    statuses: [],
+    tags: [],
+    assignedAgents: [],
+    dateRange: {start: null, end: null},
+    unreadOnly: false,
+    hasTag: false,
+    isAssigned: false,
+  });
 
   // Debug: Log socket state on mount and when it changes
   useEffect(() => {
@@ -49,11 +62,29 @@ const InboxScreen: React.FC<Props> = ({navigation}) => {
   useEffect(() => {
     loadConversations();
     loadUnreadCount();
+    loadDrafts();
   }, []);
+
+  // Reload drafts when screen comes into focus
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      loadDrafts();
+    });
+    return unsubscribe;
+  }, [navigation]);
+
+  const loadDrafts = async () => {
+    try {
+      const allDrafts = await draftService.getAllDrafts();
+      setDrafts(allDrafts);
+    } catch (error) {
+      console.error('Error loading drafts:', error);
+    }
+  };
 
   useEffect(() => {
     filterConversations();
-  }, [conversations, searchQuery, activeFilter]);
+  }, [conversations, searchQuery, activeFilter, advancedFilters]);
 
   useEffect(() => {
     // Refetch from server when filter changes to stay in sync with status on backend
@@ -161,10 +192,19 @@ const InboxScreen: React.FC<Props> = ({navigation}) => {
   const filterConversations = () => {
     let filtered = [...conversations];
 
+    // Basic filter (backward compatibility)
     if (activeFilter !== 'all') {
       filtered = filtered.filter(conv => conv.status === activeFilter);
     }
 
+    // Advanced status filter (overrides basic filter if set)
+    if (advancedFilters.statuses.length > 0) {
+      filtered = filtered.filter(conv =>
+        advancedFilters.statuses.includes(conv.status),
+      );
+    }
+
+    // Search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(
@@ -173,6 +213,35 @@ const InboxScreen: React.FC<Props> = ({navigation}) => {
           (conv.contact?.phoneNumber || '').includes(query) ||
           (conv.lastMessage?.text || '').toLowerCase().includes(query),
       );
+    }
+
+    // Unread only filter
+    if (advancedFilters.unreadOnly) {
+      filtered = filtered.filter(conv => (conv.unreadCount || 0) > 0);
+    }
+
+    // Tags filter
+    if (advancedFilters.tags.length > 0) {
+      filtered = filtered.filter(conv =>
+        conv.tags?.some(tag => advancedFilters.tags.includes(tag)),
+      );
+    }
+
+    // Has tag filter
+    if (advancedFilters.hasTag) {
+      filtered = filtered.filter(conv => conv.tags && conv.tags.length > 0);
+    }
+
+    // Assigned agents filter
+    if (advancedFilters.assignedAgents.length > 0) {
+      filtered = filtered.filter(conv =>
+        advancedFilters.assignedAgents.includes(conv.assignedTo || ''),
+      );
+    }
+
+    // Is assigned filter
+    if (advancedFilters.isAssigned) {
+      filtered = filtered.filter(conv => !!conv.assignedTo);
     }
 
     setFilteredConversations(filtered);
@@ -258,6 +327,30 @@ const InboxScreen: React.FC<Props> = ({navigation}) => {
               </View>
             )}
             <TouchableOpacity
+              style={styles.searchButton}
+              onPress={() => navigation.navigate('Search')}
+              activeOpacity={0.7}
+              accessibilityLabel="Search Messages">
+              <Icon name="search" size={20} color={theme.colors.textInverse} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.filterIconButton}
+              onPress={() => setShowFilterModal(true)}
+              activeOpacity={0.7}
+              accessibilityLabel="Filter Conversations">
+              <Icon name="filter" size={20} color={theme.colors.textInverse} />
+              {(advancedFilters.statuses.length > 0 ||
+                advancedFilters.tags.length > 0 ||
+                advancedFilters.assignedAgents.length > 0 ||
+                advancedFilters.unreadOnly ||
+                advancedFilters.hasTag ||
+                advancedFilters.isAssigned) && (
+                <View style={styles.filterActiveBadge}>
+                  <Text style={styles.filterActiveBadgeText}>!</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
               style={styles.refreshButton}
               onPress={handleRefresh}
               activeOpacity={0.7}
@@ -306,12 +399,17 @@ const InboxScreen: React.FC<Props> = ({navigation}) => {
       <FlatList
         data={filteredConversations}
         keyExtractor={item => String(item._id)}
-        renderItem={({item}) => (
-          <ConversationCard
-            conversation={item}
-            onPress={() => handleConversationPress(item)}
-          />
-        )}
+        renderItem={({item}) => {
+          const draft = drafts.find(d => d.conversationId === item._id);
+          return (
+            <ConversationCard
+              conversation={item}
+              onPress={() => handleConversationPress(item)}
+              hasDraft={!!draft}
+              draftText={draft?.text}
+            />
+          );
+        }}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -326,6 +424,39 @@ const InboxScreen: React.FC<Props> = ({navigation}) => {
         }
       />
 
+      {/* Filter Modal */}
+      <FilterModal
+        visible={showFilterModal}
+        onClose={() => setShowFilterModal(false)}
+        onApply={(filters) => setAdvancedFilters(filters)}
+        availableTags={
+          Array.from(
+            new Set(
+              conversations
+                .filter(c => c.tags && c.tags.length > 0)
+                .flatMap(c => c.tags || [])
+            )
+          )
+        }
+        availableAgents={
+          Array.from(
+            new Set(
+              conversations
+                .filter(c => c.assignedTo)
+                .map(c => ({
+                  id: c.assignedTo!,
+                  name: c.assignedToName || c.assignedTo!,
+                }))
+            )
+          ).reduce((unique: Array<{id: string; name: string}>, agent) => {
+            if (!unique.find(a => a.id === agent.id)) {
+              unique.push(agent);
+            }
+            return unique;
+          }, [])
+        }
+        currentFilters={advancedFilters}
+      />
     </View>
   );
 };
@@ -387,6 +518,41 @@ const styles = StyleSheet.create({
   unreadText: {
     color: theme.colors.primary,
     ...theme.typography.caption,
+    fontWeight: 'bold',
+  },
+  searchButton: {
+    width: 40,
+    height: 40,
+    borderRadius: theme.borderRadius.full,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: theme.spacing.sm,
+  },
+  filterIconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: theme.borderRadius.full,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: theme.spacing.sm,
+    position: 'relative',
+  },
+  filterActiveBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: theme.colors.error,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  filterActiveBadgeText: {
+    color: theme.colors.textInverse,
+    fontSize: 10,
     fontWeight: 'bold',
   },
   refreshButton: {

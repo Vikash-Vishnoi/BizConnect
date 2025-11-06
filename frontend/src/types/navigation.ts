@@ -12,6 +12,8 @@ export type RootStackParamList = {
   CreateCampaign: {edit?: Campaign; duplicate?: Campaign} | undefined;
   Inbox: undefined;
   Conversation: {conversationId: string};
+  Search: undefined;
+  SavedReplies: undefined;
   Templates: undefined;
   CreateTemplate: {templateToEdit?: Template} | undefined;
   TemplateDetails: {templateId: string};

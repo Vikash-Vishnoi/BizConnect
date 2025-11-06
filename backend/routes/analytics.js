@@ -7,6 +7,15 @@ const Conversation = require('../models/Conversation');
 const Template = require('../models/Template');
 const { auth } = require('../middleware/auth');
 
+// @route   GET /api/analytics/overview
+// @desc    Get analytics overview (alias for dashboard)
+// @access  Private
+router.get('/overview', auth, async (req, res) => {
+  // Redirect to dashboard
+  req.url = '/dashboard';
+  router.handle(req, res);
+});
+
 // @route   GET /api/analytics/dashboard
 // @desc    Get dashboard analytics summary
 // @access  Private

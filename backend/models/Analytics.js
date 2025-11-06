@@ -135,6 +135,10 @@ analyticsSchema.index({ date: -1 });
 // Ensure one document per day per user
 analyticsSchema.index({ userId: 1, date: 1 }, { unique: true, partialFilterExpression: { campaignId: null } });
 
+// TTL index - auto-delete analytics data older than 365 days (optional, can be adjusted)
+// Note: Enable this in production to prevent unlimited database growth
+// analyticsSchema.index({ date: 1 }, { expireAfterSeconds: 31536000 }); // 365 days
+
 // Calculate performance metrics before saving
 analyticsSchema.pre('save', function(next) {
   const { messagesSent, messagesDelivered, messagesRead, messagesFailed } = this.metrics;

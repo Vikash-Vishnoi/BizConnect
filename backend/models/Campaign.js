@@ -107,6 +107,42 @@ const campaignSchema = new mongoose.Schema({
       default: 3,
       min: 0,
       max: 10
+    },
+    // Message limits to prevent rate limiting and control costs
+    messageLimits: {
+      enabled: {
+        type: Boolean,
+        default: false
+      },
+      dailyLimit: {
+        type: Number,
+        default: 1000,
+        min: 1,
+        max: 100000
+      },
+      hourlyLimit: {
+        type: Number,
+        default: 100,
+        min: 1,
+        max: 10000
+      },
+      // Track sent counts for current period
+      dailyCount: {
+        type: Number,
+        default: 0
+      },
+      hourlyCount: {
+        type: Number,
+        default: 0
+      },
+      lastResetDaily: {
+        type: Date,
+        default: Date.now
+      },
+      lastResetHourly: {
+        type: Date,
+        default: Date.now
+      }
     }
   },
   userId: {

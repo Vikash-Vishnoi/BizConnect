@@ -22,7 +22,11 @@ import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '../types/navigation';
 import type {Conversation, Message, ConversationStatus} from '../types/conversation';
 import {conversationAPI} from '../services/conversationService';
+import {savedRepliesAPI, type SavedReply} from '../services/savedRepliesService';
+import {draftService} from '../services/draftService';
 import MessageBubble from '../components/conversations/MessageBubble';
+import PollComposer from '../components/conversations/PollComposer';
+import CTAComposer from '../components/conversations/CTAComposer';
 import ConnectionStatus from '../components/ConnectionStatus';
 import {useSocket} from '../contexts/SocketProvider';
 import theme from '../theme';
@@ -35,7 +39,7 @@ type MessageWithDate = Message | {type: 'date-separator'; date: string; _id: str
 const ConversationScreen: React.FC<Props> = ({navigation, route}) => {
   const {conversationId} = route.params;
   const isNewConversation = conversationId === 'new';
-  const {onNewMessage, onMessageUpdate, socketState} = useSocket();
+  const {onNewMessage, onMessageUpdate, onMessageReacted, onMessageDeleted, socketState} = useSocket();
 
   const initialConversation: Conversation | null = isNewConversation ? {
     _id: 'new',
@@ -69,7 +73,45 @@ const ConversationScreen: React.FC<Props> = ({navigation, route}) => {
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [showReactionPicker, setShowReactionPicker] = useState<string | null>(null);
   const [showButtonComposer, setShowButtonComposer] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [showContactComposer, setShowContactComposer] = useState(false);
+  const [showPollComposer, setShowPollComposer] = useState(false);
+  const [showCTAComposer, setShowCTAComposer] = useState(false);
+  const [showSavedRepliesPicker, setShowSavedRepliesPicker] = useState(false);
+  const [savedReplies, setSavedReplies] = useState<SavedReply[]>([]);
+  const [loadingReplies, setLoadingReplies] = useState(false);
   const flatListRef = useRef<FlatList>(null);
+
+  // Load saved replies when picker is opened
+  useEffect(() => {
+    if (showSavedRepliesPicker) {
+      loadSavedReplies();
+    }
+  }, [showSavedRepliesPicker]);
+
+  const loadSavedReplies = async () => {
+    try {
+      setLoadingReplies(true);
+      const response = await savedRepliesAPI.getAll();
+      setSavedReplies(response.data || []);
+    } catch (error) {
+      console.error('Error loading saved replies:', error);
+    } finally {
+      setLoadingReplies(false);
+    }
+  };
+
+  const handleSelectSavedReply = async (reply: SavedReply) => {
+    setMessageText(reply.message);
+    setShowSavedRepliesPicker(false);
+    
+    // Increment usage count
+    try {
+      await savedRepliesAPI.incrementUsage(reply._id);
+    } catch (error) {
+      console.error('Error incrementing usage:', error);
+    }
+  };
 
   // Debug: Log socket state
   useEffect(() => {
@@ -85,8 +127,36 @@ const ConversationScreen: React.FC<Props> = ({navigation, route}) => {
       loadConversation();
       loadMessages();
       markAsRead();
+      loadDraft();
     }
   }, [conversationId, isNewConversation]);
+
+  // Load draft when entering conversation
+  const loadDraft = async () => {
+    try {
+      const draft = await draftService.getDraft(conversationId);
+      if (draft && draft.text) {
+        setMessageText(draft.text);
+      }
+    } catch (error) {
+      console.error('Error loading draft:', error);
+    }
+  };
+
+  // Auto-save draft when text changes (debounced)
+  useEffect(() => {
+    if (isNewConversation) return;
+
+    const timeoutId = setTimeout(() => {
+      if (messageText.trim()) {
+        draftService.saveDraft(conversationId, messageText);
+      } else {
+        draftService.deleteDraft(conversationId);
+      }
+    }, 500); // Debounce 500ms
+
+    return () => clearTimeout(timeoutId);
+  }, [messageText, conversationId, isNewConversation]);
 
   useEffect(() => {
     if (isNewConversation) return;
@@ -155,12 +225,77 @@ const ConversationScreen: React.FC<Props> = ({navigation, route}) => {
       );
     });
 
+    const unsubscribeReaction = onMessageReacted((data) => {
+      console.log('👍 Reaction received:', data);
+      console.log('   Message ID:', data.messageId);
+      console.log('   Emoji:', data.emoji);
+      console.log('   Reacted to message:', data.reactedToMessage);
+
+      if (data.conversationId === conversationId) {
+        // Show a brief notification about the reaction
+        if (data.reactedToMessage) {
+          const messagePreview = data.reactedToMessage.text?.substring(0, 30) || `[${data.reactedToMessage.type}]`;
+          console.log(`💬 ${data.emoji} reaction on: "${messagePreview}"`);
+        }
+        
+        setMessages(prev =>
+          prev.map(msg => {
+            if (msg._id === data.messageId) {
+              // Initialize reactions array if it doesn't exist
+              const reactions = msg.reactions || [];
+              
+              // Remove existing reaction from this user
+              const filteredReactions = reactions.filter(r => r.from !== data.from);
+              
+              // Add new reaction if emoji is not empty
+              if (data.emoji) {
+                filteredReactions.push({
+                  from: data.from,
+                  emoji: data.emoji,
+                  timestamp: data.timestamp,
+                });
+              }
+              
+              return {
+                ...msg,
+                reactions: filteredReactions,
+              };
+            }
+            return msg;
+          })
+        );
+      }
+    });
+
+    const unsubscribeDeleted = onMessageDeleted((data) => {
+      console.log('🗑️ Message deleted:', data);
+      console.log('   Message ID:', data.messageId);
+
+      if (data.conversationId === conversationId) {
+        setMessages(prev =>
+          prev.map(msg => {
+            if (msg._id === data.messageId) {
+              return {
+                ...msg,
+                isDeleted: true,
+                deletedAt: data.deletedAt,
+                deletedBy: 'user',
+              };
+            }
+            return msg;
+          })
+        );
+      }
+    });
+
     return () => {
       console.log('🔌 Unsubscribing from real-time messages');
       unsubscribeNewMessage();
       unsubscribeMessageUpdate();
+      unsubscribeReaction();
+      unsubscribeDeleted();
     };
-  }, [conversationId, isNewConversation, onNewMessage, onMessageUpdate]);
+  }, [conversationId, isNewConversation, onNewMessage, onMessageUpdate, onMessageReacted, onMessageDeleted]);
 
   const loadConversation = async () => {
     try {
@@ -181,6 +316,10 @@ const ConversationScreen: React.FC<Props> = ({navigation, route}) => {
           status: msg.status,
           deliveredAt: msg.deliveredAt,
           readAt: msg.readAt,
+          reactions: msg.reactions || [],
+          isDeleted: msg.isDeleted || false,
+          deletedAt: msg.deletedAt,
+          deletedBy: msg.deletedBy,
         }));
         setMessages(mappedMessages);
         scrollToBottom();
@@ -208,6 +347,10 @@ const ConversationScreen: React.FC<Props> = ({navigation, route}) => {
           timestamp: msg.timestamp || msg.createdAt,
           deliveredAt: msg.deliveredAt,
           readAt: msg.readAt,
+          reactions: msg.reactions || [],
+          isDeleted: msg.isDeleted || false,
+          deletedAt: msg.deletedAt,
+          deletedBy: msg.deletedBy,
         }));
 
         setMessages(mappedMessages.reverse());
@@ -235,6 +378,9 @@ const ConversationScreen: React.FC<Props> = ({navigation, route}) => {
     const content = messageText.trim();
     setMessageText('');
     setSending(true);
+
+    // Clear draft after sending
+    await draftService.deleteDraft(conversationId);
 
     const actualConversationId = conversation._id;
 
@@ -507,11 +653,45 @@ const ConversationScreen: React.FC<Props> = ({navigation, route}) => {
   const handleSendReaction = async (messageId: string, emoji: string) => {
     try {
       await conversationAPI.sendReaction(conversationId, messageId, emoji);
-      setShowReactionPicker(null);
-      Alert.alert('Reaction Sent', `Sent ${emoji} reaction`);
+      console.log(`✅ Reaction sent: ${emoji} to message ${messageId}`);
+      // Don't show alert - the reaction will appear via socket update
     } catch (error) {
       console.error('Failed to send reaction:', error);
       Alert.alert('Error', 'Failed to send reaction');
+    }
+  };
+
+  const handlePinMessage = async (messageId: string) => {
+    try {
+      await conversationAPI.pinMessage(conversationId, messageId);
+      setMessages(prev =>
+        prev.map(msg =>
+          msg._id === messageId
+            ? { ...msg, isPinned: true, pinnedAt: new Date().toISOString() }
+            : msg
+        )
+      );
+      Alert.alert('Success', 'Message pinned');
+    } catch (error) {
+      console.error('Failed to pin message:', error);
+      Alert.alert('Error', 'Failed to pin message');
+    }
+  };
+
+  const handleUnpinMessage = async (messageId: string) => {
+    try {
+      await conversationAPI.unpinMessage(conversationId, messageId);
+      setMessages(prev =>
+        prev.map(msg =>
+          msg._id === messageId
+            ? { ...msg, isPinned: false, pinnedAt: undefined }
+            : msg
+        )
+      );
+      Alert.alert('Success', 'Message unpinned');
+    } catch (error) {
+      console.error('Failed to unpin message:', error);
+      Alert.alert('Error', 'Failed to unpin message');
     }
   };
 
@@ -526,6 +706,36 @@ const ConversationScreen: React.FC<Props> = ({navigation, route}) => {
       Alert.alert('Error', 'Failed to send interactive message');
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleSendPollMessage = async (question: string, options: string[]) => {
+    try {
+      await conversationAPI.sendPollMessage(conversationId, question, options);
+      setShowPollComposer(false);
+      // Message will appear via socket event
+    } catch (error) {
+      console.error('Failed to send poll message:', error);
+      throw error; // Let PollComposer handle the error display
+    }
+  };
+
+  const handleSendCTAMessage = async (
+    bodyText: string,
+    ctaButtons: Array<{
+      type: 'PHONE_NUMBER' | 'URL';
+      title: string;
+      phone_number?: string;
+      url?: string;
+    }>
+  ) => {
+    try {
+      await conversationAPI.sendCTAMessage(conversationId, bodyText, ctaButtons);
+      setShowCTAComposer(false);
+      // Message will appear via socket event
+    } catch (error) {
+      console.error('Failed to send CTA message:', error);
+      throw error; // Let CTAComposer handle the error display
     }
   };
 
@@ -564,8 +774,50 @@ const ConversationScreen: React.FC<Props> = ({navigation, route}) => {
   };
 
   const handleToggleBlock = async () => {
-    const target = conversation?.status === 'blocked' ? 'active' : 'blocked';
-    await handleStatusChange(target as any);
+    if (!conversation) return;
+    
+    const isBlocked = conversation.status === 'blocked';
+    const action = isBlocked ? 'unblock' : 'block';
+    const contactName = conversation.contact?.name || conversation.contact?.phoneNumber || 'this contact';
+    
+    Alert.alert(
+      isBlocked ? 'Unblock Contact' : 'Block Contact',
+      isBlocked 
+        ? `Are you sure you want to unblock ${contactName}? You will be able to send and receive messages again.`
+        : `Are you sure you want to block ${contactName}? You won't be able to send or receive messages from this contact.`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: isBlocked ? 'Unblock' : 'Block',
+          style: isBlocked ? 'default' : 'destructive',
+          onPress: async () => {
+            try {
+              const updatedConversation = isBlocked
+                ? await conversationAPI.unblockConversation(conversationId)
+                : await conversationAPI.blockConversation(conversationId);
+              
+              setConversation(updatedConversation);
+              
+              Alert.alert(
+                'Success',
+                isBlocked 
+                  ? `${contactName} has been unblocked.`
+                  : `${contactName} has been blocked.`
+              );
+            } catch (error) {
+              console.error(`Failed to ${action} contact:`, error);
+              Alert.alert(
+                'Error',
+                `Failed to ${action} contact. Please try again.`
+              );
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleStartConversation = async () => {
@@ -665,7 +917,6 @@ const ConversationScreen: React.FC<Props> = ({navigation, route}) => {
     return result;
   }, [messages]);
 
-  // Render item with date separators
   const renderMessageItem = ({item}: {item: MessageWithDate}) => {
     if ('type' in item && item.type === 'date-separator') {
       return (
@@ -677,7 +928,15 @@ const ConversationScreen: React.FC<Props> = ({navigation, route}) => {
       );
     }
 
-    return <MessageBubble message={item as Message} />;
+    const message = item as Message;
+    return (
+      <MessageBubble 
+        message={message} 
+        onReaction={handleSendReaction}
+        onPin={handlePinMessage}
+        onUnpin={handleUnpinMessage}
+      />
+    );
   };
 
   if (loading || !conversation) {
@@ -708,7 +967,10 @@ const ConversationScreen: React.FC<Props> = ({navigation, route}) => {
           accessibilityLabel="Back">
           <Text style={styles.iconText}>←</Text>
         </TouchableOpacity>
-        <View style={styles.headerInfo}>
+        <TouchableOpacity
+          style={styles.headerInfo}
+          onPress={() => setShowProfileModal(true)}
+          activeOpacity={0.7}>
           <Text style={styles.headerName}>
             {conversation.contact?.name || conversation.contact?.phoneNumber || 'Unknown'}
           </Text>
@@ -718,7 +980,7 @@ const ConversationScreen: React.FC<Props> = ({navigation, route}) => {
               {conversation.contact?.phoneNumber || ''}
             </Text>
           </View>
-        </View>
+        </TouchableOpacity>
         <TouchableOpacity
           onPress={() => {
             loadConversation();
@@ -839,6 +1101,33 @@ const ConversationScreen: React.FC<Props> = ({navigation, route}) => {
                 <Text style={styles.attachIcon}>🔘</Text>
                 <Text style={styles.attachText}>Buttons</Text>
               </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.attachOption}
+                onPress={() => {
+                  setShowAttachMenu(false);
+                  setShowContactComposer(true);
+                }}>
+                <Text style={styles.attachIcon}>👤</Text>
+                <Text style={styles.attachText}>Contact</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.attachOption}
+                onPress={() => {
+                  setShowAttachMenu(false);
+                  setShowPollComposer(true);
+                }}>
+                <Text style={styles.attachIcon}>📊</Text>
+                <Text style={styles.attachText}>Poll</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.attachOption}
+                onPress={() => {
+                  setShowAttachMenu(false);
+                  setShowCTAComposer(true);
+                }}>
+                <Text style={styles.attachIcon}>🔗</Text>
+                <Text style={styles.attachText}>CTA Button</Text>
+              </TouchableOpacity>
             </View>
           )}
           <View style={styles.inputContainer}>
@@ -846,6 +1135,11 @@ const ConversationScreen: React.FC<Props> = ({navigation, route}) => {
               onPress={() => setShowAttachMenu(!showAttachMenu)}
               style={styles.attachButton}>
               <Text style={styles.attachButtonIcon}>+</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setShowSavedRepliesPicker(true)}
+              style={styles.savedRepliesButton}>
+              <Icon name="message-circle" size={20} color={theme.colors.primary} />
             </TouchableOpacity>
             <TextInput
               style={styles.input}
@@ -941,6 +1235,126 @@ const ConversationScreen: React.FC<Props> = ({navigation, route}) => {
         </View>
       </Modal>
 
+      {/* Contact Composer Modal */}
+      <Modal
+        visible={showContactComposer}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowContactComposer(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Send Contact Card</Text>
+              <TouchableOpacity
+                onPress={() => setShowContactComposer(false)}
+                style={styles.modalCloseButton}>
+                <Text style={styles.modalCloseIcon}>×</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalContent}>
+              <Text style={styles.inputLabel}>Quick Send Examples</Text>
+              
+              <TouchableOpacity
+                style={styles.contactExampleButton}
+                onPress={async () => {
+                  try {
+                    setSending(true);
+                    setShowContactComposer(false);
+                    
+                    const contacts = [{
+                      name: {
+                        formatted_name: 'John Doe',
+                        first_name: 'John',
+                        last_name: 'Doe',
+                      },
+                      phones: [
+                        {
+                          phone: '+1234567890',
+                          type: 'CELL',
+                        }
+                      ],
+                      emails: [
+                        {
+                          email: 'john.doe@example.com',
+                          type: 'WORK',
+                        }
+                      ],
+                      org: {
+                        company: 'Example Corp',
+                        title: 'Manager',
+                      }
+                    }];
+                    
+                    await conversationAPI.sendContact(conversationId, contacts);
+                    Alert.alert('Success', 'Contact card sent successfully');
+                  } catch (error: any) {
+                    Alert.alert('Error', error.message || 'Failed to send contact');
+                  } finally {
+                    setSending(false);
+                  }
+                }}>
+                <Text style={styles.contactExampleIcon}>👤</Text>
+                <View style={styles.contactExampleText}>
+                  <Text style={styles.contactExampleTitle}>Sample Contact</Text>
+                  <Text style={styles.contactExampleSubtitle}>John Doe - +1234567890</Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.contactExampleButton}
+                onPress={async () => {
+                  try {
+                    setSending(true);
+                    setShowContactComposer(false);
+                    
+                    const contacts = [{
+                      name: {
+                        formatted_name: 'Support Team',
+                        first_name: 'Support',
+                        last_name: 'Team',
+                      },
+                      phones: [
+                        {
+                          phone: '+1-800-SUPPORT',
+                          type: 'WORK',
+                        }
+                      ],
+                      emails: [
+                        {
+                          email: 'support@company.com',
+                          type: 'WORK',
+                        }
+                      ],
+                    }];
+                    
+                    await conversationAPI.sendContact(conversationId, contacts);
+                    Alert.alert('Success', 'Contact card sent successfully');
+                  } catch (error: any) {
+                    Alert.alert('Error', error.message || 'Failed to send contact');
+                  } finally {
+                    setSending(false);
+                  }
+                }}>
+                <Text style={styles.contactExampleIcon}>🏢</Text>
+                <View style={styles.contactExampleText}>
+                  <Text style={styles.contactExampleTitle}>Support Team</Text>
+                  <Text style={styles.contactExampleSubtitle}>1-800-SUPPORT</Text>
+                </View>
+              </TouchableOpacity>
+
+              <Text style={styles.inputHint}>
+                💡 Tip: Contact cards (VCards) let you share detailed contact information that customers can save directly to their phone.
+              </Text>
+              
+              <Text style={styles.inputHint}>
+                📝 Note: You can customize the contact details by modifying the contact object structure.
+              </Text>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* Button Composer Modal */}
       <Modal
         visible={showButtonComposer}
@@ -1007,8 +1421,282 @@ const ConversationScreen: React.FC<Props> = ({navigation, route}) => {
           </View>
         </View>
       </Modal>
+
+      {/* Poll Composer Modal */}
+      <Modal
+        visible={showPollComposer}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowPollComposer(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <PollComposer
+              onSend={handleSendPollMessage}
+              onCancel={() => setShowPollComposer(false)}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* CTA Composer Modal */}
+      <Modal
+        visible={showCTAComposer}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowCTAComposer(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <CTAComposer
+              onSend={handleSendCTAMessage}
+              onCancel={() => setShowCTAComposer(false)}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Contact Profile Modal */}
+      <Modal
+        visible={showProfileModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowProfileModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.profileModalContainer}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Contact Profile</Text>
+              <TouchableOpacity
+                onPress={() => setShowProfileModal(false)}
+                style={styles.modalCloseButton}>
+                <Text style={styles.modalCloseIcon}>×</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.profileContent}>
+              {/* Profile Avatar */}
+              <View style={styles.profileAvatar}>
+                <Text style={styles.profileAvatarText}>
+                  {(conversation.contact?.name || conversation.contact?.phoneNumber || 'U')[0].toUpperCase()}
+                </Text>
+              </View>
+
+              {/* Contact Name */}
+              <Text style={styles.profileName}>
+                {conversation.contact?.name || 'Unknown Contact'}
+              </Text>
+
+              {/* Contact Details */}
+              <View style={styles.profileDetailsSection}>
+                <View style={styles.profileDetailRow}>
+                  <Icon name="phone" size={18} color={theme.colors.primary} />
+                  <View style={styles.profileDetailText}>
+                    <Text style={styles.profileDetailLabel}>Phone Number</Text>
+                    <Text style={styles.profileDetailValue}>
+                      +{conversation.contact?.phoneNumber || 'N/A'}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.profileDetailRow}>
+                  <Icon name="message-circle" size={18} color={theme.colors.primary} />
+                  <View style={styles.profileDetailText}>
+                    <Text style={styles.profileDetailLabel}>Conversation Status</Text>
+                    <Text style={[
+                      styles.profileDetailValue,
+                      styles.statusBadge,
+                      conversation.status === 'active' && styles.statusActive,
+                      conversation.status === 'closed' && styles.statusClosed,
+                      conversation.status === 'archived' && styles.statusArchived,
+                      conversation.status === 'blocked' && styles.statusBlocked,
+                    ]}>
+                      {conversation.status?.toUpperCase() || 'ACTIVE'}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.profileDetailRow}>
+                  <Icon name="calendar" size={18} color={theme.colors.primary} />
+                  <View style={styles.profileDetailText}>
+                    <Text style={styles.profileDetailLabel}>First Contact</Text>
+                    <Text style={styles.profileDetailValue}>
+                      {new Date(conversation.createdAt).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                      })}
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={styles.profileDetailRow}>
+                  <Icon name="hash" size={18} color={theme.colors.primary} />
+                  <View style={styles.profileDetailText}>
+                    <Text style={styles.profileDetailLabel}>Total Messages</Text>
+                    <Text style={styles.profileDetailValue}>
+                      {messages.length} messages
+                    </Text>
+                  </View>
+                </View>
+
+                {conversation.assignedToName && (
+                  <View style={styles.profileDetailRow}>
+                    <Icon name="user-check" size={18} color={theme.colors.primary} />
+                    <View style={styles.profileDetailText}>
+                      <Text style={styles.profileDetailLabel}>Assigned To</Text>
+                      <Text style={styles.profileDetailValue}>
+                        {conversation.assignedToName}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+
+                {conversation.tags && conversation.tags.length > 0 && (
+                  <View style={styles.profileDetailRow}>
+                    <Icon name="tag" size={18} color={theme.colors.primary} />
+                    <View style={styles.profileDetailText}>
+                      <Text style={styles.profileDetailLabel}>Tags</Text>
+                      <View style={styles.tagsContainer}>
+                        {conversation.tags.map((tag: string, index: number) => (
+                          <View key={index} style={styles.tagChip}>
+                            <Text style={styles.tagText}>{tag}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    </View>
+                  </View>
+                )}
+              </View>
+
+              {/* Action Buttons */}
+              <View style={styles.profileActions}>
+                <TouchableOpacity
+                  style={[styles.profileActionButton, styles.blockButton]}
+                  onPress={() => {
+                    setShowProfileModal(false);
+                    handleToggleBlock();
+                  }}>
+                  <Icon 
+                    name={conversation.status === 'blocked' ? 'unlock' : 'slash'} 
+                    size={18} 
+                    color={theme.colors.textInverse} 
+                  />
+                  <Text style={styles.profileActionText}>
+                    {conversation.status === 'blocked' ? 'Unblock' : 'Block'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.profileActionButton, styles.archiveButton]}
+                  onPress={() => {
+                    setShowProfileModal(false);
+                    handleToggleArchive();
+                  }}>
+                  <Icon 
+                    name={conversation.status === 'archived' ? 'folder' : 'archive'} 
+                    size={18} 
+                    color={theme.colors.textInverse} 
+                  />
+                  <Text style={styles.profileActionText}>
+                    {conversation.status === 'archived' ? 'Unarchive' : 'Archive'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Saved Replies Picker Modal */}
+      <Modal
+        visible={showSavedRepliesPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowSavedRepliesPicker(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.savedRepliesModal}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Saved Replies</Text>
+              <View style={styles.modalHeaderActions}>
+                <TouchableOpacity
+                  onPress={() => {
+                    setShowSavedRepliesPicker(false);
+                    navigation.navigate('SavedReplies');
+                  }}
+                  style={styles.manageButton}>
+                  <Icon name="settings" size={20} color={theme.colors.primary} />
+                  <Text style={styles.manageButtonText}>Manage</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setShowSavedRepliesPicker(false)}
+                  style={styles.modalCloseButton}>
+                  <Text style={styles.modalCloseIcon}>×</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {loadingReplies ? (
+              <View style={styles.savedRepliesLoading}>
+                <ActivityIndicator size="large" color={theme.colors.primary} />
+              </View>
+            ) : savedReplies.length === 0 ? (
+              <View style={styles.savedRepliesEmpty}>
+                <Icon name="message-circle" size={48} color={theme.colors.textTertiary} />
+                <Text style={styles.savedRepliesEmptyTitle}>No Saved Replies</Text>
+                <Text style={styles.savedRepliesEmptyText}>
+                  Create saved replies to send messages quickly
+                </Text>
+                <TouchableOpacity
+                  style={styles.createRepliesButton}
+                  onPress={() => {
+                    setShowSavedRepliesPicker(false);
+                    navigation.navigate('SavedReplies');
+                  }}>
+                  <Text style={styles.createRepliesButtonText}>Create Saved Replies</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <FlatList
+                data={savedReplies}
+                keyExtractor={item => item._id}
+                renderItem={({item}) => (
+                  <TouchableOpacity
+                    style={styles.savedReplyItem}
+                    onPress={() => handleSelectSavedReply(item)}>
+                    <View style={styles.savedReplyHeader}>
+                      <Text style={styles.savedReplyShortcut}>/{item.shortcut}</Text>
+                      <View style={[styles.savedReplyCategoryBadge, { backgroundColor: getCategoryColor(item.category) }]}>
+                        <Text style={styles.savedReplyCategoryText}>{item.category}</Text>
+                      </View>
+                    </View>
+                    <Text style={styles.savedReplyMessage} numberOfLines={2}>
+                      {item.message}
+                    </Text>
+                    {item.usageCount > 0 && (
+                      <Text style={styles.savedReplyUsage}>
+                        Used {item.usageCount} times
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                )}
+                contentContainerStyle={styles.savedRepliesList}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
+};
+
+const getCategoryColor = (category: string) => {
+  const colors: Record<string, string> = {
+    greeting: '#4CAF50',
+    support: '#2196F3',
+    sales: '#FF9800',
+    closing: '#9C27B0',
+    faq: '#00BCD4',
+    other: '#607D8B',
+  };
+  return colors[category] || colors.other;
 };
 
 const styles = StyleSheet.create({
@@ -1158,6 +1846,14 @@ const styles = StyleSheet.create({
     fontSize: 24,
     color: theme.colors.primary,
     fontWeight: 'bold',
+  },
+  savedRepliesButton: {
+    width: 36,
+    height: 36,
+    borderRadius: theme.borderRadius.full,
+    backgroundColor: theme.colors.primary + '10',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   inputContainer: {
     flexDirection: 'row',
@@ -1309,6 +2005,264 @@ const styles = StyleSheet.create({
     color: '#54656F',
     fontWeight: '500',
     fontSize: 12,
+  },
+  // Profile Modal Styles
+  profileModalContainer: {
+    backgroundColor: theme.colors.surface,
+    borderTopLeftRadius: theme.borderRadius.xl,
+    borderTopRightRadius: theme.borderRadius.xl,
+    maxHeight: '85%',
+    ...theme.shadows.lg,
+  },
+  profileContent: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.xl,
+    alignItems: 'center',
+  },
+  profileAvatar: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: theme.colors.primary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: theme.spacing.md,
+    ...theme.shadows.md,
+  },
+  profileAvatarText: {
+    ...theme.typography.h1,
+    color: theme.colors.textInverse,
+    fontWeight: 'bold',
+  },
+  profileName: {
+    ...theme.typography.h2,
+    color: theme.colors.text,
+    marginBottom: theme.spacing.lg,
+    textAlign: 'center',
+  },
+  profileDetailsSection: {
+    width: '100%',
+    backgroundColor: theme.colors.background,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.md,
+    gap: theme.spacing.md,
+  },
+  profileDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: theme.spacing.sm,
+  },
+  profileDetailText: {
+    flex: 1,
+  },
+  profileDetailLabel: {
+    ...theme.typography.caption,
+    color: theme.colors.textSecondary,
+    marginBottom: 2,
+  },
+  profileDetailValue: {
+    ...theme.typography.body,
+    color: theme.colors.text,
+    fontWeight: '600',
+  },
+  statusBadge: {
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 4,
+    borderRadius: theme.borderRadius.base,
+    overflow: 'hidden',
+    alignSelf: 'flex-start',
+  },
+  statusActive: {
+    backgroundColor: theme.colors.success + '20',
+    color: theme.colors.success,
+  },
+  statusClosed: {
+    backgroundColor: theme.colors.error + '20',
+    color: theme.colors.error,
+  },
+  statusArchived: {
+    backgroundColor: theme.colors.textSecondary + '20',
+    color: theme.colors.textSecondary,
+  },
+  statusBlocked: {
+    backgroundColor: '#ff0000' + '20',
+    color: '#ff0000',
+  },
+  tagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
+    marginTop: 4,
+  },
+  tagChip: {
+    backgroundColor: theme.colors.primary + '15',
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 4,
+    borderRadius: theme.borderRadius.full,
+    borderWidth: 1,
+    borderColor: theme.colors.primary + '30',
+  },
+  tagText: {
+    ...theme.typography.caption,
+    color: theme.colors.primary,
+    fontWeight: '600',
+  },
+  profileActions: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.lg,
+    width: '100%',
+  },
+  profileActionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: theme.spacing.xs,
+    paddingVertical: theme.spacing.md,
+    borderRadius: theme.borderRadius.md,
+    ...theme.shadows.sm,
+  },
+  profileActionText: {
+    ...theme.typography.button,
+    color: theme.colors.textInverse,
+    fontWeight: '600',
+  },
+  blockButton: {
+    backgroundColor: theme.colors.error,
+  },
+  archiveButton: {
+    backgroundColor: theme.colors.textSecondary,
+  },
+  // Contact Composer Styles
+  contactExampleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.background,
+    paddingVertical: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.borderRadius.md,
+    marginTop: theme.spacing.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    gap: theme.spacing.sm,
+  },
+  contactExampleIcon: {
+    fontSize: 32,
+  },
+  contactExampleText: {
+    flex: 1,
+  },
+  contactExampleTitle: {
+    ...theme.typography.body,
+    color: theme.colors.text,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  contactExampleSubtitle: {
+    ...theme.typography.caption,
+    color: theme.colors.textSecondary,
+  },
+  savedRepliesModal: {
+    backgroundColor: theme.colors.surface,
+    borderTopLeftRadius: theme.borderRadius.xl,
+    borderTopRightRadius: theme.borderRadius.xl,
+    maxHeight: '70%',
+    width: '100%',
+  },
+  modalHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+  },
+  manageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.xs,
+    backgroundColor: theme.colors.primary + '20',
+    borderRadius: theme.borderRadius.md,
+  },
+  manageButtonText: {
+    ...theme.typography.bodySmall,
+    color: theme.colors.primary,
+    fontWeight: '600',
+  },
+  savedRepliesLoading: {
+    padding: theme.spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  savedRepliesEmpty: {
+    padding: theme.spacing.xl,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  savedRepliesEmptyTitle: {
+    ...theme.typography.h4,
+    color: theme.colors.text,
+    marginTop: theme.spacing.md,
+    marginBottom: theme.spacing.xs,
+  },
+  savedRepliesEmptyText: {
+    ...theme.typography.body,
+    color: theme.colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: theme.spacing.md,
+  },
+  createRepliesButton: {
+    backgroundColor: theme.colors.primary,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.borderRadius.md,
+  },
+  createRepliesButtonText: {
+    ...theme.typography.body,
+    color: theme.colors.textInverse,
+    fontWeight: '600',
+  },
+  savedRepliesList: {
+    padding: theme.spacing.sm,
+  },
+  savedReplyItem: {
+    backgroundColor: theme.colors.background,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  savedReplyHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: theme.spacing.xs,
+  },
+  savedReplyShortcut: {
+    ...theme.typography.bodySmall,
+    color: theme.colors.primary,
+    fontWeight: 'bold',
+  },
+  savedReplyCategoryBadge: {
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 2,
+    borderRadius: theme.borderRadius.sm,
+  },
+  savedReplyCategoryText: {
+    ...theme.typography.caption,
+    color: theme.colors.textInverse,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+  },
+  savedReplyMessage: {
+    ...theme.typography.body,
+    color: theme.colors.text,
+    marginBottom: theme.spacing.xs,
+  },
+  savedReplyUsage: {
+    ...theme.typography.caption,
+    color: theme.colors.textSecondary,
   },
 });
 

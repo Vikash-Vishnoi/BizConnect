@@ -173,6 +173,27 @@ class SocketService {
       this.handlers.onMessageUpdate?.(data);
     });
 
+    // ✅ FEATURE: Read Receipts - Unified message status handler
+    this.socket.on(SocketEvent.MESSAGE_STATUS, (data: MessageUpdate) => {
+      console.log(`📊 Message status updated: ${data.status}`, data);
+      this.handlers.onMessageUpdate?.(data);
+    });
+
+    this.socket.on(SocketEvent.MESSAGE_REACTED, (data: any) => {
+      console.log('👍 MESSAGE_REACTED event fired!');
+      console.log('   Message ID:', data.messageId);
+      console.log('   Emoji:', data.emoji);
+      console.log('   From:', data.from);
+      this.handlers.onMessageReacted?.(data);
+    });
+
+    this.socket.on(SocketEvent.MESSAGE_DELETED, (data: any) => {
+      console.log('🗑️ MESSAGE_DELETED event fired!');
+      console.log('   Message ID:', data.messageId);
+      console.log('   Deleted at:', data.deletedAt);
+      this.handlers.onMessageDeleted?.(data);
+    });
+
     this.socket.on(SocketEvent.CONVERSATION_STATUS_CHANGED, (data: { conversationId: string; status: string; previousStatus?: string }) => {
       console.log('Conversation status changed:', data);
       this.handlers.onConversationStatusChanged?.(data as any);
@@ -211,6 +232,40 @@ class SocketService {
         this.handlers.onQualityScoreUpdate?.(data);
       }
     );
+
+    // Notification event listeners
+    this.socket.on(SocketEvent.NOTIFICATION_NEW_MESSAGE, (data: any) => {
+      console.log('🔔 NEW_MESSAGE notification received!');
+      console.log('   Title:', data.title);
+      console.log('   Body:', data.body);
+      console.log('   Conversation ID:', data.data?.conversationId);
+      console.log('   Badge Count:', data.badge);
+      this.handlers.onNotificationNewMessage?.(data);
+    });
+
+    this.socket.on(SocketEvent.NOTIFICATION_MESSAGE_STATUS, (data: any) => {
+      console.log('📬 MESSAGE_STATUS notification received!');
+      console.log('   Message ID:', data.messageId);
+      console.log('   Status:', data.status);
+      console.log('   Conversation ID:', data.conversationId);
+      this.handlers.onNotificationMessageStatus?.(data);
+    });
+
+    this.socket.on(SocketEvent.NOTIFICATION_PROFILE_UPDATE, (data: any) => {
+      console.log('👤 PROFILE_UPDATE notification received!');
+      console.log('   Contact Name:', data.contactName);
+      console.log('   Changes:', data.changes);
+      console.log('   Conversation ID:', data.conversationId);
+      this.handlers.onNotificationProfileUpdate?.(data);
+    });
+
+    this.socket.on(SocketEvent.NOTIFICATION_ACCOUNT_ALERT, (data: any) => {
+      console.log('⚠️ ACCOUNT_ALERT notification received!');
+      console.log('   Type:', data.type);
+      console.log('   Severity:', data.severity);
+      console.log('   Message:', data.message);
+      this.handlers.onNotificationAccountAlert?.(data);
+    });
   }
 
   on(handlers: SocketEventHandlers): void {

@@ -6,9 +6,11 @@ import theme from '../../theme';
 interface Props {
   conversation: Conversation;
   onPress: () => void;
+  hasDraft?: boolean;
+  draftText?: string;
 }
 
-const ConversationCard: React.FC<Props> = ({conversation, onPress}) => {
+const ConversationCard: React.FC<Props> = ({conversation, onPress, hasDraft, draftText}) => {
   const formatTime = (dateInput: string | Date | undefined) => {
     if (!dateInput) return 'Unknown';
     try {
@@ -84,9 +86,18 @@ const ConversationCard: React.FC<Props> = ({conversation, onPress}) => {
         </View>
 
         <View style={styles.messageRow}>
-          <Text style={styles.lastMessage} numberOfLines={2}>
-            {conversation.lastMessage?.text || 'No messages'}
-          </Text>
+          {hasDraft ? (
+            <View style={styles.draftContainer}>
+              <Text style={styles.draftLabel}>📝 Draft: </Text>
+              <Text style={styles.draftText} numberOfLines={2}>
+                {draftText}
+              </Text>
+            </View>
+          ) : (
+            <Text style={styles.lastMessage} numberOfLines={2}>
+              {conversation.lastMessage?.text || 'No messages'}
+            </Text>
+          )}
           {(conversation.unreadCount || 0) > 0 && (
             <View style={styles.badge}>
               <Text style={styles.badgeText}>{conversation.unreadCount}</Text>
@@ -222,6 +233,24 @@ const styles = StyleSheet.create({
   assignedText: {
     ...theme.typography.caption,
     color: theme.colors.textSecondary,
+  },
+  draftContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginRight: theme.spacing.xs,
+  },
+  draftLabel: {
+    ...theme.typography.body,
+    color: theme.colors.error,
+    fontWeight: '600',
+  },
+  draftText: {
+    flex: 1,
+    ...theme.typography.body,
+    color: theme.colors.textSecondary,
+    fontStyle: 'italic',
+    lineHeight: 20,
   },
 });
 

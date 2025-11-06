@@ -104,6 +104,56 @@ class SettingsService {
       );
     }
   }
+
+  async getAccountLimits(): Promise<{
+    tier: string;
+    tierName: string;
+    messagingLimit: number;
+    qualityRating: string;
+    nameStatus?: string;
+    codeVerificationStatus?: string;
+  }> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const response = await axios.get(`${API_URL}/api/settings/account-limits`, {
+        headers,
+      });
+      return response.data;
+    } catch (error: any) {
+      console.error('Get account limits error:', error);
+      throw new Error(
+        error.response?.data?.error || 'Failed to get account limits'
+      );
+    }
+  }
+
+  async getMessagingLimits(): Promise<{
+    limits: {
+      tier: string;
+      tierName: string;
+      messagingLimit: number;
+      qualityRating: string;
+    };
+    usage: {
+      today: number;
+      week: number;
+      todayPercentage: number;
+      weekAverage: number;
+    };
+  }> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const response = await axios.get(`${API_URL}/api/settings/messaging-limits`, {
+        headers,
+      });
+      return response.data;
+    } catch (error: any) {
+      console.error('Get messaging limits error:', error);
+      throw new Error(
+        error.response?.data?.error || 'Failed to get messaging limits'
+      );
+    }
+  }
 }
 
 export const settingsService = new SettingsService();

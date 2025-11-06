@@ -16,6 +16,8 @@ import {
   CampaignProgressUpdate,
   NewMessageNotification,
   MessageUpdate,
+  MessageReaction,
+  MessageDeleted,
   TemplateStatusUpdate,
   AnalyticsUpdate,
 } from '../types/realtime';
@@ -30,6 +32,8 @@ interface SocketContextValue {
   ) => () => void;
   onNewMessage: (handler: (data: NewMessageNotification) => void) => () => void;
   onMessageUpdate: (handler: (data: MessageUpdate) => void) => () => void;
+  onMessageReacted: (handler: (data: MessageReaction) => void) => () => void;
+  onMessageDeleted: (handler: (data: MessageDeleted) => void) => () => void;
   onConversationStatusChanged: (
     handler: (data: { conversationId: string; status: string; previousStatus?: string }) => void
   ) => () => void;
@@ -201,6 +205,22 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({children}) => {
     []
   );
 
+  const onMessageReacted = useCallback(
+    (handler: (data: MessageReaction) => void) => {
+      socketService.on({onMessageReacted: handler});
+      return () => socketService.off('onMessageReacted');
+    },
+    []
+  );
+
+  const onMessageDeleted = useCallback(
+    (handler: (data: MessageDeleted) => void) => {
+      socketService.on({onMessageDeleted: handler});
+      return () => socketService.off('onMessageDeleted');
+    },
+    []
+  );
+
   const onConversationStatusChanged = useCallback(
     (handler: (data: { conversationId: string; status: string; previousStatus?: string }) => void) => {
       socketService.on({ onConversationStatusChanged: handler as any });
@@ -241,6 +261,8 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({children}) => {
     onCampaignProgress,
     onNewMessage,
     onMessageUpdate,
+    onMessageReacted,
+    onMessageDeleted,
     onConversationStatusChanged,
     onConversationNew,
     onTemplateStatusUpdate,

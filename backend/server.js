@@ -169,15 +169,51 @@ app.get('/debug/sockets', (req, res) => {
 
 // API Routes
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/profile', require('./routes/profile')); // ✅ NEW: Comprehensive profile management
 app.use('/api/campaigns', require('./routes/campaigns'));
 app.use('/api/templates', require('./routes/templates'));
 app.use('/api/analytics', require('./routes/analytics'));
 app.use('/api/webhooks', require('./routes/webhooks'));
 app.use('/api/settings', require('./routes/settings'));
+app.use('/api/automations', require('./routes/automations'));
+app.use('/api/alerts', require('./routes/alerts')); // ✅ NEW: Account alerts management
+app.use('/api/media', require('./routes/media')); // ✅ NEW: Media management
+app.use('/api/export', require('./routes/export')); // ✅ NEW: Chat export
+app.use('/api/database', require('./routes/database')); // ✅ NEW: Database optimization
+app.use('/api/reactions', require('./routes/reactions')); // ✅ NEW: Message reactions
+app.use('/api/forward', require('./routes/forward')); // ✅ NEW: Message forwarding
+app.use('/api/bulk', require('./routes/bulk')); // ✅ NEW: Bulk operations
+app.use('/api/tags', require('./routes/tags')); // ✅ NEW: Contact tags
+app.use('/api/search', require('./routes/search')); // ✅ NEW: Message search
+app.use('/api/saved-replies', require('./routes/savedReplies')); // ✅ NEW: Saved replies/canned responses
+app.use('/api/rate-limits', require('./routes/rateLimits'));
 
 // ✅ UNIFIED INBOX ROUTE (Replaces /conversations, /messages, and old /inbox)
 // This route handles all conversation and message operations with embedded messages
 app.use('/api/inbox', require('./routes/inbox'));
+
+// Debug endpoint - Check Socket.io connections
+app.get('/api/debug/sockets', (req, res) => {
+  const rooms = [];
+  const sockets = io.sockets.sockets;
+  
+  // Get all rooms and their socket IDs
+  io.of('/').adapter.rooms.forEach((socketIds, roomName) => {
+    // Skip socket IDs (they create rooms with their own ID)
+    if (!socketIds.has(roomName)) {
+      rooms.push({
+        room: roomName,
+        socketIds: Array.from(socketIds)
+      });
+    }
+  });
+
+  res.json({
+    totalConnections: sockets.size,
+    rooms: rooms,
+    socketIds: Array.from(sockets.keys())
+  });
+});
 
 // ❌ OLD ROUTES REMOVED (Replaced by unified inbox):
 // app.use('/api/conversations', require('./routes/conversations'));
@@ -188,16 +224,19 @@ app.use('/api/inbox', require('./routes/inbox'));
 app.get('/', (req, res) => {
   res.json({
     message: 'WhatsApp Marketing API',
-    version: '2.0.0',
+    version: '2.1.0',
     note: 'Using unified conversation model with embedded messages',
     endpoints: {
       health: '/health',
       auth: '/api/auth',
+      profile: '/api/profile (NEW - User & WhatsApp Business Profile)',
       campaigns: '/api/campaigns',
       templates: '/api/templates',
       inbox: '/api/inbox (unified - includes conversations & messages)',
       analytics: '/api/analytics',
-      webhooks: '/api/webhooks'
+      webhooks: '/api/webhooks',
+      settings: '/api/settings',
+      automations: '/api/automations'
     },
     deprecated: {
       note: 'These routes have been removed and replaced by /api/inbox',

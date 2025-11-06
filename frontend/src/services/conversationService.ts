@@ -132,12 +132,23 @@ export const conversationAPI = {
     }
   },
 
-  blockConversation: async (conversationId: string): Promise<void> => {
+  blockConversation: async (conversationId: string): Promise<Conversation> => {
     try {
-      await conversationAPI.updateStatus(conversationId, 'blocked');
+      const response = await api.post(`/inbox/${conversationId}/block`);
+      return response.data.conversation;
     } catch (error: any) {
       console.error('Failed to block conversation:', error);
       throw new Error(error.response?.data?.error || 'Failed to block');
+    }
+  },
+
+  unblockConversation: async (conversationId: string): Promise<Conversation> => {
+    try {
+      const response = await api.post(`/inbox/${conversationId}/unblock`);
+      return response.data.conversation;
+    } catch (error: any) {
+      console.error('Failed to unblock conversation:', error);
+      throw new Error(error.response?.data?.error || 'Failed to unblock');
     }
   },
 
@@ -266,6 +277,55 @@ export const conversationAPI = {
     }
   },
 
+  sendContact: async (
+    conversationId: string,
+    contacts: Array<{
+      name: {
+        formatted_name: string;
+        first_name?: string;
+        last_name?: string;
+      };
+      phones: Array<{
+        phone: string;
+        type?: string;
+        wa_id?: string;
+      }>;
+      emails?: Array<{
+        email: string;
+        type?: string;
+      }>;
+      org?: {
+        company?: string;
+        department?: string;
+        title?: string;
+      };
+      addresses?: Array<{
+        street?: string;
+        city?: string;
+        state?: string;
+        zip?: string;
+        country?: string;
+        country_code?: string;
+        type?: string;
+      }>;
+      urls?: Array<{
+        url: string;
+        type?: string;
+      }>;
+      birthday?: string;
+    }>
+  ): Promise<Message> => {
+    try {
+      const response = await api.post(`/inbox/${conversationId}/messages/contact`, {
+        contacts,
+      });
+      return response.data.message;
+    } catch (error: any) {
+      console.error('Failed to send contact:', error);
+      throw new Error(error.response?.data?.error || 'Failed to send contact');
+    }
+  },
+
   deleteConversation: async (conversationId: string): Promise<void> => {
     try {
       await api.delete(`/inbox/${conversationId}`);
@@ -284,5 +344,74 @@ export const conversationAPI = {
       return 0;
     }
   },
+
+  pinMessage: async (conversationId: string, messageId: string): Promise<Message> => {
+    try {
+      const response = await api.post(`/inbox/${conversationId}/messages/${messageId}/pin`);
+      return response.data.pinnedMessage;
+    } catch (error: any) {
+      console.error('Failed to pin message:', error);
+      throw new Error(error.response?.data?.error || 'Failed to pin message');
+    }
+  },
+
+  unpinMessage: async (conversationId: string, messageId: string): Promise<void> => {
+    try {
+      await api.post(`/inbox/${conversationId}/messages/${messageId}/unpin`);
+    } catch (error: any) {
+      console.error('Failed to unpin message:', error);
+      throw new Error(error.response?.data?.error || 'Failed to unpin message');
+    }
+  },
+
+  getPinnedMessages: async (conversationId: string): Promise<Message[]> => {
+    try {
+      const response = await api.get(`/inbox/${conversationId}/messages/pinned`);
+      return response.data.pinnedMessages || [];
+    } catch (error: any) {
+      console.error('Failed to get pinned messages:', error);
+      throw new Error(error.response?.data?.error || 'Failed to get pinned messages');
+    }
+  },
+
+  sendPollMessage: async (
+    conversationId: string,
+    question: string,
+    options: string[]
+  ): Promise<Message> => {
+    try {
+      const response = await api.post(`/inbox/${conversationId}/messages/poll`, {
+        question,
+        options,
+      });
+      return response.data.message;
+    } catch (error: any) {
+      console.error('Failed to send poll message:', error);
+      throw new Error(error.response?.data?.error || 'Failed to send poll message');
+    }
+  },
+
+  sendCTAMessage: async (
+    conversationId: string,
+    bodyText: string,
+    ctaButtons: Array<{
+      type: 'PHONE_NUMBER' | 'URL';
+      title: string;
+      phone_number?: string;
+      url?: string;
+    }>
+  ): Promise<Message> => {
+    try {
+      const response = await api.post(`/inbox/${conversationId}/messages/cta`, {
+        bodyText,
+        ctaButtons,
+      });
+      return response.data.message;
+    } catch (error: any) {
+      console.error('Failed to send CTA message:', error);
+      throw new Error(error.response?.data?.error || 'Failed to send CTA message');
+    }
+  },
 };
+
 

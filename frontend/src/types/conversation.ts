@@ -45,7 +45,7 @@ export interface InteractiveListSection {
 }
 
 export interface InteractiveContent {
-  type?: 'button' | 'list' | 'product' | 'product_list';
+  type?: 'button' | 'list' | 'product' | 'product_list' | 'poll' | 'cta';
   header?: string;
   body?: string;
   footer?: string;
@@ -60,6 +60,20 @@ export interface InteractiveContent {
     title: string;
     description?: string;
   };
+  // Poll fields
+  options?: string[];
+  votes?: Array<{
+    option: string;
+    voter: string;
+    timestamp: Date;
+  }>;
+  // CTA button fields
+  ctaButtons?: Array<{
+    type: 'PHONE_NUMBER' | 'URL';
+    title: string;
+    phone_number?: string;
+    url?: string;
+  }>;
 }
 
 export interface MessageContent {
@@ -105,6 +119,17 @@ export interface Message {
   timestamp: Date | string;
   deliveredAt?: Date | string;
   readAt?: Date | string;
+  isDeleted?: boolean;
+  deletedAt?: Date | string;
+  deletedBy?: 'user' | 'system';
+  reactions?: Array<{
+    from: string;
+    emoji: string;
+    timestamp: Date | string;
+  }>;
+  isPinned?: boolean;
+  pinnedAt?: Date | string;
+  pinnedBy?: string;
   error?: {
     code?: string;
     message?: string;
@@ -150,6 +175,7 @@ export interface Conversation {
   assignedTo?: string;
   assignedToName?: string;
   assignedAt?: Date | string;
+  tags?: string[];
   userId: string;
   isDeleted?: boolean;
   deletedAt?: Date | string;

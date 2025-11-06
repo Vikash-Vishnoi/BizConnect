@@ -1,4 +1,5 @@
 const axios = require('axios');
+const rateLimitService = require('./rateLimitService');
 
 class WhatsAppService {
   constructor() {
@@ -17,21 +18,59 @@ class WhatsAppService {
     }
   }
 
-  // Send a text message
-  async sendTextMessage(to, text) {
+  // Global axios response interceptor to capture rate-limit headers
+  _attachInterceptor() {
+    // Ensure we attach only once
+    if (this._interceptorAttached) return;
+    axios.interceptors.response.use(
+      async (response) => {
+        try {
+          const headers = response.headers || {};
+          const endpoint = response.config?.url || '';
+          await rateLimitService.record(headers, endpoint);
+        } catch (err) {
+          console.error('Failed to record rate limit headers:', err);
+        }
+        return response;
+      },
+      async (error) => {
+        try {
+          const headers = error.response?.headers || {};
+          const endpoint = error.config?.url || '';
+          await rateLimitService.record(headers, endpoint);
+        } catch (err) {
+          console.error('Failed to record rate limit headers (error response):', err);
+        }
+        return Promise.reject(error);
+      }
+    );
+    this._interceptorAttached = true;
+  }
+
+  // Send a text message with optional reply context
+  async sendTextMessage(to, text, context = null) {
     try {
+      const payload = {
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: to,
+        type: 'text',
+        text: {
+          preview_url: false,
+          body: text
+        }
+      };
+
+      // Add context for reply-to-message feature
+      if (context && context.message_id) {
+        payload.context = {
+          message_id: context.message_id
+        };
+      }
+
       const response = await axios.post(
-        `${this.apiUrl}/${this.phoneNumberId}/messages`,
-        {
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to: to,
-          type: 'text',
-          text: {
-            preview_url: false,
-            body: text
-          }
-        },
+        `https://graph.facebook.com/${this.apiVersion}/${this.phoneNumberId}/messages`,
+        payload,
         {
           headers: {
             'Authorization': `Bearer ${this.accessToken}`,
@@ -40,9 +79,16 @@ class WhatsAppService {
         }
       );
 
+      // Clean and trim the message ID to remove any spaces or newlines
+      const messageId = response.data.messages[0].id?.toString().trim().replace(/\s+/g, '') || '';
+      
+      console.log('📤 Text message sent successfully!');
+      console.log('   Raw Message ID:', response.data.messages[0].id);
+      console.log('   Cleaned Message ID:', messageId);
+
       return {
         success: true,
-        messageId: response.data.messages[0].id,
+        messageId: messageId,
         data: response.data
       };
     } catch (error) {
@@ -100,10 +146,16 @@ class WhatsAppService {
         }
       );
 
+      // Clean and trim the message ID to remove any spaces or newlines
+      const messageId = response.data.messages[0].id?.toString().trim().replace(/\s+/g, '') || '';
+      
       console.log('✅ Template message sent successfully!');
+      console.log('   Raw Message ID:', response.data.messages[0].id);
+      console.log('   Cleaned Message ID:', messageId);
+      
       return {
         success: true,
-        messageId: response.data.messages[0].id,
+        messageId: messageId,
         data: response.data
       };
     } catch (error) {
@@ -176,7 +228,7 @@ class WhatsAppService {
   }
 
   // Send media message (image, video, document)
-  async sendMediaMessage(to, mediaType, mediaUrl, caption = null) {
+  async sendMediaMessage(to, mediaType, mediaUrl, caption = null, context = null) {
     try {
       const payload = {
         messaging_product: 'whatsapp',
@@ -193,6 +245,13 @@ class WhatsAppService {
         payload[mediaType].caption = caption;
       }
 
+      // Add context for reply-to-message feature
+      if (context && context.message_id) {
+        payload.context = {
+          message_id: context.message_id
+        };
+      }
+
       const response = await axios.post(
         `${this.apiUrl}/${this.phoneNumberId}/messages`,
         payload,
@@ -204,13 +263,123 @@ class WhatsAppService {
         }
       );
 
+      // Clean the message ID by removing any spaces or newlines
+      const messageId = response.data.messages[0].id?.toString().trim().replace(/\s+/g, '') || '';
+      console.log('📤 Media message sent successfully!');
+      console.log('   Raw Message ID:', response.data.messages[0].id);
+      console.log('   Cleaned Message ID:', messageId);
+
       return {
         success: true,
-        messageId: response.data.messages[0].id,
+        messageId: messageId,
         data: response.data
       };
     } catch (error) {
       console.error('Send Media Error:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message
+      };
+    }
+  }
+
+  // ✅ FEATURE: Audio Messages - Send audio message with optional reply context
+  async sendAudioMessage(to, audioUrl, context = null) {
+    try {
+      console.log('🎤 Sending audio message...');
+      console.log('   To:', to);
+      console.log('   Audio URL:', audioUrl);
+
+      const payload = {
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: to,
+        type: 'audio',
+        audio: {
+          link: audioUrl
+        }
+      };
+
+      // Add context for reply-to-message feature
+      if (context && context.message_id) {
+        payload.context = {
+          message_id: context.message_id
+        };
+      }
+
+      const response = await axios.post(
+        `${this.apiUrl}/${this.phoneNumberId}/messages`,
+        payload,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      const messageId = response.data.messages[0].id?.toString().trim().replace(/\s+/g, '') || '';
+      console.log('✅ Audio message sent successfully!');
+      console.log('   Message ID:', messageId);
+
+      return {
+        success: true,
+        messageId: messageId,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('❌ Send Audio Error:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message
+      };
+    }
+  }
+
+  // ✅ FEATURE: Stickers - Send sticker message
+  async sendStickerMessage(to, stickerUrl, stickerId = null, context = null) {
+    try {
+      console.log('😊 Sending sticker message...');
+      console.log('   To:', to);
+      console.log('   Sticker URL:', stickerUrl);
+
+      const payload = {
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: to,
+        type: 'sticker',
+        sticker: stickerId ? { id: stickerId } : { link: stickerUrl }
+      };
+
+      // Add context for reply-to-message feature
+      if (context && context.message_id) {
+        payload.context = {
+          message_id: context.message_id
+        };
+      }
+
+      const response = await axios.post(
+        `${this.apiUrl}/${this.phoneNumberId}/messages`,
+        payload,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      const messageId = response.data.messages[0].id?.toString().trim().replace(/\s+/g, '') || '';
+      console.log('✅ Sticker message sent successfully!');
+      console.log('   Message ID:', messageId);
+
+      return {
+        success: true,
+        messageId: messageId,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('❌ Send Sticker Error:', error.response?.data || error.message);
       return {
         success: false,
         error: error.response?.data?.error || error.message
@@ -288,9 +457,15 @@ class WhatsAppService {
         }
       );
 
+      // Clean the message ID by removing any spaces or newlines
+      const reactionMessageId = response.data.messages[0].id?.toString().trim().replace(/\s+/g, '') || '';
+      console.log('😊 Reaction sent successfully!');
+      console.log('   Raw Message ID:', response.data.messages[0].id);
+      console.log('   Cleaned Message ID:', reactionMessageId);
+
       return {
         success: true,
-        messageId: response.data.messages[0].id,
+        messageId: reactionMessageId,
         data: response.data
       };
     } catch (error) {
@@ -336,13 +511,114 @@ class WhatsAppService {
         }
       );
 
+      // Clean the message ID by removing any spaces or newlines
+      const messageId = response.data.messages[0].id?.toString().trim().replace(/\s+/g, '') || '';
+      console.log('🔘 Button message sent successfully!');
+      console.log('   Raw Message ID:', response.data.messages[0].id);
+      console.log('   Cleaned Message ID:', messageId);
+
       return {
         success: true,
-        messageId: response.data.messages[0].id,
+        messageId: messageId,
         data: response.data
       };
     } catch (error) {
       console.error('Send Button Message Error:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message
+      };
+    }
+  }
+
+  // Send interactive CTA (Call-to-Action) buttons message
+  async sendCTAMessage(to, bodyText, ctaButtons) {
+    try {
+      // Validate CTA buttons (max 2 buttons)
+      if (!Array.isArray(ctaButtons) || ctaButtons.length === 0 || ctaButtons.length > 2) {
+        throw new Error('CTA message must have 1-2 action buttons');
+      }
+
+      // Validate each button
+      for (const btn of ctaButtons) {
+        if (!btn.type || !['PHONE_NUMBER', 'URL'].includes(btn.type)) {
+          throw new Error('Button type must be PHONE_NUMBER or URL');
+        }
+        if (!btn.title || btn.title.length > 20) {
+          throw new Error('Button title must be 1-20 characters');
+        }
+        if (btn.type === 'PHONE_NUMBER') {
+          if (!btn.phone_number || !btn.phone_number.match(/^\+?[1-9]\d{1,14}$/)) {
+            throw new Error('Invalid phone number format (E.164 required)');
+          }
+        }
+        if (btn.type === 'URL') {
+          if (!btn.url || !btn.url.match(/^https?:\/\/.+/)) {
+            throw new Error('Invalid URL format (must start with http:// or https://)');
+          }
+        }
+      }
+
+      // Build action buttons array
+      const actionButtons = ctaButtons.map((btn, idx) => {
+        if (btn.type === 'PHONE_NUMBER') {
+          return {
+            type: 'phone_number',
+            phone_number: {
+              display_phone_number: btn.phone_number,
+              phone_number: btn.phone_number
+            },
+            title: btn.title.substring(0, 20)
+          };
+        } else {
+          return {
+            type: 'url',
+            url: {
+              display_url: btn.url,
+              url: btn.url
+            },
+            title: btn.title.substring(0, 20)
+          };
+        }
+      });
+
+      const response = await axios.post(
+        `${this.apiUrl}/${this.phoneNumberId}/messages`,
+        {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: to,
+          type: 'interactive',
+          interactive: {
+            type: 'cta_url',
+            body: {
+              text: bodyText
+            },
+            action: {
+              buttons: actionButtons
+            }
+          }
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      const messageId = response.data.messages[0].id?.toString().trim().replace(/\s+/g, '') || '';
+      console.log('🔗 CTA message sent successfully!');
+      console.log('   Message Type:', ctaButtons.map(b => b.type).join(', '));
+      console.log('   Message ID:', messageId);
+
+      return {
+        success: true,
+        messageId: messageId,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Send CTA Message Error:', error.response?.data || error.message);
       return {
         success: false,
         error: error.response?.data?.error || error.message
@@ -379,9 +655,15 @@ class WhatsAppService {
         }
       );
 
+      // Clean the message ID by removing any spaces or newlines
+      const messageId = response.data.messages[0].id?.toString().trim().replace(/\s+/g, '') || '';
+      console.log('📋 List message sent successfully!');
+      console.log('   Raw Message ID:', response.data.messages[0].id);
+      console.log('   Cleaned Message ID:', messageId);
+
       return {
         success: true,
-        messageId: response.data.messages[0].id,
+        messageId: messageId,
         data: response.data
       };
     } catch (error) {
@@ -418,9 +700,15 @@ class WhatsAppService {
         }
       );
 
+      // Clean the message ID by removing any spaces or newlines
+      const messageId = response.data.messages[0].id?.toString().trim().replace(/\s+/g, '') || '';
+      console.log('📍 Location message sent successfully!');
+      console.log('   Raw Message ID:', response.data.messages[0].id);
+      console.log('   Cleaned Message ID:', messageId);
+
       return {
         success: true,
-        messageId: response.data.messages[0].id,
+        messageId: messageId,
         data: response.data
       };
     } catch (error) {
@@ -452,13 +740,84 @@ class WhatsAppService {
         }
       );
 
+      // Clean the message ID by removing any spaces or newlines
+      const messageId = response.data.messages[0].id?.toString().trim().replace(/\s+/g, '') || '';
+      console.log('👤 Contact message sent successfully!');
+      console.log('   Raw Message ID:', response.data.messages[0].id);
+      console.log('   Cleaned Message ID:', messageId);
+
       return {
         success: true,
-        messageId: response.data.messages[0].id,
+        messageId: messageId,
         data: response.data
       };
     } catch (error) {
       console.error('Send Contact Error:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message
+      };
+    }
+  }
+
+  // Send interactive poll message
+  async sendPollMessage(to, question, options) {
+    try {
+      // Validate options (WhatsApp allows 2-12 options)
+      if (!Array.isArray(options) || options.length < 2 || options.length > 12) {
+        throw new Error('Poll must have between 2 and 12 options');
+      }
+
+      // Validate option length (max 20 characters each)
+      for (const option of options) {
+        if (!option || option.length > 20) {
+          throw new Error('Each poll option must be 1-20 characters');
+        }
+      }
+
+      // Validate question length (max 255 characters)
+      if (!question || question.length > 255) {
+        throw new Error('Poll question must be 1-255 characters');
+      }
+
+      const response = await axios.post(
+        `${this.apiUrl}/${this.phoneNumberId}/messages`,
+        {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: to,
+          type: 'interactive',
+          interactive: {
+            type: 'poll_message_creation',
+            body: {
+              text: question
+            },
+            action: {
+              buttons: options.map(option => ({ type: 'text', title: option }))
+            }
+          }
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      const messageId = response.data.messages[0].id?.toString().trim().replace(/\s+/g, '') || '';
+      console.log('📊 Poll message sent successfully!');
+      console.log('   Question:', question);
+      console.log('   Options:', options.length);
+      console.log('   Message ID:', messageId);
+
+      return {
+        success: true,
+        messageId: messageId,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Send Poll Error:', error.response?.data || error.message);
       return {
         success: false,
         error: error.response?.data?.error || error.message
@@ -535,6 +894,413 @@ class WhatsAppService {
     
     // If other format, throw error
     throw new Error(`Invalid phone number: ${phoneNumber}. Expected 10 digits, will add 91 prefix automatically.`);
+  }
+
+  // ===== Business Profile API Methods =====
+  
+  /**
+   * Get Business Profile information
+   * Retrieves business details like name, description, address, etc.
+   */
+  async getBusinessProfile() {
+    try {
+      const response = await axios.get(
+        `${this.apiUrl}/${this.phoneNumberId}/whatsapp_business_profile`,
+        {
+          params: {
+            fields: 'about,address,description,email,profile_picture_url,websites,vertical'
+          },
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      console.log('📊 Business profile retrieved successfully');
+      
+      return {
+        success: true,
+        data: response.data.data[0] || {}
+      };
+    } catch (error) {
+      console.error('Get Business Profile Error:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message
+      };
+    }
+  }
+
+  /**
+   * Update Business Profile information
+   * Updates business details (about, address, description, email, websites, vertical)
+   */
+  async updateBusinessProfile(profileData) {
+    try {
+      const response = await axios.post(
+        `${this.apiUrl}/${this.phoneNumberId}/whatsapp_business_profile`,
+        {
+          messaging_product: 'whatsapp',
+          ...profileData
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      console.log('✅ Business profile updated successfully');
+      
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Update Business Profile Error:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message
+      };
+    }
+  }
+
+  /**
+   * Upload and set business profile photo
+   * Note: Requires uploading media first, then setting as profile photo
+   */
+  async updateProfilePhoto(mediaId) {
+    try {
+      const response = await axios.post(
+        `${this.apiUrl}/${this.phoneNumberId}/whatsapp_business_profile`,
+        {
+          messaging_product: 'whatsapp',
+          profile_picture_handle: mediaId
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      console.log('✅ Profile photo updated successfully');
+      
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('Update Profile Photo Error:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message
+      };
+    }
+  }
+
+  /**
+   * ✅ FEATURE: Media Management - Upload media file to WhatsApp
+   * Uploads media (image, video, audio, document, sticker) to WhatsApp servers
+   * Returns media ID that can be used to send media messages
+   * 
+   * @param {Buffer|Stream} file - File data as Buffer or Stream
+   * @param {string} mimeType - MIME type (e.g., 'image/jpeg', 'video/mp4')
+   * @param {string} filename - Original filename
+   * @returns {Promise<{success: boolean, mediaId?: string, error?: string}>}
+   */
+  async uploadMedia(file, mimeType, filename) {
+    try {
+      console.log('📤 Uploading media to WhatsApp...');
+      console.log('   File name:', filename);
+      console.log('   MIME type:', mimeType);
+      console.log('   File size:', file.length || 'stream');
+
+      const FormData = require('form-data');
+      const formData = new FormData();
+      
+      formData.append('messaging_product', 'whatsapp');
+      formData.append('file', file, {
+        filename: filename,
+        contentType: mimeType
+      });
+
+      const response = await axios.post(
+        `${this.apiUrl}/${this.phoneNumberId}/media`,
+        formData,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`,
+            ...formData.getHeaders()
+          },
+          maxContentLength: Infinity,
+          maxBodyLength: Infinity
+        }
+      );
+
+      const mediaId = response.data.id;
+      console.log('✅ Media uploaded successfully!');
+      console.log('   Media ID:', mediaId);
+
+      return {
+        success: true,
+        mediaId: mediaId,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('❌ Upload Media Error:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message
+      };
+    }
+  }
+
+  /**
+   * ✅ FEATURE: Media Management - Get media URL and metadata
+   * Retrieves the download URL and metadata for a media file
+   * URL is temporary and expires after a few minutes
+   * 
+   * @param {string} mediaId - WhatsApp media ID
+   * @returns {Promise<{success: boolean, url?: string, mimeType?: string, fileSize?: number, error?: string}>}
+   */
+  async getMediaUrl(mediaId) {
+    try {
+      console.log('🔍 Retrieving media URL...');
+      console.log('   Media ID:', mediaId);
+
+      const response = await axios.get(
+        `${this.apiUrl}/${mediaId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`
+          }
+        }
+      );
+
+      console.log('✅ Media URL retrieved successfully');
+      console.log('   URL:', response.data.url);
+      console.log('   MIME type:', response.data.mime_type);
+      console.log('   File size:', response.data.file_size);
+
+      return {
+        success: true,
+        url: response.data.url,
+        mimeType: response.data.mime_type,
+        fileSize: response.data.file_size,
+        sha256: response.data.sha256,
+        data: response.data
+      };
+    } catch (error) {
+      console.error('❌ Get Media URL Error:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message
+      };
+    }
+  }
+
+  /**
+   * ✅ FEATURE: Media Management - Download media file
+   * Downloads media file from WhatsApp using media ID
+   * First gets URL, then downloads the file
+   * 
+   * @param {string} mediaId - WhatsApp media ID
+   * @returns {Promise<{success: boolean, buffer?: Buffer, mimeType?: string, error?: string}>}
+   */
+  async downloadMedia(mediaId) {
+    try {
+      console.log('⬇️  Downloading media...');
+      console.log('   Media ID:', mediaId);
+
+      // First, get the media URL
+      const mediaInfo = await this.getMediaUrl(mediaId);
+      if (!mediaInfo.success) {
+        return mediaInfo;
+      }
+
+      // Download the file
+      console.log('   Downloading from URL...');
+      const response = await axios.get(mediaInfo.url, {
+        headers: {
+          'Authorization': `Bearer ${this.accessToken}`
+        },
+        responseType: 'arraybuffer'
+      });
+
+      const buffer = Buffer.from(response.data);
+      console.log('✅ Media downloaded successfully');
+      console.log('   Size:', buffer.length, 'bytes');
+
+      return {
+        success: true,
+        buffer: buffer,
+        mimeType: mediaInfo.mimeType,
+        fileSize: buffer.length
+      };
+    } catch (error) {
+      console.error('❌ Download Media Error:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message
+      };
+    }
+  }
+
+  /**
+   * ✅ FEATURE: Media Management - Delete media file from WhatsApp
+   * Removes media file from WhatsApp servers
+   * Use this to clean up uploaded media that's no longer needed
+   * 
+   * @param {string} mediaId - WhatsApp media ID
+   * @returns {Promise<{success: boolean, error?: string}>}
+   */
+  async deleteMedia(mediaId) {
+    try {
+      console.log('🗑️  Deleting media...');
+      console.log('   Media ID:', mediaId);
+
+      const response = await axios.delete(
+        `${this.apiUrl}/${mediaId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`
+          }
+        }
+      );
+
+      console.log('✅ Media deleted successfully');
+
+      return {
+        success: true,
+        data: response.data
+      };
+    } catch (error) {
+      // If media is already deleted or doesn't exist, consider it success
+      if (error.response?.status === 404) {
+        console.log('ℹ️  Media already deleted or not found');
+        return {
+          success: true,
+          message: 'Media not found (already deleted)'
+        };
+      }
+
+      console.error('❌ Delete Media Error:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message
+      };
+    }
+  }
+
+  /**
+   * ✅ FEATURE: Account Management - Get account limits and tier info
+   * Retrieves the current messaging limits and tier information
+   * 
+   * @returns {Promise<{success: boolean, data?: object, error?: string}>}
+   */
+  async getAccountLimits() {
+    try {
+      console.log('📊 Fetching account limits...');
+
+      const response = await axios.get(
+        `${this.apiUrl}/${this.phoneNumberId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`
+          },
+          params: {
+            fields: 'messaging_limit_tier,quality_rating,name_status,code_verification_status'
+          }
+        }
+      );
+
+      console.log('✅ Account limits retrieved successfully');
+      console.log('   Tier:', response.data.messaging_limit_tier);
+      console.log('   Quality Rating:', response.data.quality_rating);
+
+      // Map tier to daily message limit
+      const tierLimits = {
+        'TIER_50': 50,
+        'TIER_250': 250,
+        'TIER_1K': 1000,
+        'TIER_10K': 10000,
+        'TIER_100K': 100000,
+        'TIER_UNLIMITED': 1000000
+      };
+
+      const tier = response.data.messaging_limit_tier || 'TIER_1K';
+      const messagingLimit = tierLimits[tier] || 1000;
+
+      return {
+        success: true,
+        data: {
+          tier: tier,
+          tierName: tier.replace('TIER_', '').replace('K', ',000'),
+          messagingLimit: messagingLimit,
+          qualityRating: response.data.quality_rating || 'UNKNOWN',
+          nameStatus: response.data.name_status,
+          codeVerificationStatus: response.data.code_verification_status,
+          rawData: response.data
+        }
+      };
+    } catch (error) {
+      console.error('❌ Get Account Limits Error:', error.response?.data || error.message);
+      
+      // Return default values if API fails
+      return {
+        success: true,
+        data: {
+          tier: 'TIER_1K',
+          tierName: '1,000',
+          messagingLimit: 1000,
+          qualityRating: 'UNKNOWN',
+          nameStatus: 'UNKNOWN',
+          codeVerificationStatus: 'UNKNOWN',
+          note: 'Using default values - API call failed'
+        }
+      };
+    }
+  }
+
+  /**
+   * ✅ FEATURE: Account Management - Get quality rating
+   * Retrieves the current account quality rating
+   * 
+   * @returns {Promise<{success: boolean, rating?: string, error?: string}>}
+   */
+  async getQualityRating() {
+    try {
+      console.log('⭐ Fetching quality rating...');
+
+      const response = await axios.get(
+        `${this.apiUrl}/${this.phoneNumberId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${this.accessToken}`
+          },
+          params: {
+            fields: 'quality_rating'
+          }
+        }
+      );
+
+      console.log('✅ Quality rating retrieved:', response.data.quality_rating);
+
+      return {
+        success: true,
+        rating: response.data.quality_rating || 'UNKNOWN'
+      };
+    } catch (error) {
+      console.error('❌ Get Quality Rating Error:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.error || error.message
+      };
+    }
   }
 }
 

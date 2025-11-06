@@ -142,6 +142,38 @@ const messageSchema = new mongoose.Schema({
   },
   deliveredAt: Date,
   readAt: Date,
+  // Message deletion tracking
+  isDeleted: {
+    type: Boolean,
+    default: false
+  },
+  deletedAt: Date,
+  deletedBy: {
+    type: String, // 'user' or 'system'
+    enum: ['user', 'system']
+  },
+  // Reactions to this message
+  reactions: [{
+    from: {
+      type: String,
+      required: true
+    },
+    emoji: {
+      type: String,
+      required: true
+    },
+    timestamp: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  // Message pinning
+  isPinned: {
+    type: Boolean,
+    default: false
+  },
+  pinnedAt: Date,
+  pinnedBy: String, // User ID who pinned the message
   error: {
     code: String,
     message: String,
@@ -180,6 +212,8 @@ const conversationSchema = new mongoose.Schema({
     },
     name: String,
     profilePicture: String,
+    profilePhoto: String, // WhatsApp profile photo URL
+    about: String, // WhatsApp profile about/status
     email: String,
     customFields: {
       type: Map,
@@ -187,7 +221,17 @@ const conversationSchema = new mongoose.Schema({
     },
     // WhatsApp Business API contact metadata
     waId: String, // WhatsApp ID (usually same as phone without +)
-    profileName: String // Name from WhatsApp profile
+    profileName: String, // Name from WhatsApp profile
+    // ✅ FEATURE: Profile Updates - Track profile change history
+    profileHistory: [{
+      field: {
+        type: String,
+        enum: ['name', 'profilePhoto', 'about']
+      },
+      oldValue: String,
+      newValue: String,
+      timestamp: Date
+    }]
   },
   
   // Embedded Messages Array
@@ -270,6 +314,13 @@ const conversationSchema = new mongoose.Schema({
   assignedToName: String,
   assignedAt: Date,
   
+  // Tags and Labels for Organization
+  tags: [{
+    type: String,
+    trim: true,
+    lowercase: true
+  }],
+  
   // User/Organization
   userId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -284,7 +335,11 @@ const conversationSchema = new mongoose.Schema({
     default: false,
     index: true
   },
-  deletedAt: Date
+  deletedAt: Date,
+  
+  // Additional timestamps for status changes
+  archivedAt: Date,
+  closedAt: Date
   
 }, {
   timestamps: true,

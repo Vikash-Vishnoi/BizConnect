@@ -3,6 +3,7 @@ const router = express.Router();
 const User = require('../models/User');
 const Template = require('../models/Template');
 const { auth } = require('../middleware/auth');
+const whatsappService = require('../services/whatsappService');
 
 // @route   GET /api/settings/welcome-message
 // @desc    Get user's welcome message configuration
@@ -174,6 +175,182 @@ router.post('/welcome-message/test', auth, async (req, res) => {
   } catch (error) {
     console.error('Test welcome message error:', error);
     res.status(500).json({ error: 'Failed to send test message' });
+  }
+});
+
+// ===== Business Profile API Routes =====
+
+// @route   GET /api/settings/business-profile
+// @desc    Get WhatsApp business profile information
+// @access  Private
+router.get('/business-profile', auth, async (req, res) => {
+  try {
+    const result = await whatsappService.getBusinessProfile();
+    
+    if (result.success) {
+      res.json(result.data);
+    } else {
+      res.status(400).json({ error: result.error });
+    }
+  } catch (error) {
+    console.error('Get business profile error:', error);
+    res.status(500).json({ error: 'Failed to get business profile' });
+  }
+});
+
+// @route   PUT /api/settings/business-profile
+// @desc    Update WhatsApp business profile information
+// @access  Private
+router.put('/business-profile', auth, async (req, res) => {
+  try {
+    const {
+      about,
+      address,
+      description,
+      email,
+      websites,
+      vertical
+    } = req.body;
+
+    // Build profile data object with only provided fields
+    const profileData = {};
+    if (about !== undefined) profileData.about = about;
+    if (address !== undefined) profileData.address = address;
+    if (description !== undefined) profileData.description = description;
+    if (email !== undefined) profileData.email = email;
+    if (websites !== undefined) profileData.websites = websites;
+    if (vertical !== undefined) profileData.vertical = vertical;
+
+    const result = await whatsappService.updateBusinessProfile(profileData);
+    
+    if (result.success) {
+      res.json({
+        message: 'Business profile updated successfully',
+        data: result.data
+      });
+    } else {
+      res.status(400).json({ error: result.error });
+    }
+  } catch (error) {
+    console.error('Update business profile error:', error);
+    res.status(500).json({ error: 'Failed to update business profile' });
+  }
+});
+
+// @route   POST /api/settings/business-profile/photo
+// @desc    Update business profile photo
+// @access  Private
+router.post('/business-profile/photo', auth, async (req, res) => {
+  try {
+    const { mediaId } = req.body;
+
+    if (!mediaId) {
+      return res.status(400).json({ error: 'Media ID is required' });
+    }
+
+    const result = await whatsappService.updateProfilePhoto(mediaId);
+    
+    if (result.success) {
+      res.json({
+        message: 'Profile photo updated successfully',
+        data: result.data
+      });
+    } else {
+      res.status(400).json({ error: result.error });
+    }
+  } catch (error) {
+    console.error('Update profile photo error:', error);
+    res.status(500).json({ error: 'Failed to update profile photo' });
+  }
+});
+
+// ===== Account Limits API Routes =====
+
+// @route   GET /api/settings/account-limits
+// @desc    Get WhatsApp Business account limits and tier information
+// @access  Private
+router.get('/account-limits', auth, async (req, res) => {
+  try {
+    const result = await whatsappService.getAccountLimits();
+    
+    if (result.success) {
+      res.json(result.data);
+    } else {
+      res.status(400).json({ error: result.error });
+    }
+  } catch (error) {
+    console.error('Get account limits error:', error);
+    res.status(500).json({ error: 'Failed to get account limits' });
+  }
+});
+
+// @route   GET /api/settings/messaging-limits
+// @desc    Get current messaging limits and usage statistics
+// @access  Private
+router.get('/messaging-limits', auth, async (req, res) => {
+  try {
+    const Conversation = require('../models/Conversation');
+    
+    // Get account tier limits from WhatsApp
+    const limitsResult = await whatsappService.getAccountLimits();
+    
+    if (!limitsResult.success) {
+      return res.status(400).json({ error: limitsResult.error });
+    }
+
+    // Calculate today's message count
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const conversations = await Conversation.find({
+      userId: req.userId,
+      'messages.timestamp': { $gte: today }
+    }).select('messages');
+
+    let todayCount = 0;
+    conversations.forEach(conv => {
+      conv.messages.forEach(msg => {
+        if (msg.direction === 'outgoing' && 
+            msg.timestamp >= today &&
+            msg.type !== 'reaction') {
+          todayCount++;
+        }
+      });
+    });
+
+    // Calculate this week's count (last 7 days)
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    
+    const weekConversations = await Conversation.find({
+      userId: req.userId,
+      'messages.timestamp': { $gte: weekAgo }
+    }).select('messages');
+
+    let weekCount = 0;
+    weekConversations.forEach(conv => {
+      conv.messages.forEach(msg => {
+        if (msg.direction === 'outgoing' && 
+            msg.timestamp >= weekAgo &&
+            msg.type !== 'reaction') {
+          weekCount++;
+        }
+      });
+    });
+
+    res.json({
+      limits: limitsResult.data,
+      usage: {
+        today: todayCount,
+        week: weekCount,
+        todayPercentage: limitsResult.data.messagingLimit ? 
+          Math.round((todayCount / limitsResult.data.messagingLimit) * 100) : 0,
+        weekAverage: Math.round(weekCount / 7)
+      }
+    });
+  } catch (error) {
+    console.error('Get messaging limits error:', error);
+    res.status(500).json({ error: 'Failed to get messaging limits' });
   }
 });
 

@@ -4,6 +4,7 @@ const router = express.Router();
 const Conversation = require('../models/Conversation');
 const Template = require('../models/Template');
 const Campaign = require('../models/Campaign');
+const automationService = require('../services/automationService');
 
 // @route   GET /api/webhooks/whatsapp
 // @desc    Webhook verification (WhatsApp requires this)
@@ -84,6 +85,13 @@ router.post('/whatsapp', async (req, res) => {
         // Handle template status updates
         if (value.message_template_status_update) {
           await handleTemplateStatusUpdate(value.message_template_status_update, io);
+        }
+
+        // ✅ FEATURE: Account Alerts - Handle account quality/status updates
+        if (change.field === 'phone_number_quality_update' || 
+            change.field === 'account_update' ||
+            change.field === 'account_alerts') {
+          await handleAccountAlert(change, value, io);
         }
       }
     }
@@ -167,6 +175,68 @@ async function handleIncomingMessage(message, metadata, io) {
     if (message.type === 'text') {
       type = 'text';
       content.text = message.text.body;
+    } else if (message.type === 'reaction') {
+      // Handle emoji reactions - ALWAYS return, never create a message
+      console.log(`👍 Reaction webhook received on message: ${message.reaction.message_id}`);
+      console.log(`   Emoji: "${message.reaction.emoji}" (empty = removed)`);
+      
+      // Find the message being reacted to
+      const originalMessage = conversation.messages.find(
+        m => m.whatsappMessageId === message.reaction.message_id
+      );
+      
+      if (!originalMessage) {
+        console.log(`⚠️ Original message not found for reaction: ${message.reaction.message_id}`);
+        console.log(`   This might be a campaign message or very old message`);
+        return; // STOP - don't create a message for reactions
+      }
+      
+      // Initialize reactions array if it doesn't exist
+      if (!originalMessage.reactions) {
+        originalMessage.reactions = [];
+      }
+      
+      // Remove existing reaction from this user (if any)
+      const previousReaction = originalMessage.reactions.find(r => r.from === from);
+      originalMessage.reactions = originalMessage.reactions.filter(
+        r => r.from !== from
+      );
+      
+      // Add new reaction only if emoji is not empty
+      if (message.reaction.emoji && message.reaction.emoji.trim() !== '') {
+        originalMessage.reactions.push({
+          from: from,
+          emoji: message.reaction.emoji,
+          timestamp: timestamp
+        });
+        console.log(`✅ Added reaction: ${message.reaction.emoji}`);
+      } else {
+        console.log(`✅ Removed reaction from user ${from}`);
+      }
+      
+      await conversation.save();
+      
+      // Emit reaction update event with full context
+      io.to(`user:${conversation.userId}`).emit('message:reacted', {
+        conversationId: conversation._id.toString(),
+        messageId: originalMessage._id.toString(),
+        whatsappMessageId: message.reaction.message_id,
+        from: from,
+        emoji: message.reaction.emoji || '', // Empty string for removed reactions
+        timestamp: timestamp.toISOString(),
+        // Add context about the message being reacted to
+        reactedToMessage: {
+          _id: originalMessage._id.toString(),
+          text: originalMessage.content?.text || `[${originalMessage.type}]`,
+          type: originalMessage.type,
+          direction: originalMessage.direction,
+          timestamp: originalMessage.timestamp
+        }
+      });
+      
+      console.log(`📡 Reaction event emitted to user:${conversation.userId}`);
+      console.log(`   Reacted to message: ${originalMessage.content?.text?.substring(0, 50) || originalMessage.type}`);
+      return; // CRITICAL: Always return for reactions, never create a message
     } else if (message.type === 'image') {
       type = 'image';
       content.mediaUrl = message.image.id;
@@ -190,6 +260,10 @@ async function handleIncomingMessage(message, metadata, io) {
         name: message.location.name,
         address: message.location.address
       };
+    } else if (message.type === 'contacts') {
+      type = 'contacts';
+      content.contacts = message.contacts;
+      console.log('📇 Contact card received:', JSON.stringify(message.contacts, null, 2));
     }
 
     // ✅ Ensure conversation is active on new incoming message (auto-reopen)
@@ -242,6 +316,48 @@ async function handleIncomingMessage(message, metadata, io) {
     });
 
     console.log(`✅ Incoming message processed and emitted: ${messageId}`);
+    
+    // 🤖 Trigger automation rules
+    setImmediate(async () => {
+      try {
+        // Check for new conversation trigger
+        if (conversation.messages.length === 1) {
+          await automationService.processTrigger(conversation.userId, 'new_conversation', {
+            conversationId: conversation._id,
+            contactPhone: from,
+            triggerData: { messageId: newMessage._id, isFirstMessage: true }
+          });
+        }
+        
+        // Check for keyword triggers
+        if (type === 'text' && content.text) {
+          await automationService.processTrigger(conversation.userId, 'keyword', {
+            conversationId: conversation._id,
+            contactPhone: from,
+            message: newMessage,
+            triggerData: { messageId: newMessage._id, text: content.text }
+          });
+        }
+        
+        // Check for general message_received trigger
+        await automationService.processTrigger(conversation.userId, 'message_received', {
+          conversationId: conversation._id,
+          contactPhone: from,
+          message: newMessage,
+          triggerData: { messageId: newMessage._id, messageType: type }
+        });
+        
+        // Check for after_hours trigger
+        await automationService.processTrigger(conversation.userId, 'after_hours', {
+          conversationId: conversation._id,
+          contactPhone: from,
+          message: newMessage,
+          triggerData: { messageId: newMessage._id, receivedAt: timestamp }
+        });
+      } catch (error) {
+        console.error('Automation trigger error:', error);
+      }
+    });
   } catch (error) {
     console.error('Handle incoming message error:', error);
   }
@@ -293,14 +409,25 @@ async function handleMessageStatus(status, io) {
       return;
     }
 
+    // Find the specific message
+    const messageDoc = conversation.messages.find(m => m.whatsappMessageId === messageId);
+    if (!messageDoc) {
+      console.log(`Message document not found for ${messageId}`);
+      return;
+    }
+
     // Update regular message status in conversation
     await conversation.updateMessageStatus(messageId, statusType, timestamp);
 
-    // Emit message status update
-    io.to(`user:${message.userId}`).emit('message:status', {
-      messageId: message._id,
+    // ✅ FEATURE: Read Receipts - Emit message status update with enhanced data
+    io.to(`user:${conversation.userId}`).emit('message:status', {
+      conversationId: conversation._id,
+      messageId: messageDoc._id,
+      whatsappMessageId: messageId,
       status: statusType,
-      timestamp
+      timestamp: timestamp,
+      deliveredAt: statusType === 'delivered' ? timestamp : messageDoc.deliveredAt,
+      readAt: statusType === 'read' ? timestamp : messageDoc.readAt
     });
 
     console.log(`✅ Message status updated: ${messageId} -> ${statusType}`);
@@ -504,6 +631,152 @@ function checkBusinessHours(config) {
   } catch (error) {
     console.error('Error checking business hours:', error);
     return true; // Default to true if error
+  }
+}
+
+// ✅ FEATURE: Account Alerts - Handle account quality and status updates
+async function handleAccountAlert(change, value, io) {
+  try {
+    console.log('🚨 Account alert received:');
+    console.log('   Field:', change.field);
+    console.log('   Value:', JSON.stringify(value, null, 2));
+
+    const AlertLog = require('../models/AlertLog');
+    
+    // Get user ID (in production, you would identify user by phone number ID)
+    const ADMIN_USER_ID = process.env.ADMIN_USER_ID || '68f9490fef1e28c3cb8a9f8b';
+    
+    // Parse alert data
+    const alertData = parseAccountAlert(change.field, value);
+    
+    if (!alertData) {
+      console.log('⚠️  Could not parse account alert');
+      return;
+    }
+
+    // Create alert log
+    const alert = await AlertLog.create({
+      userId: ADMIN_USER_ID,
+      alertType: alertData.alertType,
+      severity: alertData.severity,
+      title: alertData.title,
+      message: alertData.message,
+      whatsappData: {
+        phoneNumberId: value.phone_number_id,
+        displayPhoneNumber: value.display_phone_number,
+        currentRating: value.current_limit,
+        previousRating: value.previous_limit,
+        event: value.event,
+        decision: value.decision,
+        reasonCode: value.reason_code,
+        rawData: value
+      },
+      firstOccurredAt: new Date(),
+      lastOccurredAt: new Date()
+    });
+
+    console.log('✅ Alert log created:', alert._id);
+
+    // Emit socket event for real-time notification
+    if (io) {
+      io.to(`user:${ADMIN_USER_ID}`).emit('alert:new', {
+        alert: {
+          _id: alert._id,
+          alertType: alert.alertType,
+          severity: alert.severity,
+          title: alert.title,
+          message: alert.message,
+          status: alert.status,
+          createdAt: alert.createdAt
+        },
+        needsAttention: alert.needsAttention
+      });
+
+      console.log('📡 Alert notification emitted to user');
+    }
+
+    // TODO: Send email/SMS notification for critical alerts
+    if (alert.severity === 'CRITICAL' || alert.severity === 'HIGH') {
+      console.log('⚠️  CRITICAL/HIGH alert - Consider sending email/SMS notification');
+      // await sendEmailNotification(alert);
+    }
+
+  } catch (error) {
+    console.error('❌ Error handling account alert:', error);
+    // Don't throw - we don't want to fail webhook processing
+  }
+}
+
+// Parse account alert into structured data
+function parseAccountAlert(field, value) {
+  let alertType = 'UNKNOWN';
+  let severity = 'MEDIUM';
+  let title = 'WhatsApp Account Alert';
+  let message = 'An alert was received from WhatsApp.';
+
+  try {
+    // Phone number quality update
+    if (field === 'phone_number_quality_update') {
+      alertType = 'PHONE_NUMBER_QUALITY_UPDATE';
+      
+      const currentRating = value.current_limit || 'UNKNOWN';
+      const event = value.event || '';
+      
+      if (currentRating === 'RED' || event === 'FLAGGED') {
+        severity = 'CRITICAL';
+        title = '🚨 Critical: Account Quality Rating RED';
+        message = `Your WhatsApp Business phone number (${value.display_phone_number || 'Unknown'}) has been flagged due to quality issues. ` +
+                  `Your account may be restricted or suspended. ` +
+                  `IMMEDIATE ACTION REQUIRED: Review your messaging practices and reduce spam reports.`;
+      } else if (currentRating === 'YELLOW') {
+        severity = 'HIGH';
+        title = '⚠️ Warning: Account Quality Rating YELLOW';
+        message = `Your WhatsApp Business phone number (${value.display_phone_number || 'Unknown'}) quality rating has decreased to YELLOW. ` +
+                  `This is a warning that your messaging quality needs improvement. ` +
+                  `Action required: Review recent campaigns, reduce message frequency, ensure opt-in compliance.`;
+      } else if (event === 'REINSTATED') {
+        severity = 'LOW';
+        title = '✅ Account Reinstated';
+        message = `Your WhatsApp Business phone number (${value.display_phone_number || 'Unknown'}) has been reinstated. ` +
+                  `You can resume normal messaging operations.`;
+      } else if (currentRating === 'GREEN') {
+        severity = 'LOW';
+        title = '✅ Account Quality: GREEN';
+        message = `Your WhatsApp Business phone number (${value.display_phone_number || 'Unknown'}) has good quality rating. ` +
+                  `Continue following best practices.`;
+      }
+    }
+    
+    // Account update
+    else if (field === 'account_update') {
+      alertType = 'ACCOUNT_UPDATE';
+      severity = 'MEDIUM';
+      title = 'Account Update';
+      message = `WhatsApp Business account update received. ` +
+                `Event: ${value.event || 'Unknown'}. ` +
+                `Please review your account settings.`;
+    }
+    
+    // Account alerts (generic)
+    else if (field === 'account_alerts') {
+      alertType = 'ACCOUNT_WARNING';
+      
+      if (value.severity === 'HIGH' || value.severity === 'CRITICAL') {
+        severity = 'CRITICAL';
+        title = '🚨 Critical Account Alert';
+      } else {
+        severity = 'HIGH';
+        title = '⚠️ Account Alert';
+      }
+      
+      message = value.message || 'An important account alert was received from WhatsApp.';
+    }
+
+    return { alertType, severity, title, message };
+    
+  } catch (error) {
+    console.error('Error parsing account alert:', error);
+    return null;
   }
 }
 
