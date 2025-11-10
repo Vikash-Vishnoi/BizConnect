@@ -93,6 +93,11 @@ router.post('/whatsapp', async (req, res) => {
             change.field === 'account_alerts') {
           await handleAccountAlert(change, value, io);
         }
+
+        // ✅ FEATURE: Contact Updates - Handle contact profile changes
+        if (change.field === 'contacts') {
+          await handleContactUpdate(change, value, io);
+        }
       }
     }
   } catch (error) {
@@ -777,6 +782,174 @@ function parseAccountAlert(field, value) {
   } catch (error) {
     console.error('Error parsing account alert:', error);
     return null;
+  }
+}
+
+// ✅ FEATURE: Contact Updates - Handle contact profile changes
+async function handleContactUpdate(change, value, io) {
+  try {
+    console.log('👤 Contact update received:');
+    console.log('   Change:', JSON.stringify(change, null, 2));
+    console.log('   Value:', JSON.stringify(value, null, 2));
+
+    const ContactHistory = require('../models/ContactHistory');
+    const User = require('../models/User');
+
+    // Find user by phone number ID
+    const phoneNumberId = value.phone_number_id || value.metadata?.phone_number_id;
+    if (!phoneNumberId) {
+      console.log('⚠️  No phone number ID in contact update');
+      return;
+    }
+
+    const user = await User.findOne({ 'whatsapp.phoneNumberId': phoneNumberId });
+    if (!user) {
+      console.log('⚠️  User not found for phone number ID:', phoneNumberId);
+      return;
+    }
+
+    // Extract contact information
+    const contacts = value.contacts || [];
+    if (contacts.length === 0) {
+      console.log('⚠️  No contacts in update');
+      return;
+    }
+
+    // Process each contact update
+    for (const contact of contacts) {
+      const phoneNumber = contact.wa_id || contact.phone;
+      if (!phoneNumber) continue;
+
+      // Detect what changed
+      const changes = detectContactChanges(contact);
+      
+      // Record each change
+      for (const changeDetail of changes) {
+        await ContactHistory.recordChange({
+          userId: user._id,
+          phoneNumber,
+          eventType: changeDetail.eventType,
+          changeDetails: changeDetail.details,
+          metadata: {
+            source: 'webhook',
+            webhookId: change.id,
+            timestamp: new Date(value.timestamp || Date.now())
+          }
+        });
+
+        console.log('✅ Contact change recorded:', {
+          phoneNumber,
+          eventType: changeDetail.eventType,
+          field: changeDetail.details?.field
+        });
+
+        // Emit socket event for real-time updates
+        if (io) {
+          io.to(`user:${user._id}`).emit('contact:update', {
+            phoneNumber,
+            eventType: changeDetail.eventType,
+            changeDetails: changeDetail.details,
+            timestamp: new Date()
+          });
+        }
+      }
+
+      // Update conversation with new contact info if exists
+      await updateConversationContact(user._id, phoneNumber, contact);
+    }
+
+  } catch (error) {
+    console.error('Error handling contact update:', error);
+  }
+}
+
+// Helper function to detect what changed in contact
+function detectContactChanges(contact) {
+  const changes = [];
+
+  // Profile update detected
+  if (contact.profile) {
+    const profile = contact.profile;
+
+    // Name change
+    if (profile.name) {
+      changes.push({
+        eventType: 'name_change',
+        details: {
+          field: 'name',
+          newValue: profile.name,
+          description: `Contact name updated to "${profile.name}"`
+        }
+      });
+    }
+
+    // Photo update
+    if (profile.photo) {
+      changes.push({
+        eventType: 'photo_update',
+        details: {
+          field: 'photo',
+          newValue: profile.photo,
+          description: 'Contact profile photo updated'
+        }
+      });
+    }
+
+    // Status/About change
+    if (profile.about !== undefined) {
+      changes.push({
+        eventType: 'about_change',
+        details: {
+          field: 'about',
+          newValue: profile.about,
+          description: `Contact about updated`
+        }
+      });
+    }
+  }
+
+  // If no specific changes detected, record general profile update
+  if (changes.length === 0) {
+    changes.push({
+      eventType: 'profile_update',
+      details: {
+        field: 'profile',
+        description: 'Contact profile updated'
+      }
+    });
+  }
+
+  return changes;
+}
+
+// Helper function to update conversation contact info
+async function updateConversationContact(userId, phoneNumber, contactData) {
+  try {
+    const Conversation = require('../models/Conversation');
+
+    const updateData = {};
+    
+    if (contactData.profile?.name) {
+      updateData['contact.name'] = contactData.profile.name;
+    }
+
+    if (contactData.profile?.photo) {
+      updateData['contact.profilePicture'] = contactData.profile.photo;
+    }
+
+    if (Object.keys(updateData).length > 0) {
+      await Conversation.updateMany(
+        {
+          userId,
+          'contact.phoneNumber': phoneNumber
+        },
+        { $set: updateData }
+      );
+
+      console.log('✅ Conversation contact info updated for:', phoneNumber);
+    }
+  } catch (error) {
+    console.error('Error updating conversation contact:', error);
   }
 }
 

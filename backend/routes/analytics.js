@@ -609,4 +609,205 @@ router.get('/campaign-performance', auth, async (req, res) => {
   }
 });
 
+// @route   GET /api/analytics/conversation-categories
+// @desc    Get conversation analytics by category with cost estimation (FEATURE 18)
+// @access  Private
+router.get('/conversation-categories', auth, async (req, res) => {
+  try {
+    const { startDate, endDate, period = '30d' } = req.query;
+
+    // Calculate date range
+    const end = endDate ? new Date(endDate) : new Date();
+    const start = startDate ? new Date(startDate) : (() => {
+      const date = new Date();
+      if (period === '7d') date.setDate(date.getDate() - 7);
+      else if (period === '30d') date.setDate(date.getDate() - 30);
+      else if (period === '90d') date.setDate(date.getDate() - 90);
+      return date;
+    })();
+
+    // Get all conversations with messages in date range
+    const conversations = await Conversation.find({
+      userId: req.userId,
+      'messages.timestamp': { $gte: start, $lte: end }
+    }, 'messages contactName contactPhone tags');
+
+    // WhatsApp Conversation Pricing (as of 2024)
+    const conversationPricing = {
+      service: 0.0095,        // $0.0095 per service conversation
+      utility: 0.0042,        // $0.0042 per utility conversation
+      authentication: 0.0028, // $0.0028 per authentication conversation
+      marketing: 0.0160       // $0.0160 per marketing conversation (highest)
+    };
+
+    // Initialize category stats
+    const categoryStats = {
+      service: { count: 0, messages: 0, cost: 0, description: 'Customer support and service' },
+      utility: { count: 0, messages: 0, cost: 0, description: 'Transactional updates and notifications' },
+      authentication: { count: 0, messages: 0, cost: 0, description: 'OTP and verification codes' },
+      marketing: { count: 0, messages: 0, cost: 0, description: 'Promotional messages and campaigns' }
+    };
+
+    // Analyze each conversation
+    conversations.forEach(conv => {
+      if (!conv.messages || conv.messages.length === 0) return;
+
+      // Filter messages in date range
+      const messagesInRange = conv.messages.filter(
+        m => m.timestamp >= start && m.timestamp <= end
+      );
+
+      if (messagesInRange.length === 0) return;
+
+      // Determine conversation category based on message patterns and tags
+      const category = categorizeConversation(conv, messagesInRange);
+
+      // Count business-initiated conversations (outgoing messages)
+      const businessInitiated = messagesInRange.some(m => m.direction === 'outgoing');
+      
+      if (businessInitiated) {
+        categoryStats[category].count += 1;
+        categoryStats[category].messages += messagesInRange.length;
+        categoryStats[category].cost += conversationPricing[category];
+      }
+    });
+
+    // Calculate totals
+    const totalConversations = Object.values(categoryStats).reduce((sum, cat) => sum + cat.count, 0);
+    const totalMessages = Object.values(categoryStats).reduce((sum, cat) => sum + cat.messages, 0);
+    const totalCost = Object.values(categoryStats).reduce((sum, cat) => sum + cat.cost, 0);
+
+    // Calculate percentages
+    const categoryBreakdown = Object.entries(categoryStats).map(([category, stats]) => ({
+      category,
+      ...stats,
+      percentage: totalConversations > 0 ? Math.round((stats.count / totalConversations) * 100) : 0,
+      avgMessagesPerConversation: stats.count > 0 ? Math.round(stats.messages / stats.count) : 0
+    }));
+
+    res.json({
+      summary: {
+        totalConversations,
+        totalMessages,
+        totalCost: Math.round(totalCost * 100) / 100, // Round to 2 decimals
+        period,
+        startDate: start,
+        endDate: end
+      },
+      categories: categoryBreakdown,
+      pricing: conversationPricing
+    });
+  } catch (error) {
+    console.error('Get conversation categories error:', error);
+    res.status(500).json({ error: 'Failed to fetch conversation category analytics' });
+  }
+});
+
+/**
+ * Helper function to categorize conversation based on content and patterns
+ */
+function categorizeConversation(conversation, messages) {
+  const tags = conversation.tags || [];
+  const content = messages.map(m => m.content?.text?.body || '').join(' ').toLowerCase();
+
+  // Check tags first
+  if (tags.includes('support') || tags.includes('service')) return 'service';
+  if (tags.includes('marketing') || tags.includes('campaign')) return 'marketing';
+  if (tags.includes('otp') || tags.includes('verification')) return 'authentication';
+  if (tags.includes('order') || tags.includes('notification')) return 'utility';
+
+  // Check content patterns for authentication
+  if (/\b\d{4,6}\b/.test(content) || // OTP codes
+      /verification|verify|otp|code|authenticate/i.test(content)) {
+    return 'authentication';
+  }
+
+  // Check content patterns for utility
+  if (/order|delivery|shipping|tracking|confirmation|receipt|invoice|appointment/i.test(content)) {
+    return 'utility';
+  }
+
+  // Check content patterns for marketing
+  if (/sale|discount|offer|promo|deal|limited|buy now|shop|special/i.test(content)) {
+    return 'marketing';
+  }
+
+  // Default to service for customer support conversations
+  return 'service';
+}
+
+// @route   GET /api/analytics/cost-breakdown
+// @desc    Get detailed cost breakdown with daily/weekly trends
+// @access  Private
+router.get('/cost-breakdown', auth, async (req, res) => {
+  try {
+    const { period = '30d' } = req.query;
+
+    const end = new Date();
+    const start = new Date();
+    if (period === '7d') start.setDate(start.getDate() - 7);
+    else if (period === '30d') start.setDate(start.getDate() - 30);
+    else if (period === '90d') start.setDate(start.getDate() - 90);
+
+    // Get all conversations in range
+    const conversations = await Conversation.find({
+      userId: req.userId,
+      'messages.timestamp': { $gte: start, $lte: end }
+    }, 'messages createdAt');
+
+    // Group by day
+    const dailyCosts = {};
+    const conversationPricing = {
+      service: 0.0095,
+      utility: 0.0042,
+      authentication: 0.0028,
+      marketing: 0.0160
+    };
+
+    conversations.forEach(conv => {
+      if (!conv.messages || conv.messages.length === 0) return;
+
+      const messagesInRange = conv.messages.filter(
+        m => m.timestamp >= start && m.timestamp <= end
+      );
+
+      messagesInRange.forEach(msg => {
+        if (msg.direction === 'outgoing') {
+          const date = new Date(msg.timestamp).toISOString().split('T')[0];
+          if (!dailyCosts[date]) {
+            dailyCosts[date] = { date, service: 0, utility: 0, authentication: 0, marketing: 0, total: 0 };
+          }
+
+          // Simplified: assume service category for cost tracking
+          const category = 'service';
+          dailyCosts[date][category] += conversationPricing[category];
+          dailyCosts[date].total += conversationPricing[category];
+        }
+      });
+    });
+
+    // Convert to sorted array
+    const costTrend = Object.values(dailyCosts).sort((a, b) => 
+      new Date(a.date).getTime() - new Date(b.date).getTime()
+    );
+
+    // Calculate summary
+    const totalCost = costTrend.reduce((sum, day) => sum + day.total, 0);
+    const avgDailyCost = costTrend.length > 0 ? totalCost / costTrend.length : 0;
+
+    res.json({
+      summary: {
+        totalCost: Math.round(totalCost * 100) / 100,
+        avgDailyCost: Math.round(avgDailyCost * 100) / 100,
+        period,
+        days: costTrend.length
+      },
+      trend: costTrend
+    });
+  } catch (error) {
+    console.error('Get cost breakdown error:', error);
+    res.status(500).json({ error: 'Failed to fetch cost breakdown' });
+  }
+});
+
 module.exports = router;

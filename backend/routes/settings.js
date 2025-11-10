@@ -354,4 +354,115 @@ router.get('/messaging-limits', auth, async (req, res) => {
   }
 });
 
+// @route   GET /api/settings/quality-rating/history
+// @desc    Get quality rating history for the user
+// @access  Private
+router.get('/quality-rating/history', auth, async (req, res) => {
+  try {
+    const QualityRating = require('../models/QualityRating');
+    const { startDate, endDate, limit = 100 } = req.query;
+
+    // Build query
+    const query = { userId: req.userId };
+
+    // Add date filters if provided
+    if (startDate || endDate) {
+      query.timestamp = {};
+      if (startDate) {
+        query.timestamp.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        query.timestamp.$lte = new Date(endDate);
+      }
+    }
+
+    // Fetch history
+    const history = await QualityRating.find(query)
+      .sort({ timestamp: -1 })
+      .limit(parseInt(limit));
+
+    // Get trend analysis
+    const trend = await QualityRating.getRatingTrend(req.userId, 7);
+
+    // Calculate statistics
+    const stats = {
+      total: history.length,
+      trend,
+      currentRating: history.length > 0 ? history[0].rating : 'UNKNOWN',
+      lastChecked: history.length > 0 ? history[0].timestamp : null
+    };
+
+    // Count rating distribution
+    const distribution = history.reduce((acc, record) => {
+      acc[record.rating] = (acc[record.rating] || 0) + 1;
+      return acc;
+    }, {});
+
+    res.json({
+      success: true,
+      history,
+      stats,
+      distribution
+    });
+  } catch (error) {
+    console.error('Get quality rating history error:', error);
+    res.status(500).json({ error: 'Failed to get quality rating history' });
+  }
+});
+
+// @route   POST /api/settings/quality-rating/check
+// @desc    Manually trigger a quality rating check
+// @access  Private
+router.post('/quality-rating/check', auth, async (req, res) => {
+  try {
+    const User = require('../models/User');
+    const QualityRating = require('../models/QualityRating');
+
+    const user = await User.findById(req.userId);
+    if (!user || !user.whatsappPhoneNumberId) {
+      return res.status(400).json({ error: 'WhatsApp phone number not configured' });
+    }
+
+    // Fetch current quality rating from WhatsApp
+    const ratingResult = await whatsappService.getQualityRating();
+    
+    if (!ratingResult.success) {
+      return res.status(500).json({ error: 'Failed to fetch quality rating from WhatsApp' });
+    }
+
+    // Check if rating changed
+    const hasChanged = await QualityRating.hasRatingChanged(req.userId, ratingResult.rating);
+
+    // Get account limits for additional context
+    const limitsResult = await whatsappService.getAccountLimits();
+
+    // Save to database
+    const qualityRecord = new QualityRating({
+      userId: req.userId,
+      phoneNumberId: user.whatsappPhoneNumberId,
+      rating: ratingResult.rating,
+      tier: limitsResult.tier || 'TIER_1K',
+      messagingLimit: limitsResult.messagingLimit || 1000,
+      nameStatus: limitsResult.nameStatus || 'UNKNOWN',
+      codeVerificationStatus: limitsResult.codeVerificationStatus || 'UNKNOWN',
+      metadata: {
+        source: 'manual_check',
+        hasChanged
+      }
+    });
+
+    await qualityRecord.save();
+
+    res.json({
+      success: true,
+      rating: ratingResult.rating,
+      hasChanged,
+      record: qualityRecord
+    });
+  } catch (error) {
+    console.error('Manual quality rating check error:', error);
+    res.status(500).json({ error: 'Failed to check quality rating' });
+  }
+});
+
 module.exports = router;

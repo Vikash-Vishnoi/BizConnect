@@ -187,6 +187,7 @@ app.use('/api/tags', require('./routes/tags')); // ✅ NEW: Contact tags
 app.use('/api/search', require('./routes/search')); // ✅ NEW: Message search
 app.use('/api/saved-replies', require('./routes/savedReplies')); // ✅ NEW: Saved replies/canned responses
 app.use('/api/rate-limits', require('./routes/rateLimits'));
+app.use('/api/contacts', require('./routes/contacts')); // ✅ NEW: Contact history and changes
 
 // ✅ UNIFIED INBOX ROUTE (Replaces /conversations, /messages, and old /inbox)
 // This route handles all conversation and message operations with embedded messages
@@ -282,17 +283,29 @@ app.use((err, req, res, next) => {
   });
 });
 
+// Start cron jobs
+const { startQualityRatingTracker } = require('./jobs/qualityRatingTracker');
+
+// Make io globally accessible for jobs
+global.io = io;
+
 // Start server
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📡 Socket.io server ready`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  
+  // Start cron jobs after server is ready
+  startQualityRatingTracker();
 });
 
 // Graceful shutdown
+const { stopQualityRatingTracker } = require('./jobs/qualityRatingTracker');
+
 process.on('SIGTERM', () => {
   console.log('SIGTERM signal received: closing HTTP server');
+  stopQualityRatingTracker(); // Stop cron jobs
   server.close(() => {
     console.log('HTTP server closed');
     mongoose.connection.close(false, () => {

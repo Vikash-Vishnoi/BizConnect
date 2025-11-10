@@ -1157,6 +1157,217 @@ router.post('/:id/messages/location', auth, async (req, res) => {
   }
 });
 
+// @route   POST /api/inbox/:id/messages/live-location
+// @desc    Start live location sharing (real-time tracking)
+// @access  Private
+router.post('/:id/messages/live-location', auth, async (req, res) => {
+  try {
+    const { latitude, longitude, name, address, duration = 900 } = req.body;
+
+    // Validation
+    if (!latitude || !longitude) {
+      return res.status(400).json({ error: 'latitude and longitude required' });
+    }
+
+    // Validate latitude/longitude ranges
+    if (latitude < -90 || latitude > 90) {
+      return res.status(400).json({ error: 'latitude must be between -90 and 90' });
+    }
+
+    if (longitude < -180 || longitude > 180) {
+      return res.status(400).json({ error: 'longitude must be between -180 and 180' });
+    }
+
+    // Validate duration (60 seconds to 8 hours)
+    const validDuration = Math.max(60, Math.min(28800, parseInt(duration)));
+
+    const conversation = await Conversation.findOne({
+      _id: req.params.id,
+      userId: req.userId,
+      isDeleted: false
+    });
+
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    // Send live location via WhatsApp
+    const result = await whatsappService.sendLiveLocation(
+      conversation.contact.phoneNumber,
+      latitude,
+      longitude,
+      name,
+      address,
+      validDuration
+    );
+
+    if (!result.success) {
+      return res.status(500).json({ error: result.error });
+    }
+
+    // Add to conversation with live location metadata
+    const messageData = {
+      whatsappMessageId: result.messageId,
+      from: process.env.WHATSAPP_PHONE_NUMBER_ID || 'system',
+      to: conversation.contact.phoneNumber,
+      direction: 'outgoing',
+      type: 'location',
+      content: {
+        location: {
+          latitude: parseFloat(latitude),
+          longitude: parseFloat(longitude),
+          name: name || 'Live Location',
+          address: address || '',
+          isLive: true,
+          duration: validDuration,
+          startedAt: new Date(),
+          expiresAt: new Date(Date.now() + validDuration * 1000),
+          lastUpdate: new Date()
+        }
+      },
+      status: 'sent',
+      timestamp: new Date(),
+      metadata: {
+        liveLocation: true,
+        duration: validDuration
+      }
+    };
+
+    const savedMessage = await conversation.addMessage(messageData);
+
+    res.status(201).json({ 
+      message: savedMessage,
+      duration: validDuration,
+      expiresAt: messageData.content.location.expiresAt
+    });
+  } catch (error) {
+    console.error('Send live location error:', error);
+    res.status(500).json({ error: 'Failed to send live location' });
+  }
+});
+
+// @route   PUT /api/inbox/:id/messages/:messageId/live-location
+// @desc    Update live location coordinates (during active sharing)
+// @access  Private
+router.put('/:id/messages/:messageId/live-location', auth, async (req, res) => {
+  try {
+    const { latitude, longitude, speed, accuracy, bearing } = req.body;
+
+    if (!latitude || !longitude) {
+      return res.status(400).json({ error: 'latitude and longitude required' });
+    }
+
+    const conversation = await Conversation.findOne({
+      _id: req.params.id,
+      userId: req.userId,
+      isDeleted: false
+    });
+
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    // Find the message
+    const message = conversation.messages.id(req.params.messageId);
+    if (!message) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+
+    // Verify it's a live location message
+    if (message.type !== 'location' || !message.content?.location?.isLive) {
+      return res.status(400).json({ error: 'Not a live location message' });
+    }
+
+    // Check if live location has expired
+    const expiresAt = message.content.location.expiresAt;
+    if (new Date() > new Date(expiresAt)) {
+      return res.status(400).json({ error: 'Live location sharing has expired' });
+    }
+
+    // Update location coordinates
+    message.content.location.latitude = parseFloat(latitude);
+    message.content.location.longitude = parseFloat(longitude);
+    message.content.location.lastUpdate = new Date();
+
+    // Update metadata if provided
+    if (speed !== undefined) {
+      message.content.location.speed = parseFloat(speed);
+    }
+    if (accuracy !== undefined) {
+      message.content.location.accuracy = parseFloat(accuracy);
+    }
+    if (bearing !== undefined) {
+      message.content.location.bearing = parseFloat(bearing);
+    }
+
+    await conversation.save();
+
+    // Emit socket event for real-time updates
+    if (global.io) {
+      global.io.to(`user:${req.userId}`).emit('live:location:update', {
+        conversationId: conversation._id,
+        messageId: message._id,
+        location: message.content.location
+      });
+    }
+
+    res.json({ 
+      message: 'Live location updated',
+      location: message.content.location
+    });
+  } catch (error) {
+    console.error('Update live location error:', error);
+    res.status(500).json({ error: 'Failed to update live location' });
+  }
+});
+
+// @route   DELETE /api/inbox/:id/messages/:messageId/live-location
+// @desc    Stop live location sharing
+// @access  Private
+router.delete('/:id/messages/:messageId/live-location', auth, async (req, res) => {
+  try {
+    const conversation = await Conversation.findOne({
+      _id: req.params.id,
+      userId: req.userId,
+      isDeleted: false
+    });
+
+    if (!conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    // Find the message
+    const message = conversation.messages.id(req.params.messageId);
+    if (!message) {
+      return res.status(404).json({ error: 'Message not found' });
+    }
+
+    // Verify it's a live location message
+    if (message.type !== 'location' || !message.content?.location?.isLive) {
+      return res.status(400).json({ error: 'Not a live location message' });
+    }
+
+    // Stop live location by setting isLive to false
+    message.content.location.isLive = false;
+    message.content.location.stoppedAt = new Date();
+
+    await conversation.save();
+
+    // Emit socket event
+    if (global.io) {
+      global.io.to(`user:${req.userId}`).emit('live:location:stopped', {
+        conversationId: conversation._id,
+        messageId: message._id
+      });
+    }
+
+    res.json({ message: 'Live location sharing stopped' });
+  } catch (error) {
+    console.error('Stop live location error:', error);
+    res.status(500).json({ error: 'Failed to stop live location' });
+  }
+});
+
 // @route   POST /api/inbox/:id/messages/contact
 // @desc    Send contact card (VCard)
 // @access  Private

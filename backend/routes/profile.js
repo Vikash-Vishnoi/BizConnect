@@ -294,6 +294,101 @@ router.delete('/whatsapp/photo', auth, async (req, res) => {
 });
 
 // ========================================
+// BUSINESS HOURS MANAGEMENT (FEATURE 17)
+// ========================================
+
+// @route   GET /api/profile/whatsapp/business-hours
+// @desc    Get business hours configuration
+// @access  Private
+router.get('/whatsapp/business-hours', auth, async (req, res) => {
+  try {
+    const result = await whatsappService.getBusinessHours();
+    
+    if (result.success) {
+      res.json({
+        businessHours: result.data,
+        message: 'Business hours retrieved successfully'
+      });
+    } else {
+      res.status(400).json({ 
+        error: 'Failed to get business hours',
+        details: result.error 
+      });
+    }
+  } catch (error) {
+    console.error('Get business hours error:', error);
+    res.status(500).json({ error: 'Failed to fetch business hours' });
+  }
+});
+
+// @route   PUT /api/profile/whatsapp/business-hours
+// @desc    Update business hours configuration
+// @access  Private
+router.put('/whatsapp/business-hours', [
+  auth,
+  body('businessHours')
+    .notEmpty()
+    .withMessage('Business hours configuration is required')
+    .isObject()
+    .withMessage('Business hours must be an object')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { businessHours } = req.body;
+
+    // Validate structure
+    const validDays = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
+    const timeRegex = /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/;
+
+    for (const day of validDays) {
+      if (businessHours[day]) {
+        const { open_time, close_time, is_open } = businessHours[day];
+        
+        if (typeof is_open !== 'boolean') {
+          return res.status(400).json({ 
+            error: `Invalid is_open value for ${day}. Must be boolean.` 
+          });
+        }
+
+        if (is_open) {
+          if (!open_time || !timeRegex.test(open_time)) {
+            return res.status(400).json({ 
+              error: `Invalid open_time for ${day}. Use HH:MM format (24-hour).` 
+            });
+          }
+          if (!close_time || !timeRegex.test(close_time)) {
+            return res.status(400).json({ 
+              error: `Invalid close_time for ${day}. Use HH:MM format (24-hour).` 
+            });
+          }
+        }
+      }
+    }
+
+    const result = await whatsappService.updateBusinessHours(businessHours);
+    
+    if (result.success) {
+      res.json({
+        message: 'Business hours updated successfully',
+        businessHours
+      });
+    } else {
+      res.status(400).json({ 
+        error: 'Failed to update business hours',
+        details: result.error 
+      });
+    }
+  } catch (error) {
+    console.error('Update business hours error:', error);
+    res.status(500).json({ error: 'Failed to update business hours' });
+  }
+});
+
+// ========================================
 // BUSINESS VERTICALS REFERENCE
 // ========================================
 

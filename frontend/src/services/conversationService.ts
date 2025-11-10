@@ -224,6 +224,71 @@ export const conversationAPI = {
     }
   },
 
+  sendLiveLocation: async (
+    conversationId: string,
+    latitude: number,
+    longitude: number,
+    name?: string,
+    address?: string,
+    duration?: number
+  ): Promise<{message: Message; duration: number; expiresAt: string}> => {
+    try {
+      const response = await api.post(`/inbox/${conversationId}/messages/live-location`, {
+        latitude,
+        longitude,
+        name,
+        address,
+        duration: duration || 900, // Default: 15 minutes
+      });
+      return response.data;
+    } catch (error: any) {
+      console.error('Failed to start live location sharing:', error);
+      throw new Error(error.response?.data?.error || 'Failed to start live location sharing');
+    }
+  },
+
+  updateLiveLocation: async (
+    conversationId: string,
+    messageId: string,
+    latitude: number,
+    longitude: number,
+    speed?: number,
+    accuracy?: number,
+    bearing?: number
+  ): Promise<{message: string; location: any}> => {
+    try {
+      const response = await api.put(
+        `/inbox/${conversationId}/messages/${messageId}/live-location`,
+        {
+          latitude,
+          longitude,
+          speed,
+          accuracy,
+          bearing,
+        }
+      );
+      return response.data;
+    } catch (error: any) {
+      console.error('Failed to update live location:', error);
+      throw new Error(error.response?.data?.error || 'Failed to update live location');
+    }
+  },
+
+  stopLiveLocation: async (
+    conversationId: string,
+    messageId: string
+  ): Promise<{message: string}> => {
+    try {
+      const response = await api.delete(
+        `/inbox/${conversationId}/messages/${messageId}/live-location`
+      );
+      return response.data;
+    } catch (error: any) {
+      console.error('Failed to stop live location sharing:', error);
+      throw new Error(error.response?.data?.error || 'Failed to stop live location sharing');
+    }
+  },
+
   sendImage: async (
     conversationId: string,
     imageUri: string,

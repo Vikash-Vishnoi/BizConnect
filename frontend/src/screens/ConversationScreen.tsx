@@ -27,6 +27,7 @@ import {draftService} from '../services/draftService';
 import MessageBubble from '../components/conversations/MessageBubble';
 import PollComposer from '../components/conversations/PollComposer';
 import CTAComposer from '../components/conversations/CTAComposer';
+import LiveLocationComposer from '../components/conversations/LiveLocationComposer';
 import ConnectionStatus from '../components/ConnectionStatus';
 import {useSocket} from '../contexts/SocketProvider';
 import theme from '../theme';
@@ -77,6 +78,7 @@ const ConversationScreen: React.FC<Props> = ({navigation, route}) => {
   const [showContactComposer, setShowContactComposer] = useState(false);
   const [showPollComposer, setShowPollComposer] = useState(false);
   const [showCTAComposer, setShowCTAComposer] = useState(false);
+  const [showLiveLocationComposer, setShowLiveLocationComposer] = useState(false);
   const [showSavedRepliesPicker, setShowSavedRepliesPicker] = useState(false);
   const [savedReplies, setSavedReplies] = useState<SavedReply[]>([]);
   const [loadingReplies, setLoadingReplies] = useState(false);
@@ -739,6 +741,30 @@ const ConversationScreen: React.FC<Props> = ({navigation, route}) => {
     }
   };
 
+  const handleSendLiveLocation = async (data: {
+    latitude: number;
+    longitude: number;
+    name: string;
+    address: string;
+    duration: number;
+  }) => {
+    try {
+      await conversationAPI.sendLiveLocation(
+        conversationId,
+        data.latitude,
+        data.longitude,
+        data.name,
+        data.address,
+        data.duration
+      );
+      // Message will appear via socket event
+      loadConversation(); // Refresh to show new message
+    } catch (error) {
+      console.error('Failed to start live location sharing:', error);
+      throw error; // Let LiveLocationComposer handle the error display
+    }
+  };
+
   const handleAssign = async (agentId: string, agentName: string) => {
     try {
       await conversationAPI.updateStatus(conversationId, 'active');
@@ -1128,6 +1154,15 @@ const ConversationScreen: React.FC<Props> = ({navigation, route}) => {
                 <Text style={styles.attachIcon}>🔗</Text>
                 <Text style={styles.attachText}>CTA Button</Text>
               </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.attachOption}
+                onPress={() => {
+                  setShowAttachMenu(false);
+                  setShowLiveLocationComposer(true);
+                }}>
+                <Text style={styles.attachIcon}>🌐</Text>
+                <Text style={styles.attachText}>Live Location</Text>
+              </TouchableOpacity>
             </View>
           )}
           <View style={styles.inputContainer}>
@@ -1449,6 +1484,22 @@ const ConversationScreen: React.FC<Props> = ({navigation, route}) => {
             <CTAComposer
               onSend={handleSendCTAMessage}
               onCancel={() => setShowCTAComposer(false)}
+            />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Live Location Composer Modal */}
+      <Modal
+        visible={showLiveLocationComposer}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowLiveLocationComposer(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <LiveLocationComposer
+              onSend={handleSendLiveLocation}
+              onClose={() => setShowLiveLocationComposer(false)}
             />
           </View>
         </View>

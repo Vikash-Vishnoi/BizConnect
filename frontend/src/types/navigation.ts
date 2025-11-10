@@ -19,4 +19,6 @@ export type RootStackParamList = {
   TemplateDetails: {templateId: string};
   Analytics: undefined;
   WelcomeMessageSettings: undefined;
+  ContactChangeAlerts: undefined;
+  ContactHistory: {phoneNumber: string};
 };

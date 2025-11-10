@@ -154,6 +154,77 @@ class SettingsService {
       );
     }
   }
+
+  async getQualityRatingHistory(
+    startDate?: string,
+    endDate?: string,
+    limit?: number
+  ): Promise<{
+    success: boolean;
+    history: Array<{
+      _id: string;
+      rating: string;
+      tier: string;
+      timestamp: string;
+      metadata?: {
+        hasChanged?: boolean;
+        previousRating?: string;
+      };
+    }>;
+    stats: {
+      total: number;
+      trend: 'improving' | 'declining' | 'stable';
+      currentRating: string;
+      lastChecked: string | null;
+    };
+    distribution: {
+      [key: string]: number;
+    };
+  }> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const params: any = {};
+      if (startDate) params.startDate = startDate;
+      if (endDate) params.endDate = endDate;
+      if (limit) params.limit = limit;
+
+      const response = await axios.get(
+        `${API_URL}/api/settings/quality-rating/history`,
+        {
+          headers,
+          params,
+        }
+      );
+      return response.data;
+    } catch (error: any) {
+      console.error('Get quality rating history error:', error);
+      throw new Error(
+        error.response?.data?.error || 'Failed to get quality rating history'
+      );
+    }
+  }
+
+  async checkQualityRatingNow(): Promise<{
+    success: boolean;
+    rating: string;
+    hasChanged: boolean;
+    record: any;
+  }> {
+    try {
+      const headers = await this.getAuthHeaders();
+      const response = await axios.post(
+        `${API_URL}/api/settings/quality-rating/check`,
+        {},
+        {headers}
+      );
+      return response.data;
+    } catch (error: any) {
+      console.error('Check quality rating error:', error);
+      throw new Error(
+        error.response?.data?.error || 'Failed to check quality rating'
+      );
+    }
+  }
 }
 
 export const settingsService = new SettingsService();
