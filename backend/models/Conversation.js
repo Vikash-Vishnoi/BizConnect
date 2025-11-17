@@ -15,9 +15,8 @@ const mongoose = require('mongoose');
 // Embedded Message Schema
 const messageSchema = new mongoose.Schema({
   whatsappMessageId: {
-    type: String,
-    sparse: true // Allows multiple null values
-    // Note: Index is created at conversation level (line 294)
+    type: String
+    // Note: Index is created at conversation level (line 364)
   },
   from: {
     type: String,
@@ -253,6 +252,13 @@ const conversationSchema = new mongoose.Schema({
     type: String,
     enum: ['active', 'archived', 'blocked', 'closed'],
     default: 'active',
+    index: true
+  },
+  
+  // ✅ GROUP MESSAGES: Flag for group conversations
+  isGroup: {
+    type: Boolean,
+    default: false,
     index: true
   },
   

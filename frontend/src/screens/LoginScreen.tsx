@@ -98,7 +98,7 @@ const LoginScreen = ({navigation}: Props) => {
       await storageService.saveUser(response.user);
       await storageService.saveRememberMe(rememberMe);
 
-      navigation.replace('Dashboard', {user: response.user});
+      navigation.replace('Main');
     } catch (error: any) {
       Alert.alert('Login Failed', error.message || 'Invalid credentials. Please check your email and password.');
     } finally {

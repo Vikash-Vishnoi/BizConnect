@@ -355,6 +355,107 @@ const DashboardScreen = ({navigation, route}: Props) => {
             </View>
             <Text style={styles.chevronText}>›</Text>
           </TouchableOpacity>
+
+          <View style={styles.actionDivider} />
+
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => navigation.navigate('RoleManager')}
+            activeOpacity={0.7}>
+            <View style={[styles.actionIconContainer, {backgroundColor: '#E0E7FF'}]}>
+              <Text style={styles.actionIcon}>🔐</Text>
+            </View>
+            <View style={styles.actionContent}>
+              <Text style={styles.actionTitle}>Role Management</Text>
+              <Text style={styles.actionSubtitle}>
+                Manage roles & permissions
+              </Text>
+            </View>
+            <Text style={styles.chevronText}>›</Text>
+          </TouchableOpacity>
+
+          <View style={styles.actionDivider} />
+
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => navigation.navigate('GroupMessage')}
+            activeOpacity={0.7}>
+            <View style={[styles.actionIconContainer, {backgroundColor: '#DBEAFE'}]}>
+              <Text style={styles.actionIcon}>👥</Text>
+            </View>
+            <View style={styles.actionContent}>
+              <Text style={styles.actionTitle}>Group Messages</Text>
+              <Text style={styles.actionSubtitle}>
+                Send messages to groups
+              </Text>
+            </View>
+            <Text style={styles.chevronText}>›</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => navigation.navigate('FlowList')}
+            activeOpacity={0.7}>
+            <View style={[styles.actionIconContainer, {backgroundColor: '#DCFCE7'}]}>
+              <Text style={styles.actionIcon}>📋</Text>
+            </View>
+            <View style={styles.actionContent}>
+              <Text style={styles.actionTitle}>Interactive Flows</Text>
+              <Text style={styles.actionSubtitle}>
+                Create forms & collect data
+              </Text>
+            </View>
+            <Text style={styles.chevronText}>›</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => navigation.navigate('Channels')}
+            activeOpacity={0.7}>
+            <View style={[styles.actionIconContainer, {backgroundColor: '#FEF3C7'}]}>
+              <Text style={styles.actionIcon}>📢</Text>
+            </View>
+            <View style={styles.actionContent}>
+              <Text style={styles.actionTitle}>Channels</Text>
+              <Text style={styles.actionSubtitle}>
+                Broadcast to followers
+              </Text>
+            </View>
+            <Text style={styles.chevronText}>›</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => navigation.navigate('AuditLogs')}
+            activeOpacity={0.7}>
+            <View style={[styles.actionIconContainer, {backgroundColor: '#E0E7FF'}]}>
+              <Text style={styles.actionIcon}>🔍</Text>
+            </View>
+            <View style={styles.actionContent}>
+              <Text style={styles.actionTitle}>Audit Logs</Text>
+              <Text style={styles.actionSubtitle}>
+                Compliance & activity tracking
+              </Text>
+            </View>
+            <Text style={styles.chevronText}>›</Text>
+          </TouchableOpacity>
+
+          {/* Privacy & GDPR */}
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={() => navigation.navigate('Privacy')}
+            activeOpacity={0.7}>
+            <View style={[styles.actionIconContainer, {backgroundColor: '#FEF3C7'}]}>
+              <Text style={styles.actionIcon}>🔒</Text>
+            </View>
+            <View style={styles.actionContent}>
+              <Text style={styles.actionTitle}>Privacy & GDPR</Text>
+              <Text style={styles.actionSubtitle}>
+                Data export & deletion
+              </Text>
+            </View>
+            <Text style={styles.chevronText}>›</Text>
+          </TouchableOpacity>
         </Card>
 
         {}

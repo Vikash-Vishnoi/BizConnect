@@ -4,6 +4,12 @@ const router = express.Router();
 const Conversation = require('../models/Conversation');
 const Template = require('../models/Template');
 const Campaign = require('../models/Campaign');
+const TemplateAnalytics = require('../models/TemplateAnalytics');
+const Flow = require('../models/Flow');
+const FlowResponse = require('../models/FlowResponse');
+const Channel = require('../models/Channel');
+const ChannelMessage = require('../models/ChannelMessage');
+const AlertLog = require('../models/AlertLog');
 const automationService = require('../services/automationService');
 
 // @route   GET /api/webhooks/whatsapp
@@ -97,6 +103,36 @@ router.post('/whatsapp', async (req, res) => {
         // ✅ FEATURE: Contact Updates - Handle contact profile changes
         if (change.field === 'contacts') {
           await handleContactUpdate(change, value, io);
+        }
+
+        // ✅ FEATURE 32: Flow Responses - Handle WhatsApp Flow responses
+        if (value.messages) {
+          for (const message of value.messages) {
+            if (message.type === 'interactive' && message.interactive?.type === 'nfm_reply') {
+              await handleFlowResponse(message, value.metadata, io);
+            }
+          }
+        }
+
+        // ✅ FEATURE 33: Channel Events - Handle channel-related events
+        if (change.field === 'channel_messages') {
+          await handleChannelEvent(value, io);
+        }
+
+        // ✅ FEATURE 35: Enhanced Webhook Events
+        // Phone number name update
+        if (change.field === 'phone_number_name_update') {
+          await handlePhoneNameUpdate(value, io);
+        }
+
+        // Template limit update
+        if (change.field === 'template_category_limit_update') {
+          await handleTemplateLimitUpdate(value, io);
+        }
+
+        // Security notifications
+        if (change.field === 'security' || value.event === 'DISABLED' || value.event === 'VERIFIED') {
+          await handleSecurityEvent(value, io);
         }
       }
     }
@@ -322,6 +358,36 @@ async function handleIncomingMessage(message, metadata, io) {
 
     console.log(`✅ Incoming message processed and emitted: ${messageId}`);
     
+    // ✅ FEATURE: Template Analytics - Track reply if recent outgoing template message
+    setImmediate(async () => {
+      try {
+        // Find most recent outgoing template message (within last 24 hours)
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const recentTemplateMessage = conversation.messages
+          .filter(m => 
+            m.direction === 'outgoing' && 
+            m.type === 'template' && 
+            m.timestamp >= oneDayAgo &&
+            m._id.toString() !== newMessage._id.toString()
+          )
+          .sort((a, b) => b.timestamp - a.timestamp)[0];
+
+        if (recentTemplateMessage && recentTemplateMessage.templateId) {
+          // Track reply for template
+          const analytics = await TemplateAnalytics.getOrCreateAnalytics(
+            conversation.userId,
+            recentTemplateMessage.templateId,
+            recentTemplateMessage.templateName || 'Unknown Template'
+          );
+          
+          await analytics.updateMetrics({ replied: 1 });
+          console.log(`✅ Template reply tracked: ${recentTemplateMessage.templateName}`);
+        }
+      } catch (error) {
+        console.error('Error tracking template reply:', error);
+      }
+    });
+    
     // 🤖 Trigger automation rules
     setImmediate(async () => {
       try {
@@ -375,6 +441,12 @@ async function handleMessageStatus(status, io) {
     const statusType = status.status; // sent, delivered, read, failed
     const timestamp = new Date(parseInt(status.timestamp) * 1000);
 
+    // ✅ FEATURE: Message Errors - Handle failed message status with errors
+    if (statusType === 'failed' && status.errors && status.errors.length > 0) {
+      await handleMessageError(status, io);
+      return;
+    }
+
     // ✅ OPTIMIZATION: Check if this is a campaign message first (stored in Campaign, not Conversation)
     const campaign = await Campaign.findOne({
       'recipients.whatsappMessageId': messageId
@@ -389,6 +461,21 @@ async function handleMessageStatus(status, io) {
         if (statusType === 'delivered') recipient.deliveredAt = timestamp;
         if (statusType === 'read') recipient.readAt = timestamp;
         await campaign.save();
+
+        // ✅ FEATURE: Template Analytics - Track status changes
+        if (campaign.templateId) {
+          await trackTemplateAnalytics(
+            campaign.userId,
+            campaign.templateId,
+            campaign.templateName,
+            statusType,
+            {
+              recipientPhone: recipient.phoneNumber,
+              sentAt: recipient.sentAt,
+              timestamp: timestamp
+            }
+          );
+        }
 
         // Emit campaign progress update
         io.to(`user:${campaign.userId}`).emit('campaign:progress', {
@@ -950,6 +1037,685 @@ async function updateConversationContact(userId, phoneNumber, contactData) {
     }
   } catch (error) {
     console.error('Error updating conversation contact:', error);
+  }
+}
+
+// ✅ FEATURE: Message Errors - Handle message failures
+async function handleMessageError(status, io) {
+  try {
+    console.log('❌ Message error received:');
+    console.log('   Status:', JSON.stringify(status, null, 2));
+
+    const MessageError = require('../models/MessageError');
+    const User = require('../models/User');
+    const Conversation = require('../models/Conversation');
+
+    const messageId = status.id;
+    const recipientPhone = status.recipient_id;
+    const errors = status.errors || [];
+
+    if (errors.length === 0) {
+      console.log('⚠️  No error details in failed status');
+      return;
+    }
+
+    // Get the first error (usually only one)
+    const error = errors[0];
+
+    // Find conversation and message context
+    let conversation = null;
+    let messageContext = null;
+    let userId = null;
+
+    // Check if it's a campaign message
+    const Campaign = require('../models/Campaign');
+    const campaign = await Campaign.findOne({
+      'recipients.whatsappMessageId': messageId
+    });
+
+    if (campaign) {
+      userId = campaign.userId;
+      const recipient = campaign.recipients.find(r => r.whatsappMessageId === messageId);
+      
+      if (recipient) {
+        recipient.status = 'failed';
+        recipient.errorMessage = error.message;
+        await campaign.save();
+
+        // Emit campaign error
+        if (io) {
+          io.to(`user:${userId}`).emit('campaign:error', {
+            campaignId: campaign._id,
+            recipientPhone: recipient.phoneNumber,
+            error: error.message
+          });
+        }
+      }
+
+      messageContext = {
+        type: 'template',
+        direction: 'outgoing'
+      };
+    } else {
+      // Check conversation messages
+      conversation = await Conversation.findOne({
+        'messages.whatsappMessageId': messageId
+      });
+
+      if (conversation) {
+        userId = conversation.userId;
+        const message = conversation.messages.find(m => m.whatsappMessageId === messageId);
+        
+        if (message) {
+          message.status = 'failed';
+          message.errorMessage = error.message;
+          await conversation.save();
+
+          messageContext = {
+            type: message.type,
+            content: message.content,
+            direction: message.direction
+          };
+
+          // Emit message error
+          if (io) {
+            io.to(`user:${userId}`).emit('message:error', {
+              conversationId: conversation._id,
+              messageId: message._id,
+              whatsappMessageId: messageId,
+              error: error.message
+            });
+          }
+        }
+      }
+    }
+
+    if (!userId) {
+      console.log('⚠️  Could not find user for error:', messageId);
+      return;
+    }
+
+    // Record error in database
+    await MessageError.recordError({
+      userId,
+      conversationId: conversation?._id,
+      messageId: messageId,
+      whatsappMessageId: messageId,
+      recipientPhone,
+      errorData: {
+        code: error.code,
+        title: error.title,
+        message: error.message,
+        type: error.error_data?.type,
+        error_data: error.error_data,
+        fbtrace_id: error.fbtrace_id
+      },
+      messageContext,
+      webhookId: status.id
+    });
+
+    console.log('✅ Message error recorded successfully');
+
+  } catch (error) {
+    console.error('Error handling message error:', error);
+  }
+}
+
+// ✅ FEATURE: Template Analytics - Track template performance
+async function trackTemplateAnalytics(userId, templateId, templateName, statusType, data = {}) {
+  try {
+    // Get or create analytics
+    const analytics = await TemplateAnalytics.getOrCreateAnalytics(
+      userId,
+      templateId,
+      templateName
+    );
+
+    const updateData = {};
+
+    // Track based on status type
+    switch (statusType) {
+      case 'sent':
+        updateData.sent = 1;
+        if (data.recipientPhone) {
+          updateData.recipientPhone = data.recipientPhone;
+        }
+        break;
+
+      case 'delivered':
+        updateData.delivered = 1;
+        // Calculate delivery time if sentAt is available
+        if (data.sentAt && data.timestamp) {
+          const deliveryTime = data.timestamp - data.sentAt;
+          updateData.deliveryTime = deliveryTime;
+        }
+        break;
+
+      case 'read':
+        updateData.read = 1;
+        break;
+
+      case 'failed':
+        updateData.failed = 1;
+        break;
+    }
+
+    // Update metrics
+    if (Object.keys(updateData).length > 0) {
+      await analytics.updateMetrics(updateData);
+      console.log(`✅ Template analytics tracked: ${templateName} - ${statusType}`);
+    }
+  } catch (error) {
+    console.error('Error tracking template analytics:', error);
+  }
+}
+
+// ✅ FEATURE 32: Handle Flow Response (NFM Reply)
+async function handleFlowResponse(message, metadata, io) {
+  try {
+    console.log('📝 Processing flow response:', message.id);
+
+    const from = message.from;
+    const interactive = message.interactive;
+    const nfmReply = interactive.nfm_reply;
+
+    if (!nfmReply) {
+      console.log('⚠️ No nfm_reply data in message');
+      return;
+    }
+
+    const {
+      name,           // Flow action name (e.g., "complete", "data_exchange")
+      body,           // Flow response body (JSON string with form data)
+      response_json   // Parsed response (may or may not be present)
+    } = nfmReply;
+
+    // Parse response data
+    let responseData = {};
+    try {
+      responseData = response_json ? JSON.parse(response_json) : JSON.parse(body);
+    } catch (e) {
+      console.error('Error parsing flow response:', e);
+      responseData = { raw_body: body };
+    }
+
+    // Extract flow token from response
+    const flowToken = responseData.flow_token || 
+                     interactive.flow_token || 
+                     message.context?.flow_token;
+
+    if (!flowToken) {
+      console.log('⚠️ No flow token found in response');
+      return;
+    }
+
+    // Find the flow response record
+    const flowResponse = await FlowResponse.findByToken(flowToken);
+
+    if (!flowResponse) {
+      console.log(`⚠️ Flow response not found for token: ${flowToken}`);
+      return;
+    }
+
+    console.log(`✅ Found flow response for flow: ${flowResponse.flow}`);
+
+    // Update contact information
+    const phoneNormalized = Conversation.normalizePhone(from);
+    flowResponse.contact.phoneNumber = phoneNormalized;
+    
+    // Get contact name from conversation if available
+    const conversation = await Conversation.findOne({
+      'contact.phoneNumber': phoneNormalized
+    });
+    
+    if (conversation) {
+      flowResponse.contact.name = conversation.contact.name;
+      flowResponse.contact.profilePic = conversation.contact.profilePic;
+      flowResponse.conversationId = conversation._id;
+    }
+
+    // Store response data
+    const formData = responseData.data || responseData.screen_0_TextInput_0 || responseData;
+    
+    // Convert form data to Map
+    if (typeof formData === 'object') {
+      Object.entries(formData).forEach(([key, value]) => {
+        flowResponse.addResponse(key, value);
+      });
+    }
+
+    // Update status based on action name
+    if (name === 'complete' || name === 'COMPLETE') {
+      await flowResponse.markCompleted();
+      console.log(`✅ Flow completed: ${flowResponse._id}`);
+    } else {
+      flowResponse.status = 'in_progress';
+      await flowResponse.save();
+      console.log(`📝 Flow in progress: ${flowResponse._id}`);
+    }
+
+    // Store raw webhook data for debugging
+    flowResponse.rawWebhookData = {
+      messageId: message.id,
+      timestamp: message.timestamp,
+      interactive,
+      nfmReply
+    };
+    await flowResponse.save();
+
+    // Update conversation with flow response message
+    if (conversation) {
+      const responseMessage = {
+        whatsappMessageId: message.id,
+        type: 'flow_response',
+        timestamp: new Date(parseInt(message.timestamp) * 1000),
+        from,
+        direction: 'incoming',
+        status: 'received',
+        content: {
+          flow_name: name,
+          response_summary: Object.keys(formData).map(key => 
+            `${key}: ${formData[key]}`
+          ).join(', '),
+          flow_token: flowToken
+        }
+      };
+
+      conversation.messages.push(responseMessage);
+      conversation.lastMessage = `Flow response: ${name}`;
+      conversation.lastMessageAt = responseMessage.timestamp;
+      conversation.unreadCount = (conversation.unreadCount || 0) + 1;
+      await conversation.save();
+
+      // Emit real-time update
+      if (io) {
+        io.to(`conversation:${conversation._id}`).emit('newMessage', {
+          conversationId: conversation._id,
+          message: responseMessage
+        });
+
+        io.emit('conversationUpdate', {
+          conversationId: conversation._id,
+          lastMessage: conversation.lastMessage,
+          unreadCount: conversation.unreadCount
+        });
+      }
+    }
+
+    // Emit flow response event
+    if (io) {
+      io.emit('flowResponse', {
+        flowId: flowResponse.flow,
+        responseId: flowResponse._id,
+        contact: flowResponse.contact,
+        status: flowResponse.status,
+        data: formData
+      });
+    }
+
+    console.log(`✅ Flow response processed successfully`);
+  } catch (error) {
+    console.error('Error handling flow response:', error);
+  }
+}
+
+/**
+ * ✅ FEATURE 33: Handle WhatsApp Channel Events
+ * Processes channel-related webhook events (message views, reactions, etc.)
+ */
+async function handleChannelEvent(value, io) {
+  try {
+    console.log('📢 Processing channel event...');
+
+    // Extract channel event data
+    const metadata = value.metadata;
+    const statuses = value.statuses || [];
+
+    // Handle message status updates for channel messages
+    for (const status of statuses) {
+      const messageId = status.id;
+      const statusType = status.status; // sent, delivered, read
+      const timestamp = new Date(parseInt(status.timestamp) * 1000);
+
+      // Find the channel message
+      const channelMessage = await ChannelMessage.findOne({ messageId });
+
+      if (!channelMessage) {
+        console.log(`⚠️ Channel message not found: ${messageId}`);
+        continue;
+      }
+
+      // Update delivery status
+      if (statusType === 'delivered') {
+        await channelMessage.updateDeliveryStatus('delivered');
+        console.log(`✅ Channel message ${messageId} marked as delivered`);
+      }
+
+      // Handle views (read receipts)
+      if (statusType === 'read') {
+        await channelMessage.recordView();
+        console.log(`👁️ Channel message ${messageId} view recorded`);
+      }
+
+      // Handle reactions if present
+      if (status.reaction) {
+        const emoji = status.reaction.emoji;
+        await channelMessage.recordReaction(emoji);
+        console.log(`❤️ Channel message ${messageId} received reaction: ${emoji}`);
+
+        // Update channel analytics
+        const channel = await Channel.findById(channelMessage.channelId);
+        if (channel) {
+          await channel.incrementReactions(1);
+        }
+      }
+
+      // Emit real-time update
+      if (io) {
+        const channel = await Channel.findById(channelMessage.channelId);
+        if (channel) {
+          io.to(`user:${channel.createdBy}`).emit('channelMessageUpdate', {
+            channelId: channel._id,
+            messageId: channelMessage._id,
+            status: channelMessage.status,
+            views: channelMessage.views,
+            reactions: channelMessage.reactions,
+            engagementRate: channelMessage.calculateEngagementRate()
+          });
+        }
+      }
+    }
+
+    // Handle follower updates if present
+    if (value.follower_updates) {
+      for (const followerUpdate of value.follower_updates) {
+        const channelId = followerUpdate.channel_id;
+        const followerCount = followerUpdate.follower_count;
+
+        // Find channel by WhatsApp channel ID
+        const channel = await Channel.findOne({ channelId });
+
+        if (channel) {
+          await channel.updateFollowerCount(followerCount);
+          console.log(`✅ Channel ${channelId} follower count updated: ${followerCount}`);
+
+          // Emit real-time update
+          if (io) {
+            io.to(`user:${channel.createdBy}`).emit('channelFollowerUpdate', {
+              channelId: channel._id,
+              followerCount
+            });
+          }
+        }
+      }
+    }
+
+    console.log('✅ Channel event processed successfully');
+  } catch (error) {
+    console.error('Error handling channel event:', error);
+  }
+}
+
+/**
+ * ✅ FEATURE 35: Handle Phone Number Name Update
+ * Processes when business display name changes
+ */
+async function handlePhoneNameUpdate(value, io) {
+  try {
+    console.log('📱 Processing phone name update...');
+
+    const phoneNumberId = value.phone_number_id;
+    const displayPhoneNumber = value.display_phone_number;
+    const oldName = value.old_name || 'Unknown';
+    const newName = value.new_name || displayPhoneNumber;
+    const decision = value.decision; // APPROVED, REJECTED
+    const requestedName = value.requested_name;
+
+    // Find user by phone number ID
+    const User = require('../models/User');
+    const user = await User.findOne({ whatsappPhoneNumberId: phoneNumberId });
+
+    if (!user) {
+      console.log(`⚠️ User not found for phone number ID: ${phoneNumberId}`);
+      return;
+    }
+
+    // Create alert log
+    const severity = decision === 'REJECTED' ? 'MEDIUM' : 'LOW';
+    const title = decision === 'REJECTED' 
+      ? 'Display Name Change Rejected' 
+      : 'Display Name Updated';
+    
+    let message = '';
+    if (decision === 'REJECTED') {
+      message = `Your request to change the display name from "${oldName}" to "${requestedName}" was rejected by WhatsApp.`;
+    } else if (decision === 'APPROVED') {
+      message = `Your business display name has been updated from "${oldName}" to "${newName}".`;
+    } else {
+      message = `Your business display name change is pending review. Requested name: "${requestedName}"`;
+    }
+
+    await AlertLog.create({
+      userId: user._id,
+      alertType: 'PHONE_NUMBER_NAME_UPDATE',
+      severity: severity,
+      title: title,
+      message: message,
+      whatsappData: {
+        phoneNumberId: phoneNumberId,
+        displayPhoneNumber: displayPhoneNumber,
+        decision: decision,
+        event: 'NAME_UPDATE',
+        rawData: value
+      },
+      status: 'UNREAD'
+    });
+
+    // Emit real-time notification
+    if (io) {
+      io.to(`user:${user._id}`).emit('phoneNameUpdate', {
+        phoneNumberId,
+        oldName,
+        newName,
+        decision,
+        requestedName,
+        message
+      });
+    }
+
+    console.log(`✅ Phone name update processed: ${oldName} → ${newName}`);
+  } catch (error) {
+    console.error('Error handling phone name update:', error);
+  }
+}
+
+/**
+ * ✅ FEATURE 35: Handle Template Category Limit Update
+ * Processes when template approval limits change
+ */
+async function handleTemplateLimitUpdate(value, io) {
+  try {
+    console.log('📋 Processing template limit update...');
+
+    const phoneNumberId = value.phone_number_id;
+    const displayPhoneNumber = value.display_phone_number;
+    const category = value.category; // MARKETING, UTILITY, AUTHENTICATION
+    const oldLimit = value.old_limit || 0;
+    const newLimit = value.new_limit || 0;
+    const reason = value.reason || 'No reason provided';
+
+    // Find user by phone number ID
+    const User = require('../models/User');
+    const user = await User.findOne({ whatsappPhoneNumberId: phoneNumberId });
+
+    if (!user) {
+      console.log(`⚠️ User not found for phone number ID: ${phoneNumberId}`);
+      return;
+    }
+
+    // Determine severity
+    let severity = 'LOW';
+    if (newLimit < oldLimit) {
+      severity = 'MEDIUM'; // Limit decreased
+    } else if (newLimit > oldLimit * 2) {
+      severity = 'LOW'; // Significant increase
+    }
+
+    const title = newLimit > oldLimit 
+      ? `Template Limit Increased - ${category}` 
+      : newLimit < oldLimit 
+      ? `Template Limit Decreased - ${category}`
+      : `Template Limit Updated - ${category}`;
+    
+    const message = `Your ${category} template approval limit has changed from ${oldLimit} to ${newLimit} templates. Reason: ${reason}`;
+
+    await AlertLog.create({
+      userId: user._id,
+      alertType: 'LIMIT_CHANGE',
+      severity: severity,
+      title: title,
+      message: message,
+      whatsappData: {
+        phoneNumberId: phoneNumberId,
+        displayPhoneNumber: displayPhoneNumber,
+        templateCategory: category,
+        event: 'LIMIT_UPDATE',
+        rawData: {
+          category,
+          oldLimit,
+          newLimit,
+          reason
+        }
+      },
+      status: 'UNREAD'
+    });
+
+    // Emit real-time notification
+    if (io) {
+      io.to(`user:${user._id}`).emit('templateLimitUpdate', {
+        phoneNumberId,
+        category,
+        oldLimit,
+        newLimit,
+        reason,
+        message
+      });
+    }
+
+    console.log(`✅ Template limit update processed: ${category} ${oldLimit} → ${newLimit}`);
+  } catch (error) {
+    console.error('Error handling template limit update:', error);
+  }
+}
+
+/**
+ * ✅ FEATURE 35: Handle Security Event
+ * Processes security notifications (account verification, suspension, etc.)
+ */
+async function handleSecurityEvent(value, io) {
+  try {
+    console.log('🔒 Processing security event...');
+
+    const phoneNumberId = value.phone_number_id;
+    const displayPhoneNumber = value.display_phone_number;
+    const event = value.event; // DISABLED, VERIFIED, FLAGGED, REINSTATED
+    const reason = value.reason || 'No reason provided';
+    const decision = value.decision; // Can be DISABLE, REINSTATE
+
+    // Find user by phone number ID
+    const User = require('../models/User');
+    const user = await User.findOne({ whatsappPhoneNumberId: phoneNumberId });
+
+    if (!user) {
+      console.log(`⚠️ User not found for phone number ID: ${phoneNumberId}`);
+      return;
+    }
+
+    // Determine severity and message based on event
+    let severity = 'LOW';
+    let title = 'Security Notification';
+    let message = '';
+    let alertType = 'ACCOUNT_UPDATE';
+
+    switch (event) {
+      case 'DISABLED':
+        severity = 'CRITICAL';
+        title = '🚨 Account Disabled';
+        message = `Your WhatsApp Business account (${displayPhoneNumber}) has been disabled. Reason: ${reason}. Please contact WhatsApp support immediately.`;
+        alertType = 'POLICY_ENFORCEMENT';
+        break;
+
+      case 'VERIFIED':
+        severity = 'LOW';
+        title = '✅ Account Verified';
+        message = `Your WhatsApp Business account (${displayPhoneNumber}) has been verified successfully.`;
+        break;
+
+      case 'FLAGGED':
+        severity = 'HIGH';
+        title = '⚠️ Account Flagged';
+        message = `Your WhatsApp Business account (${displayPhoneNumber}) has been flagged for review. Reason: ${reason}. Please review your messaging practices.`;
+        alertType = 'ACCOUNT_WARNING';
+        break;
+
+      case 'REINSTATED':
+        severity = 'LOW';
+        title = '✅ Account Reinstated';
+        message = `Your WhatsApp Business account (${displayPhoneNumber}) has been reinstated. You can resume normal operations.`;
+        break;
+
+      default:
+        severity = 'MEDIUM';
+        title = 'Security Event';
+        message = `A security event occurred on your WhatsApp Business account (${displayPhoneNumber}). Event: ${event}. ${reason}`;
+    }
+
+    await AlertLog.create({
+      userId: user._id,
+      alertType: alertType,
+      severity: severity,
+      title: title,
+      message: message,
+      whatsappData: {
+        phoneNumberId: phoneNumberId,
+        displayPhoneNumber: displayPhoneNumber,
+        event: event,
+        decision: decision,
+        reasonCode: reason,
+        rawData: value
+      },
+      status: 'UNREAD',
+      impact: {
+        affectedFeatures: event === 'DISABLED' ? ['messaging', 'campaigns', 'templates', 'automation'] : [],
+        businessImpact: event === 'DISABLED' ? 'CRITICAL' : event === 'FLAGGED' ? 'HIGH' : 'LOW'
+      }
+    });
+
+    // Emit real-time notification
+    if (io) {
+      io.to(`user:${user._id}`).emit('securityEvent', {
+        phoneNumberId,
+        event,
+        decision,
+        reason,
+        severity,
+        message
+      });
+    }
+
+    // If critical, also emit urgent alert
+    if (severity === 'CRITICAL') {
+      io.to(`user:${user._id}`).emit('urgentAlert', {
+        title,
+        message,
+        type: 'security',
+        requiresAction: true
+      });
+    }
+
+    console.log(`✅ Security event processed: ${event} for ${displayPhoneNumber}`);
+  } catch (error) {
+    console.error('Error handling security event:', error);
   }
 }
 

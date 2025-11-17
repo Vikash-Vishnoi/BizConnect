@@ -346,6 +346,23 @@ async function startCampaign(campaignId, io) {
           campaign.recipients[i].sentAt = new Date();
           campaign.recipients[i].whatsappMessageId = result.messageId;
 
+          // ✅ FEATURE: Template Analytics - Track campaign message sent
+          if (campaign.templateId) {
+            const TemplateAnalytics = require('../models/TemplateAnalytics');
+            try {
+              await TemplateAnalytics.trackCampaignUsage(
+                campaign.userId,
+                campaign.templateId._id,
+                campaign.templateId.name || campaign.templateName,
+                campaign._id,
+                campaign.name,
+                1 // one message
+              );
+            } catch (analyticsError) {
+              console.error('Error tracking template analytics:', analyticsError);
+            }
+          }
+
           // Get or create conversation (but don't store full message)
           const conversation = await getOrCreateConversation(recipient.phoneNumber, campaign.userId);
           

@@ -43,7 +43,7 @@ const SplashScreen: React.FC<Props> = ({navigation}) => {
       if (token && rememberMe) {
         try {
           const user = await authAPI.me();
-          navigation.replace('Dashboard', {user});
+          navigation.replace('Main');
         } catch (error) {
           console.log('Token validation failed:', error);
           await storageService.clearAuth();

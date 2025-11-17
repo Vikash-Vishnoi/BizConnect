@@ -9,8 +9,7 @@ const qualityRatingSchema = new mongoose.Schema({
   },
   phoneNumberId: {
     type: String,
-    required: true,
-    index: true
+    required: true
   },
   rating: {
     type: String,

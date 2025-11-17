@@ -38,6 +38,10 @@ const limiter = rateLimit({
 
 app.use('/api/', limiter);
 
+// ✅ FEATURE 36: Audit logging middleware
+const { auditLogger } = require('./middleware/auditLogger');
+app.use(auditLogger);
+
 // MongoDB Connection
 const connectDB = async () => {
   try {
@@ -188,6 +192,19 @@ app.use('/api/search', require('./routes/search')); // ✅ NEW: Message search
 app.use('/api/saved-replies', require('./routes/savedReplies')); // ✅ NEW: Saved replies/canned responses
 app.use('/api/rate-limits', require('./routes/rateLimits'));
 app.use('/api/contacts', require('./routes/contacts')); // ✅ NEW: Contact history and changes
+app.use('/api/message-errors', require('./routes/messageErrors')); // ✅ NEW: Message error tracking
+app.use('/api/template-analytics', require('./routes/templateAnalytics')); // ✅ NEW: Template performance analytics
+app.use('/api/opt-in', require('./routes/optIn')); // ✅ NEW: Opt-in consent management
+app.use('/api/business-location', require('./routes/businessLocation')); // ✅ NEW: Business location management
+app.use('/api/view-once', require('./routes/viewOnce')); // ✅ FEATURE 26: View-once media
+app.use('/api/status', require('./routes/status')); // ✅ FEATURE 27: Status/story updates
+app.use('/api/phone-health', require('./routes/phoneHealth')); // ✅ FEATURE 28: Phone number health monitoring
+app.use('/api/rbac', require('./routes/rbac')); // ✅ FEATURE 30: Advanced RBAC (roles & permissions)
+app.use('/api/groups', require('./routes/groups')); // ✅ FEATURE 31: WhatsApp group messaging
+app.use('/api/flows', require('./routes/flows')); // ✅ FEATURE 32: WhatsApp Flows (interactive forms)
+app.use('/api/channels', require('./routes/channels')); // ✅ FEATURE 33: WhatsApp Channels (one-way broadcast)
+app.use('/api/audit-logs', require('./routes/auditLogs')); // ✅ FEATURE 36: Audit logs for compliance
+app.use('/api/gdpr', require('./routes/gdpr')); // ✅ FEATURE 37: GDPR Tools (data export & deletion)
 
 // ✅ UNIFIED INBOX ROUTE (Replaces /conversations, /messages, and old /inbox)
 // This route handles all conversation and message operations with embedded messages
@@ -285,6 +302,7 @@ app.use((err, req, res, next) => {
 
 // Start cron jobs
 const { startQualityRatingTracker } = require('./jobs/qualityRatingTracker');
+const phoneHealthCheckService = require('./services/phoneHealthCheckService');
 
 // Make io globally accessible for jobs
 global.io = io;
@@ -298,6 +316,7 @@ server.listen(PORT, () => {
   
   // Start cron jobs after server is ready
   startQualityRatingTracker();
+  phoneHealthCheckService.start(); // ✅ FEATURE 28: Phone health monitoring
 });
 
 // Graceful shutdown
@@ -306,6 +325,7 @@ const { stopQualityRatingTracker } = require('./jobs/qualityRatingTracker');
 process.on('SIGTERM', () => {
   console.log('SIGTERM signal received: closing HTTP server');
   stopQualityRatingTracker(); // Stop cron jobs
+  phoneHealthCheckService.stop(); // Stop health check service
   server.close(() => {
     console.log('HTTP server closed');
     mongoose.connection.close(false, () => {
