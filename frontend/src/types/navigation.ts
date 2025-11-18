@@ -31,15 +31,13 @@ export type RootStackParamList = {
   StatusList: undefined;
   RoleManager: undefined;
   PermissionEditor: {role: any};
-  GroupMessage: undefined;
   FlowList: undefined;
   FlowBuilder: {flowId?: string} | undefined;
   FlowDetails: {flowId: string};
   SendFlow: {flow: any};
-  Channels: undefined;
-  ChannelMessages: {channelId: string};
-  ChannelAnalytics: {channelId: string};
   CreateChannel: undefined;
   AuditLogs: undefined;
   Privacy: undefined;
+  CreateBusiness: undefined;
+  BusinessSettings: undefined;
 };

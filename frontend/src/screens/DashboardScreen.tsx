@@ -6,8 +6,8 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
-  ActivityIndicator,
   RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/Feather';
@@ -22,7 +22,10 @@ import MetricCard from '../components/analytics/MetricCard';
 import ActivityFeed from '../components/analytics/ActivityFeed';
 import Button from '../components/common/Button';
 import Card from '../components/common/Card';
+import BusinessSelector from '../components/common/BusinessSelector';
+import {EnhancedCard, Skeleton, SkeletonCard} from '../components/common';
 import {DailyMetrics, RecentActivity} from '../types/analytics';
+import {useBusiness} from '../contexts/BusinessContext';
 import theme from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Dashboard'>;
@@ -173,7 +176,14 @@ const DashboardScreen = ({navigation, route}: Props) => {
             tintColor={theme.colors.primary}
           />
         }>
-        {}
+        {/* Business Selector */}
+        <View style={styles.businessSelectorContainer}>
+          <BusinessSelector 
+            onCreateNew={() => navigation.navigate('CreateBusiness')}
+          />
+        </View>
+
+        {/* Welcome Card */}
         {user?.email && (
           <Card variant="gradient" style={styles.welcomeCard}>
             <View style={styles.welcomeContent}>
@@ -342,6 +352,24 @@ const DashboardScreen = ({navigation, route}: Props) => {
 
           <TouchableOpacity
             style={styles.actionButton}
+            onPress={() => navigation.navigate('BusinessSettings')}
+            activeOpacity={0.7}>
+            <View style={[styles.actionIconContainer, {backgroundColor: theme.colors.primaryLight + '40'}]}>
+              <Text style={styles.actionIcon}>⚙️</Text>
+            </View>
+            <View style={styles.actionContent}>
+              <Text style={styles.actionTitle}>Business Settings</Text>
+              <Text style={styles.actionSubtitle}>
+                Manage business and team
+              </Text>
+            </View>
+            <Text style={styles.chevronText}>›</Text>
+          </TouchableOpacity>
+
+          <View style={styles.actionDivider} />
+
+          <TouchableOpacity
+            style={styles.actionButton}
             onPress={() => navigation.navigate('WelcomeMessageSettings')}
             activeOpacity={0.7}>
             <View style={[styles.actionIconContainer, {backgroundColor: '#FEF3C7'}]}>
@@ -378,22 +406,6 @@ const DashboardScreen = ({navigation, route}: Props) => {
 
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={() => navigation.navigate('GroupMessage')}
-            activeOpacity={0.7}>
-            <View style={[styles.actionIconContainer, {backgroundColor: '#DBEAFE'}]}>
-              <Text style={styles.actionIcon}>👥</Text>
-            </View>
-            <View style={styles.actionContent}>
-              <Text style={styles.actionTitle}>Group Messages</Text>
-              <Text style={styles.actionSubtitle}>
-                Send messages to groups
-              </Text>
-            </View>
-            <Text style={styles.chevronText}>›</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.actionButton}
             onPress={() => navigation.navigate('FlowList')}
             activeOpacity={0.7}>
             <View style={[styles.actionIconContainer, {backgroundColor: '#DCFCE7'}]}>
@@ -410,13 +422,13 @@ const DashboardScreen = ({navigation, route}: Props) => {
 
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={() => navigation.navigate('Channels')}
+            onPress={() => navigation.navigate('AuditLogs')}
             activeOpacity={0.7}>
             <View style={[styles.actionIconContainer, {backgroundColor: '#FEF3C7'}]}>
-              <Text style={styles.actionIcon}>📢</Text>
+              <Text style={styles.actionIcon}>📋</Text>
             </View>
             <View style={styles.actionContent}>
-              <Text style={styles.actionTitle}>Channels</Text>
+              <Text style={styles.actionTitle}>Audit Logs</Text>
               <Text style={styles.actionSubtitle}>
                 Broadcast to followers
               </Text>
@@ -678,6 +690,12 @@ const styles = StyleSheet.create({
   },
   actionIcon: {
     fontSize: 24,
+  },
+  businessSelectorContainer: {
+    paddingHorizontal: theme.spacing.base,
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.sm,
+    backgroundColor: theme.colors.background,
   },
 });
 

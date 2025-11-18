@@ -15,6 +15,8 @@ import type {Campaign} from '../types/campaign';
 import {campaignAPI} from '../services/campaignService';
 import StatusBadge from '../components/campaigns/StatusBadge';
 import ProgressStats from '../components/campaigns/ProgressStats';
+import {EnhancedButton, EnhancedCard, Skeleton, SkeletonCard} from '../components/common';
+import theme from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CampaignDetails'>;
 
@@ -137,34 +139,45 @@ const CampaignDetailsScreen = ({navigation, route}: Props) => {
 
     if (campaign.status === 'draft' || campaign.status === 'scheduled') {
       return (
-        <TouchableOpacity
-          style={[styles.actionButton, styles.startButton]}
+        <EnhancedButton
+          title="▶️ Start Campaign"
           onPress={handleStartCampaign}
-          disabled={actionLoading}>
-          <Text style={styles.actionButtonText}>▶️ Start Campaign</Text>
-        </TouchableOpacity>
+          loading={actionLoading}
+          disabled={actionLoading}
+          variant="primary"
+          size="large"
+          fullWidth
+          gradient
+        />
       );
     }
 
     if (campaign.status === 'active') {
       return (
-        <TouchableOpacity
-          style={[styles.actionButton, styles.pauseButton]}
+        <EnhancedButton
+          title="⏸️ Pause Campaign"
           onPress={handlePauseCampaign}
-          disabled={actionLoading}>
-          <Text style={styles.actionButtonText}>⏸️ Pause Campaign</Text>
-        </TouchableOpacity>
+          loading={actionLoading}
+          disabled={actionLoading}
+          variant="danger"
+          size="large"
+          fullWidth
+        />
       );
     }
 
     if (campaign.status === 'paused') {
       return (
-        <TouchableOpacity
-          style={[styles.actionButton, styles.resumeButton]}
+        <EnhancedButton
+          title="▶️ Resume Campaign"
           onPress={handleStartCampaign}
-          disabled={actionLoading}>
-          <Text style={styles.actionButtonText}>▶️ Resume Campaign</Text>
-        </TouchableOpacity>
+          loading={actionLoading}
+          disabled={actionLoading}
+          variant="primary"
+          size="large"
+          fullWidth
+          gradient
+        />
       );
     }
 
@@ -184,7 +197,11 @@ const CampaignDetailsScreen = ({navigation, route}: Props) => {
           <View style={{width: 40}} />
         </View>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#25D366" />
+          <SkeletonCard />
+          <View style={{height: theme.spacing.md}} />
+          <Skeleton width="100%" height={120} />
+          <View style={{height: theme.spacing.md}} />
+          <Skeleton width="100%" height={80} />
         </View>
       </View>
     );

@@ -7,14 +7,14 @@
 
 const express = require('express');
 const router = express.Router();
-const { auth } = require('../middleware/auth');
+const { auth, requireBusiness, requireBusinessPermission } = require('../middleware/auth');
 const Conversation = require('../models/Conversation');
-const whatsappService = require('../services/whatsappService');
+const WhatsAppService = require('../services/whatsappService');
 
 // @route   GET /api/inbox
 // @desc    Get all conversations with optional filters
 // @access  Private
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { 
       page = 1, 
@@ -25,7 +25,7 @@ router.get('/', auth, async (req, res) => {
       sortOrder = -1 
     } = req.query;
 
-    const result = await Conversation.getPaginated(req.userId, {
+    const result = await Conversation.getPaginated(req.businessId, {
       page: parseInt(page),
       limit: parseInt(limit),
       status,
@@ -44,17 +44,17 @@ router.get('/', auth, async (req, res) => {
 // @route   GET /api/inbox/stats
 // @desc    Get inbox statistics
 // @access  Private
-router.get('/stats', auth, async (req, res) => {
+router.get('/stats', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const [total, active, archived, blocked] = await Promise.all([
-      Conversation.countDocuments({ userId: req.userId, isDeleted: false }),
-      Conversation.countDocuments({ userId: req.userId, status: 'active', isDeleted: false }),
-      Conversation.countDocuments({ userId: req.userId, status: 'archived', isDeleted: false }),
-      Conversation.countDocuments({ userId: req.userId, status: 'blocked', isDeleted: false })
+      Conversation.countDocuments({ businessId: req.businessId, isDeleted: false }),
+      Conversation.countDocuments({ businessId: req.businessId, status: 'active', isDeleted: false }),
+      Conversation.countDocuments({ businessId: req.businessId, status: 'archived', isDeleted: false }),
+      Conversation.countDocuments({ businessId: req.businessId, status: 'blocked', isDeleted: false })
     ]);
 
     const unreadConversations = await Conversation.find({
-      userId: req.userId,
+      businessId: req.businessId,
       unreadCount: { $gt: 0 },
       isDeleted: false
     }).lean();
@@ -63,7 +63,7 @@ router.get('/stats', auth, async (req, res) => {
 
     // Calculate response metrics
     const conversations = await Conversation.find({ 
-      userId: req.userId,
+      businessId: req.businessId,
       isDeleted: false 
     }).lean();
     
@@ -95,11 +95,11 @@ router.get('/stats', auth, async (req, res) => {
 // @route   GET /api/inbox/:id
 // @desc    Get single conversation with all messages
 // @access  Private
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const conversation = await Conversation.findOne({
       _id: req.params.id,
-      userId: req.userId,
+      businessId: req.businessId,
       isDeleted: false
     });
 
@@ -117,11 +117,11 @@ router.get('/:id', auth, async (req, res) => {
 // @route   GET /api/inbox/:id/profile-history
 // @desc    Get contact profile change history
 // @access  Private
-router.get('/:id/profile-history', auth, async (req, res) => {
+router.get('/:id/profile-history', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const conversation = await Conversation.findOne({
       _id: req.params.id,
-      userId: req.userId,
+      businessId: req.businessId,
       isDeleted: false
     }).select('contact.profileHistory contact.name contact.phoneNumber contact.profilePhoto contact.about');
 
@@ -147,13 +147,13 @@ router.get('/:id/profile-history', auth, async (req, res) => {
 // @route   GET /api/inbox/:id/messages
 // @desc    Get conversation messages with pagination (includes campaign messages by reference)
 // @access  Private
-router.get('/:id/messages', auth, async (req, res) => {
+router.get('/:id/messages', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { page = 1, limit = 50 } = req.query;
     
     const conversation = await Conversation.findOne({
       _id: req.params.id,
-      userId: req.userId,
+      businessId: req.businessId,
       isDeleted: false
     }).lean();
 
@@ -229,7 +229,7 @@ router.get('/:id/messages', auth, async (req, res) => {
 // @route   POST /api/inbox/:id/messages
 // @desc    Send a message in conversation
 // @access  Private
-router.post('/:id/messages', auth, async (req, res) => {
+router.post('/:id/messages', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { text, type = 'text', mediaUrl, caption } = req.body;
 
@@ -239,7 +239,7 @@ router.post('/:id/messages', auth, async (req, res) => {
 
     const conversation = await Conversation.findOne({
       _id: req.params.id,
-      userId: req.userId,
+      businessId: req.businessId,
       isDeleted: false
     });
 
@@ -265,7 +265,10 @@ router.post('/:id/messages', auth, async (req, res) => {
       }
     }
 
-    // Send via WhatsApp
+    // Send via WhatsApp using business credentials
+    const credentials = await req.business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
+    
     let result;
     if (type === 'text') {
       result = await whatsappService.sendTextMessage(
@@ -321,7 +324,7 @@ router.post('/:id/messages', auth, async (req, res) => {
 // @route   POST /api/inbox/:id/messages/audio
 // @desc    Send audio message
 // @access  Private
-router.post('/:id/messages/audio', auth, async (req, res) => {
+router.post('/:id/messages/audio', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { audioUrl, replyToMessageId } = req.body;
 
@@ -331,7 +334,7 @@ router.post('/:id/messages/audio', auth, async (req, res) => {
 
     const conversation = await Conversation.findOne({
       _id: req.params.id,
-      userId: req.userId,
+      businessId: req.businessId,
       isDeleted: false
     });
 
@@ -359,7 +362,10 @@ router.post('/:id/messages/audio', auth, async (req, res) => {
       }
     }
 
-    // Send via WhatsApp
+    // Send via WhatsApp using business credentials
+    const credentials = await req.business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
+    
     const result = await whatsappService.sendAudioMessage(
       conversation.contact.phoneNumber,
       audioUrl,
@@ -411,7 +417,7 @@ router.post('/:id/messages/audio', auth, async (req, res) => {
 // @route   POST /api/inbox/:id/messages/sticker
 // @desc    Send sticker message
 // @access  Private
-router.post('/:id/messages/sticker', auth, async (req, res) => {
+router.post('/:id/messages/sticker', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { stickerUrl, stickerId, replyToMessageId } = req.body;
 
@@ -421,7 +427,7 @@ router.post('/:id/messages/sticker', auth, async (req, res) => {
 
     const conversation = await Conversation.findOne({
       _id: req.params.id,
-      userId: req.userId,
+      businessId: req.businessId,
       isDeleted: false
     });
 
@@ -449,7 +455,10 @@ router.post('/:id/messages/sticker', auth, async (req, res) => {
       }
     }
 
-    // Send via WhatsApp
+    // Send via WhatsApp using business credentials
+    const credentials = await req.business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
+    
     const result = await whatsappService.sendStickerMessage(
       conversation.contact.phoneNumber,
       stickerUrl,
@@ -503,7 +512,7 @@ router.post('/:id/messages/sticker', auth, async (req, res) => {
 // @route   POST /api/inbox/:id/messages/reply
 // @desc    Send a reply to a specific message
 // @access  Private
-router.post('/:id/messages/reply', auth, async (req, res) => {
+router.post('/:id/messages/reply', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { text, replyToMessageId, type = 'text', mediaUrl, caption } = req.body;
 
@@ -517,7 +526,7 @@ router.post('/:id/messages/reply', auth, async (req, res) => {
 
     const conversation = await Conversation.findOne({
       _id: req.params.id,
-      userId: req.userId,
+      businessId: req.businessId,
       isDeleted: false
     });
 
@@ -545,7 +554,10 @@ router.post('/:id/messages/reply', auth, async (req, res) => {
     // Build context for reply
     const context = { message_id: replyToMessage.whatsappMessageId };
 
-    // Send via WhatsApp with context
+    // Send via WhatsApp with context using business credentials
+    const credentials = await req.business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
+    
     let result;
     if (type === 'text') {
       result = await whatsappService.sendTextMessage(
@@ -606,7 +618,7 @@ router.post('/:id/messages/reply', auth, async (req, res) => {
 // @route   POST /api/inbox/:id/messages/reaction
 // @desc    Send reaction to a message
 // @access  Private
-router.post('/:id/messages/reaction', auth, async (req, res) => {
+router.post('/:id/messages/reaction', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { messageId, emoji } = req.body;
 
@@ -616,7 +628,7 @@ router.post('/:id/messages/reaction', auth, async (req, res) => {
 
     const conversation = await Conversation.findOne({
       _id: req.params.id,
-      userId: req.userId,
+      businessId: req.businessId,
       isDeleted: false
     });
 
@@ -630,7 +642,10 @@ router.post('/:id/messages/reaction', auth, async (req, res) => {
       return res.status(404).json({ error: 'Message not found' });
     }
 
-    // Send reaction via WhatsApp
+    // Send reaction via WhatsApp using business credentials
+    const credentials = await req.business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
+    
     const result = await whatsappService.sendReaction(
       conversation.contact.phoneNumber,
       message.whatsappMessageId,
@@ -651,11 +666,11 @@ router.post('/:id/messages/reaction', auth, async (req, res) => {
 // @route   POST /api/inbox/:id/messages/:messageId/pin
 // @desc    Pin a message in conversation
 // @access  Private
-router.post('/:id/messages/:messageId/pin', auth, async (req, res) => {
+router.post('/:id/messages/:messageId/pin', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const conversation = await Conversation.findOne({
       _id: req.params.id,
-      userId: req.userId,
+      businessId: req.businessId,
       isDeleted: false
     });
 
@@ -701,11 +716,11 @@ router.post('/:id/messages/:messageId/pin', auth, async (req, res) => {
 // @route   POST /api/inbox/:id/messages/:messageId/unpin
 // @desc    Unpin a message in conversation
 // @access  Private
-router.post('/:id/messages/:messageId/unpin', auth, async (req, res) => {
+router.post('/:id/messages/:messageId/unpin', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const conversation = await Conversation.findOne({
       _id: req.params.id,
-      userId: req.userId,
+      businessId: req.businessId,
       isDeleted: false
     });
 
@@ -744,11 +759,11 @@ router.post('/:id/messages/:messageId/unpin', auth, async (req, res) => {
 // @route   GET /api/inbox/:id/messages/pinned
 // @desc    Get all pinned messages in conversation
 // @access  Private
-router.get('/:id/messages/pinned', auth, async (req, res) => {
+router.get('/:id/messages/pinned', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const conversation = await Conversation.findOne({
       _id: req.params.id,
-      userId: req.userId,
+      businessId: req.businessId,
       isDeleted: false
     });
 
@@ -771,7 +786,7 @@ router.get('/:id/messages/pinned', auth, async (req, res) => {
 // @route   POST /api/inbox/:id/messages/button
 // @desc    Send interactive button message
 // @access  Private
-router.post('/:id/messages/button', auth, async (req, res) => {
+router.post('/:id/messages/button', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { bodyText, buttons } = req.body;
 
@@ -793,7 +808,7 @@ router.post('/:id/messages/button', auth, async (req, res) => {
 
     const conversation = await Conversation.findOne({
       _id: req.params.id,
-      userId: req.userId,
+      businessId: req.businessId,
       isDeleted: false
     });
 
@@ -803,6 +818,10 @@ router.post('/:id/messages/button', auth, async (req, res) => {
 
     console.log('📤 Sending button message:', { bodyText, buttons, to: conversation.contact.phoneNumber });
 
+    // Use business credentials
+    const credentials = await req.business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
+    
     const result = await whatsappService.sendButtonMessage(
       conversation.contact.phoneNumber,
       bodyText,
@@ -847,7 +866,7 @@ router.post('/:id/messages/button', auth, async (req, res) => {
 // @route   POST /api/inbox/:id/messages/list
 // @desc    Send interactive list message
 // @access  Private
-router.post('/:id/messages/list', auth, async (req, res) => {
+router.post('/:id/messages/list', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { bodyText, buttonText, sections } = req.body;
 
@@ -857,7 +876,7 @@ router.post('/:id/messages/list', auth, async (req, res) => {
 
     const conversation = await Conversation.findOne({
       _id: req.params.id,
-      userId: req.userId,
+      businessId: req.businessId,
       isDeleted: false
     });
 
@@ -865,6 +884,10 @@ router.post('/:id/messages/list', auth, async (req, res) => {
       return res.status(404).json({ error: 'Conversation not found' });
     }
 
+    // Use business credentials
+    const credentials = await req.business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
+    
     const result = await whatsappService.sendListMessage(
       conversation.contact.phoneNumber,
       bodyText,
@@ -907,7 +930,7 @@ router.post('/:id/messages/list', auth, async (req, res) => {
 // @route   POST /api/inbox/:id/messages/poll
 // @desc    Send interactive poll message
 // @access  Private
-router.post('/:id/messages/poll', auth, async (req, res) => {
+router.post('/:id/messages/poll', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { question, options } = req.body;
 
@@ -934,7 +957,7 @@ router.post('/:id/messages/poll', auth, async (req, res) => {
 
     const conversation = await Conversation.findOne({
       _id: req.params.id,
-      userId: req.userId,
+      businessId: req.businessId,
       isDeleted: false
     });
 
@@ -948,6 +971,10 @@ router.post('/:id/messages/poll', auth, async (req, res) => {
 
     console.log('📊 Sending poll:', { question, optionsCount: options.length });
 
+    // Use business credentials
+    const credentials = await req.business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
+    
     const result = await whatsappService.sendPollMessage(
       conversation.contact.phoneNumber,
       question,
@@ -997,7 +1024,7 @@ router.post('/:id/messages/poll', auth, async (req, res) => {
 // @route   POST /api/inbox/:id/messages/cta
 // @desc    Send interactive CTA (Call-to-Action) message
 // @access  Private
-router.post('/:id/messages/cta', auth, async (req, res) => {
+router.post('/:id/messages/cta', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { bodyText, ctaButtons } = req.body;
 
@@ -1028,7 +1055,7 @@ router.post('/:id/messages/cta', auth, async (req, res) => {
 
     const conversation = await Conversation.findOne({
       _id: req.params.id,
-      userId: req.userId,
+      businessId: req.businessId,
       isDeleted: false
     });
 
@@ -1046,6 +1073,10 @@ router.post('/:id/messages/cta', auth, async (req, res) => {
       to: conversation.contact.phoneNumber
     });
 
+    // Use business credentials
+    const credentials = await req.business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
+    
     const result = await whatsappService.sendCTAMessage(
       conversation.contact.phoneNumber,
       bodyText,
@@ -1098,7 +1129,7 @@ router.post('/:id/messages/cta', auth, async (req, res) => {
 // @route   POST /api/inbox/:id/messages/location
 // @desc    Send location message
 // @access  Private
-router.post('/:id/messages/location', auth, async (req, res) => {
+router.post('/:id/messages/location', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { latitude, longitude, name, address } = req.body;
 
@@ -1108,7 +1139,7 @@ router.post('/:id/messages/location', auth, async (req, res) => {
 
     const conversation = await Conversation.findOne({
       _id: req.params.id,
-      userId: req.userId,
+      businessId: req.businessId,
       isDeleted: false
     });
 
@@ -1116,7 +1147,10 @@ router.post('/:id/messages/location', auth, async (req, res) => {
       return res.status(404).json({ error: 'Conversation not found' });
     }
 
-    // Send location via WhatsApp
+    // Send location via WhatsApp using business credentials
+    const credentials = await req.business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
+    
     const result = await whatsappService.sendLocationMessage(
       conversation.contact.phoneNumber,
       latitude,
@@ -1160,7 +1194,7 @@ router.post('/:id/messages/location', auth, async (req, res) => {
 // @route   POST /api/inbox/:id/messages/live-location
 // @desc    Start live location sharing (real-time tracking)
 // @access  Private
-router.post('/:id/messages/live-location', auth, async (req, res) => {
+router.post('/:id/messages/live-location', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { latitude, longitude, name, address, duration = 900 } = req.body;
 
@@ -1183,7 +1217,7 @@ router.post('/:id/messages/live-location', auth, async (req, res) => {
 
     const conversation = await Conversation.findOne({
       _id: req.params.id,
-      userId: req.userId,
+      businessId: req.businessId,
       isDeleted: false
     });
 
@@ -1191,7 +1225,10 @@ router.post('/:id/messages/live-location', auth, async (req, res) => {
       return res.status(404).json({ error: 'Conversation not found' });
     }
 
-    // Send live location via WhatsApp
+    // Send live location via WhatsApp using business credentials
+    const credentials = await req.business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
+    
     const result = await whatsappService.sendLiveLocation(
       conversation.contact.phoneNumber,
       latitude,
@@ -1249,7 +1286,7 @@ router.post('/:id/messages/live-location', auth, async (req, res) => {
 // @route   PUT /api/inbox/:id/messages/:messageId/live-location
 // @desc    Update live location coordinates (during active sharing)
 // @access  Private
-router.put('/:id/messages/:messageId/live-location', auth, async (req, res) => {
+router.put('/:id/messages/:messageId/live-location', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { latitude, longitude, speed, accuracy, bearing } = req.body;
 
@@ -1259,7 +1296,7 @@ router.put('/:id/messages/:messageId/live-location', auth, async (req, res) => {
 
     const conversation = await Conversation.findOne({
       _id: req.params.id,
-      userId: req.userId,
+      businessId: req.businessId,
       isDeleted: false
     });
 
@@ -1324,11 +1361,11 @@ router.put('/:id/messages/:messageId/live-location', auth, async (req, res) => {
 // @route   DELETE /api/inbox/:id/messages/:messageId/live-location
 // @desc    Stop live location sharing
 // @access  Private
-router.delete('/:id/messages/:messageId/live-location', auth, async (req, res) => {
+router.delete('/:id/messages/:messageId/live-location', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const conversation = await Conversation.findOne({
       _id: req.params.id,
-      userId: req.userId,
+      businessId: req.businessId,
       isDeleted: false
     });
 
@@ -1371,7 +1408,7 @@ router.delete('/:id/messages/:messageId/live-location', auth, async (req, res) =
 // @route   POST /api/inbox/:id/messages/contact
 // @desc    Send contact card (VCard)
 // @access  Private
-router.post('/:id/messages/contact', auth, async (req, res) => {
+router.post('/:id/messages/contact', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { contacts } = req.body;
 
@@ -1381,7 +1418,7 @@ router.post('/:id/messages/contact', auth, async (req, res) => {
 
     const conversation = await Conversation.findOne({
       _id: req.params.id,
-      userId: req.userId,
+      businessId: req.businessId,
       isDeleted: false
     });
 
@@ -1399,7 +1436,10 @@ router.post('/:id/messages/contact', auth, async (req, res) => {
       }
     }
 
-    // Send contact via WhatsApp
+    // Send contact via WhatsApp using business credentials
+    const credentials = await req.business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
+    
     const result = await whatsappService.sendContactMessage(
       conversation.contact.phoneNumber,
       contacts
@@ -1443,11 +1483,11 @@ router.post('/:id/messages/contact', auth, async (req, res) => {
 // @route   POST /api/inbox/:id/read
 // @desc    Mark conversation as read
 // @access  Private
-router.post('/:id/read', auth, async (req, res) => {
+router.post('/:id/read', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const conversation = await Conversation.findOne({
       _id: req.params.id,
-      userId: req.userId,
+      businessId: req.businessId,
       isDeleted: false
     });
 
@@ -1474,7 +1514,7 @@ router.post('/:id/read', auth, async (req, res) => {
 // @route   POST /api/inbox/:id/status
 // @desc    Update conversation status
 // @access  Private
-router.post('/:id/status', auth, async (req, res) => {
+router.post('/:id/status', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { status } = req.body;
 
@@ -1484,7 +1524,7 @@ router.post('/:id/status', auth, async (req, res) => {
 
     const conversation = await Conversation.findOne({
       _id: req.params.id,
-      userId: req.userId,
+      businessId: req.businessId,
       isDeleted: false
     });
 
@@ -1513,11 +1553,11 @@ router.post('/:id/status', auth, async (req, res) => {
 // @route   POST /api/inbox/:id/block
 // @desc    Block a contact (sets conversation status to 'blocked')
 // @access  Private
-router.post('/:id/block', auth, async (req, res) => {
+router.post('/:id/block', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const conversation = await Conversation.findOne({
       _id: req.params.id,
-      userId: req.userId,
+      businessId: req.businessId,
       isDeleted: false
     });
 
@@ -1551,11 +1591,11 @@ router.post('/:id/block', auth, async (req, res) => {
 // @route   POST /api/inbox/:id/unblock
 // @desc    Unblock a contact (sets conversation status to 'active')
 // @access  Private
-router.post('/:id/unblock', auth, async (req, res) => {
+router.post('/:id/unblock', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const conversation = await Conversation.findOne({
       _id: req.params.id,
-      userId: req.userId,
+      businessId: req.businessId,
       isDeleted: false
     });
 
@@ -1593,11 +1633,11 @@ router.post('/:id/unblock', auth, async (req, res) => {
 // @route   DELETE /api/inbox/:id
 // @desc    Soft delete conversation
 // @access  Private
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const conversation = await Conversation.findOne({
       _id: req.params.id,
-      userId: req.userId,
+      businessId: req.businessId,
       isDeleted: false
     });
 

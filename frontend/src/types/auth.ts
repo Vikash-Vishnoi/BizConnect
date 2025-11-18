@@ -1,8 +1,14 @@
+import { UserBusiness } from './business';
+
 export interface User {
   id: string;
   name: string;
   email: string;
   role: string;
+  businesses?: UserBusiness[];
+  currentBusiness?: string;
+  lastLogin?: string;
+  createdAt?: string;
 }
 
 export interface AuthState {

@@ -21,6 +21,7 @@ import LineChart from '../components/analytics/LineChart';
 import BarChart from '../components/analytics/BarChart';
 import PieChart from '../components/analytics/PieChart';
 import theme from '../theme';
+import {Skeleton, SkeletonCard} from '../components/common';
 import {
   DailyMetrics,
   CampaignAnalytics,
@@ -123,7 +124,19 @@ const AnalyticsScreen = ({navigation}: Props) => {
           <View style={styles.headerRight} />
         </LinearGradient>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
+          <View style={{width: '100%', padding: theme.spacing.md}}>
+            <View style={{flexDirection: 'row', justifyContent: 'space-between', marginBottom: theme.spacing.md}}>
+              <SkeletonCard width="48%" height={100} />
+              <SkeletonCard width="48%" height={100} />
+            </View>
+            <View style={{flexDirection: 'row', justifyContent: 'space-between', marginBottom: theme.spacing.md}}>
+              <SkeletonCard width="48%" height={100} />
+              <SkeletonCard width="48%" height={100} />
+            </View>
+            <Skeleton width="100%" height={200} />
+            <View style={{height: theme.spacing.md}} />
+            <Skeleton width="100%" height={180} />
+          </View>
           <Text style={styles.loadingText}>Loading analytics...</Text>
         </View>
       </View>

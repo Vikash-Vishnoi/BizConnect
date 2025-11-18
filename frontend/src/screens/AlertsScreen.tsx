@@ -12,6 +12,7 @@ import {
 import api from '../services/api';
 import {useSocket} from '../contexts/SocketProvider';
 import theme from '../theme';
+import {SkeletonList, EmptyState, EnhancedButton} from '../components/common';
 
 interface Alert {
   _id: string;
@@ -233,8 +234,10 @@ export default function AlertsScreen() {
 
   if (loading) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
+      <View style={styles.container}>
+        <View style={{padding: theme.spacing.md}}>
+          <SkeletonList count={6} />
+        </View>
       </View>
     );
   }

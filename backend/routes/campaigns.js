@@ -4,18 +4,18 @@ const Campaign = require('../models/Campaign');
 // ✅ REMOVED: Message model no longer exists - using Conversation.messages
 const Conversation = require('../models/Conversation');
 const Template = require('../models/Template');
-const { auth } = require('../middleware/auth');
+const { auth, requireBusiness, requireBusinessPermission } = require('../middleware/auth');
 const { validateCreateCampaign, validateUpdateCampaign, validateCampaignId, validatePagination } = require('../middleware/validation');
-const whatsappService = require('../services/whatsappService');
+const WhatsAppService = require('../services/whatsappService');
 
 // @route   GET /api/campaigns
 // @desc    Get all campaigns for user
 // @access  Private
-router.get('/', auth, validatePagination, async (req, res) => {
+router.get('/', auth, requireBusiness, requireBusinessPermission('manage_campaigns'), validatePagination, async (req, res) => {
   try {
     const { status, page = 1, limit = 20 } = req.query;
     
-    const query = { userId: req.userId };
+    const query = { businessId: req.businessId };
     if (status) {
       query.status = status;
     }
@@ -44,11 +44,11 @@ router.get('/', auth, validatePagination, async (req, res) => {
 // @route   GET /api/campaigns/:id
 // @desc    Get campaign by ID
 // @access  Private
-router.get('/:id', auth, validateCampaignId, async (req, res) => {
+router.get('/:id', auth, requireBusiness, requireBusinessPermission('manage_campaigns'), validateCampaignId, async (req, res) => {
   try {
     const campaign = await Campaign.findOne({
       _id: req.params.id,
-      userId: req.userId
+      businessId: req.businessId
     }).populate('templateId');
 
     if (!campaign) {
@@ -65,7 +65,7 @@ router.get('/:id', auth, validateCampaignId, async (req, res) => {
 // @route   POST /api/campaigns
 // @desc    Create new campaign
 // @access  Private
-router.post('/', auth, validateCreateCampaign, async (req, res) => {
+router.post('/', auth, requireBusiness, requireBusinessPermission('manage_campaigns'), validateCreateCampaign, async (req, res) => {
   try {
     const { name, description, templateId, recipients, settings } = req.body;
 
@@ -77,10 +77,10 @@ router.post('/', auth, validateCreateCampaign, async (req, res) => {
       return res.status(400).json({ error: 'Template is required' });
     }
 
-    // Verify template exists and is approved
+    // Verify template exists and is approved (within business)
     const template = await Template.findOne({
       _id: templateId,
-      userId: req.userId,
+      businessId: req.businessId,
       status: 'approved'
     });
 
@@ -93,6 +93,10 @@ router.post('/', auth, validateCreateCampaign, async (req, res) => {
     }
 
     // Format recipients with +91 prefix validation
+    // Get business credentials for WhatsApp service
+    const credentials = await req.business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
+    
     const formattedRecipients = recipients.map(r => ({
       phoneNumber: whatsappService.formatPhoneNumber(r.phoneNumber),
       name: r.name || null,
@@ -107,6 +111,7 @@ router.post('/', auth, validateCreateCampaign, async (req, res) => {
       recipients: formattedRecipients,
       settings: settings || {},
       userId: req.userId,
+      businessId: req.businessId,
       status: 'draft'
     });
 
@@ -131,11 +136,11 @@ router.post('/', auth, validateCreateCampaign, async (req, res) => {
 // @route   PUT /api/campaigns/:id
 // @desc    Update campaign
 // @access  Private
-router.put('/:id', auth, validateUpdateCampaign, async (req, res) => {
+router.put('/:id', auth, requireBusiness, requireBusinessPermission('manage_campaigns'), validateUpdateCampaign, async (req, res) => {
   try {
     const campaign = await Campaign.findOne({
       _id: req.params.id,
-      userId: req.userId
+      businessId: req.businessId
     });
 
     if (!campaign) {
@@ -157,6 +162,10 @@ router.put('/:id', auth, validateUpdateCampaign, async (req, res) => {
     if (settings) campaign.settings = { ...campaign.settings, ...settings };
     
     if (recipients) {
+      // Get business credentials for WhatsApp service
+      const credentials = await req.business.getWhatsAppCredentials();
+      const whatsappService = new WhatsAppService(credentials);
+      
       campaign.recipients = recipients.map(r => ({
         phoneNumber: whatsappService.formatPhoneNumber(r.phoneNumber),
         name: r.name || null,
@@ -180,11 +189,11 @@ router.put('/:id', auth, validateUpdateCampaign, async (req, res) => {
 // @route   POST /api/campaigns/:id/start
 // @desc    Start a campaign
 // @access  Private
-router.post('/:id/start', auth, validateCampaignId, async (req, res) => {
+router.post('/:id/start', auth, requireBusiness, requireBusinessPermission('manage_campaigns'), validateCampaignId, async (req, res) => {
   try {
     const campaign = await Campaign.findOne({
       _id: req.params.id,
-      userId: req.userId
+      businessId: req.businessId
     });
 
     if (!campaign) {
@@ -219,11 +228,11 @@ router.post('/:id/start', auth, validateCampaignId, async (req, res) => {
 // @route   POST /api/campaigns/:id/pause
 // @desc    Pause a campaign
 // @access  Private
-router.post('/:id/pause', auth, validateCampaignId, async (req, res) => {
+router.post('/:id/pause', auth, requireBusiness, requireBusinessPermission('manage_campaigns'), validateCampaignId, async (req, res) => {
   try {
     const campaign = await Campaign.findOne({
       _id: req.params.id,
-      userId: req.userId
+      businessId: req.businessId
     });
 
     if (!campaign) {
@@ -250,11 +259,11 @@ router.post('/:id/pause', auth, validateCampaignId, async (req, res) => {
 // @route   DELETE /api/campaigns/:id
 // @desc    Delete campaign
 // @access  Private
-router.delete('/:id', auth, validateCampaignId, async (req, res) => {
+router.delete('/:id', auth, requireBusiness, requireBusinessPermission('manage_campaigns'), validateCampaignId, async (req, res) => {
   try {
     const campaign = await Campaign.findOne({
       _id: req.params.id,
-      userId: req.userId
+      businessId: req.businessId
     });
 
     if (!campaign) {

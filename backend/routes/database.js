@@ -8,7 +8,7 @@
 
 const express = require('express');
 const router = express.Router();
-const { auth } = require('../middleware/auth');
+const { auth, requireBusiness } = require('../middleware/auth');
 const DatabaseOptimizationService = require('../services/databaseOptimizationService');
 
 /**
@@ -16,7 +16,7 @@ const DatabaseOptimizationService = require('../services/databaseOptimizationSer
  * @desc    Create all optimal database indexes
  * @access  Private (Admin)
  */
-router.post('/optimize/indexes', auth, async (req, res) => {
+router.post('/optimize/indexes', auth, requireBusiness, async (req, res) => {
   try {
     // Check if user is admin
     if (req.user.role !== 'admin') {
@@ -48,7 +48,7 @@ router.post('/optimize/indexes', auth, async (req, res) => {
  * @desc    Get information about all database indexes
  * @access  Private (Admin)
  */
-router.get('/indexes', auth, async (req, res) => {
+router.get('/indexes', auth, requireBusiness, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
       return res.status(403).json({
@@ -78,7 +78,7 @@ router.get('/indexes', auth, async (req, res) => {
  * @desc    Archive old completed campaigns
  * @access  Private (Admin)
  */
-router.post('/archive/campaigns', auth, async (req, res) => {
+router.post('/archive/campaigns', auth, requireBusiness, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
       return res.status(403).json({
@@ -89,7 +89,7 @@ router.post('/archive/campaigns', auth, async (req, res) => {
 
     const { daysOld = 90 } = req.body;
 
-    const result = await DatabaseOptimizationService.archiveOldCampaigns(daysOld);
+    const result = await DatabaseOptimizationService.archiveOldCampaigns(daysOld, req.businessId);
 
     res.json({
       success: true,
@@ -111,7 +111,7 @@ router.post('/archive/campaigns', auth, async (req, res) => {
  * @desc    Archive old inactive conversations
  * @access  Private (Admin)
  */
-router.post('/archive/conversations', auth, async (req, res) => {
+router.post('/archive/conversations', auth, requireBusiness, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
       return res.status(403).json({
@@ -122,7 +122,7 @@ router.post('/archive/conversations', auth, async (req, res) => {
 
     const { daysOld = 180 } = req.body;
 
-    const result = await DatabaseOptimizationService.archiveOldConversations(daysOld);
+    const result = await DatabaseOptimizationService.archiveOldConversations(daysOld, req.businessId);
 
     res.json({
       success: true,
@@ -152,7 +152,7 @@ router.post('/archive/conversations', auth, async (req, res) => {
  * @desc    Optimize large conversations by limiting message array size
  * @access  Private (Admin)
  */
-router.post('/optimize/conversations', auth, async (req, res) => {
+router.post('/optimize/conversations', auth, requireBusiness, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
       return res.status(403).json({
@@ -163,7 +163,7 @@ router.post('/optimize/conversations', auth, async (req, res) => {
 
     const { maxMessages = 1000 } = req.body;
 
-    const result = await DatabaseOptimizationService.optimizeConversationSize(maxMessages);
+    const result = await DatabaseOptimizationService.optimizeConversationSize(maxMessages, req.businessId);
 
     res.json({
       success: true,
@@ -185,7 +185,7 @@ router.post('/optimize/conversations', auth, async (req, res) => {
  * @desc    Get database statistics and health metrics
  * @access  Private (Admin)
  */
-router.get('/stats', auth, async (req, res) => {
+router.get('/stats', auth, requireBusiness, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
       return res.status(403).json({
@@ -194,7 +194,7 @@ router.get('/stats', auth, async (req, res) => {
       });
     }
 
-    const stats = await DatabaseOptimizationService.getDatabaseStats();
+    const stats = await DatabaseOptimizationService.getDatabaseStats(req.businessId);
 
     res.json({
       success: true,
@@ -215,7 +215,7 @@ router.get('/stats', auth, async (req, res) => {
  * @desc    Analyze database performance and get recommendations
  * @access  Private (Admin)
  */
-router.get('/analyze', auth, async (req, res) => {
+router.get('/analyze', auth, requireBusiness, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
       return res.status(403).json({
@@ -224,7 +224,7 @@ router.get('/analyze', auth, async (req, res) => {
       });
     }
 
-    const analysis = await DatabaseOptimizationService.analyzePerformance();
+    const analysis = await DatabaseOptimizationService.analyzePerformance(req.businessId);
 
     res.json({
       success: true,
@@ -245,7 +245,7 @@ router.get('/analyze', auth, async (req, res) => {
  * @desc    Run full database optimization (all tasks)
  * @access  Private (Admin)
  */
-router.post('/optimize/full', auth, async (req, res) => {
+router.post('/optimize/full', auth, requireBusiness, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
       return res.status(403).json({
@@ -262,7 +262,7 @@ router.post('/optimize/full', auth, async (req, res) => {
       conversationArchiveDays: req.body.conversationArchiveDays || 180
     };
 
-    const result = await DatabaseOptimizationService.runFullOptimization(options);
+    const result = await DatabaseOptimizationService.runFullOptimization(options, req.businessId);
 
     res.json({
       success: true,
@@ -284,7 +284,7 @@ router.post('/optimize/full', auth, async (req, res) => {
  * @desc    Run scheduled maintenance tasks
  * @access  Private (Admin)
  */
-router.post('/maintenance', auth, async (req, res) => {
+router.post('/maintenance', auth, requireBusiness, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
       return res.status(403).json({

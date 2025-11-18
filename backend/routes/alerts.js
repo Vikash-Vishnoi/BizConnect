@@ -1,13 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const { auth } = require('../middleware/auth');
+const { auth, requireBusiness, requireBusinessPermission } = require('../middleware/auth');
 const { check, validationResult } = require('express-validator');
 const AlertLog = require('../models/AlertLog');
 
 // @route   GET /api/alerts
-// @desc    Get all alerts for user with filters
+// @desc    Get all alerts for business with filters
 // @access  Private
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, requireBusiness, requireBusinessPermission('manage_settings'), async (req, res) => {
   try {
     const {
       status, // UNREAD, READ, ACKNOWLEDGED, RESOLVED, IGNORED
@@ -23,7 +23,7 @@ router.get('/', auth, async (req, res) => {
 
     // Build query
     const query = {
-      userId: req.user.id,
+      businessId: req.businessId,
       isDeleted: false
     };
 
@@ -77,18 +77,18 @@ router.get('/', auth, async (req, res) => {
 // @route   GET /api/alerts/stats
 // @desc    Get alert statistics
 // @access  Private
-router.get('/stats', auth, async (req, res) => {
+router.get('/stats', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
 
     const stats = await AlertLog.getStats(
-      req.user.id,
+      req.businessId,
       startDate,
       endDate
     );
 
     // Get unresolved critical alerts
-    const criticalAlerts = await AlertLog.getUnresolvedCritical(req.user.id);
+    const criticalAlerts = await AlertLog.getUnresolvedCritical(req.businessId);
 
     res.json({
       stats,
@@ -104,10 +104,10 @@ router.get('/stats', auth, async (req, res) => {
 // @route   GET /api/alerts/unresolved
 // @desc    Get all unresolved alerts
 // @access  Private
-router.get('/unresolved', auth, async (req, res) => {
+router.get('/unresolved', auth, requireBusiness, requireBusinessPermission('manage_settings'), async (req, res) => {
   try {
     const alerts = await AlertLog.find({
-      userId: req.user.id,
+      businessId: req.businessId,
       status: { $in: ['UNREAD', 'READ', 'ACKNOWLEDGED'] },
       isDeleted: false
     })
@@ -124,9 +124,9 @@ router.get('/unresolved', auth, async (req, res) => {
 // @route   GET /api/alerts/critical
 // @desc    Get unresolved critical/high alerts
 // @access  Private
-router.get('/critical', auth, async (req, res) => {
+router.get('/critical', auth, requireBusiness, requireBusinessPermission('manage_settings'), async (req, res) => {
   try {
-    const alerts = await AlertLog.getUnresolvedCritical(req.user.id);
+    const alerts = await AlertLog.getUnresolvedCritical(req.businessId);
     
     res.json({ 
       alerts,
@@ -142,11 +142,11 @@ router.get('/critical', auth, async (req, res) => {
 // @route   GET /api/alerts/:id
 // @desc    Get single alert by ID
 // @access  Private
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', auth, requireBusiness, requireBusinessPermission('manage_settings'), async (req, res) => {
   try {
     const alert = await AlertLog.findOne({
       _id: req.params.id,
-      userId: req.user.id,
+      businessId: req.businessId,
       isDeleted: false
     })
     .populate('resolvedBy', 'name email')
@@ -178,6 +178,8 @@ router.get('/:id', auth, async (req, res) => {
 // @access  Private
 router.put('/:id/acknowledge', [
   auth,
+  requireBusiness,
+  requireBusinessPermission('manage_settings'),
   check('notes', 'Notes are required').optional().notEmpty()
 ], async (req, res) => {
   const errors = validationResult(req);
@@ -188,7 +190,7 @@ router.put('/:id/acknowledge', [
   try {
     const alert = await AlertLog.findOne({
       _id: req.params.id,
-      userId: req.user.id,
+      businessId: req.businessId,
       isDeleted: false
     });
 
@@ -196,11 +198,11 @@ router.put('/:id/acknowledge', [
       return res.status(404).json({ message: 'Alert not found' });
     }
 
-    await alert.acknowledge(req.user.id, req.body.notes);
+    await alert.acknowledge(req.userId, req.body.notes);
 
     // Emit socket event
     const io = req.app.get('io');
-    io.to(`user:${req.user.id}`).emit('alert:acknowledged', {
+    io.to(`business:${req.businessId}`).emit('alert:acknowledged', {
       alertId: alert._id,
       status: alert.status
     });
@@ -220,6 +222,8 @@ router.put('/:id/acknowledge', [
 // @access  Private
 router.put('/:id/resolve', [
   auth,
+  requireBusiness,
+  requireBusinessPermission('manage_settings'),
   check('resolutionNotes', 'Resolution notes are required').notEmpty()
 ], async (req, res) => {
   const errors = validationResult(req);
@@ -230,7 +234,7 @@ router.put('/:id/resolve', [
   try {
     const alert = await AlertLog.findOne({
       _id: req.params.id,
-      userId: req.user.id,
+      businessId: req.businessId,
       isDeleted: false
     });
 
@@ -238,11 +242,11 @@ router.put('/:id/resolve', [
       return res.status(404).json({ message: 'Alert not found' });
     }
 
-    await alert.resolve(req.user.id, req.body.resolutionNotes);
+    await alert.resolve(req.userId, req.body.resolutionNotes);
 
     // Emit socket event
     const io = req.app.get('io');
-    io.to(`user:${req.user.id}`).emit('alert:resolved', {
+    io.to(`business:${req.businessId}`).emit('alert:resolved', {
       alertId: alert._id,
       status: alert.status
     });
@@ -262,6 +266,8 @@ router.put('/:id/resolve', [
 // @access  Private
 router.put('/:id/action', [
   auth,
+  requireBusiness,
+  requireBusinessPermission('manage_settings'),
   check('action', 'Action is required').notEmpty(),
   check('notes', 'Notes are required').notEmpty()
 ], async (req, res) => {
@@ -273,7 +279,7 @@ router.put('/:id/action', [
   try {
     const alert = await AlertLog.findOne({
       _id: req.params.id,
-      userId: req.user.id,
+      businessId: req.businessId,
       isDeleted: false
     });
 
@@ -281,7 +287,7 @@ router.put('/:id/action', [
       return res.status(404).json({ message: 'Alert not found' });
     }
 
-    await alert.addAction(req.body.action, req.user.id, req.body.notes);
+    await alert.addAction(req.body.action, req.userId, req.body.notes);
 
     res.json({ 
       message: 'Action added',
@@ -298,6 +304,8 @@ router.put('/:id/action', [
 // @access  Private
 router.put('/:id/status', [
   auth,
+  requireBusiness,
+  requireBusinessPermission('manage_settings'),
   check('status', 'Status is required').isIn(['UNREAD', 'READ', 'ACKNOWLEDGED', 'RESOLVED', 'IGNORED'])
 ], async (req, res) => {
   const errors = validationResult(req);
@@ -308,7 +316,7 @@ router.put('/:id/status', [
   try {
     const alert = await AlertLog.findOne({
       _id: req.params.id,
-      userId: req.user.id,
+      businessId: req.businessId,
       isDeleted: false
     });
 
@@ -321,7 +329,7 @@ router.put('/:id/status', [
 
     // Emit socket event
     const io = req.app.get('io');
-    io.to(`user:${req.user.id}`).emit('alert:status_changed', {
+    io.to(`business:${req.businessId}`).emit('alert:status_changed', {
       alertId: alert._id,
       status: alert.status
     });
@@ -339,11 +347,11 @@ router.put('/:id/status', [
 // @route   DELETE /api/alerts/:id
 // @desc    Delete alert (soft delete)
 // @access  Private
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', auth, requireBusiness, requireBusinessPermission('manage_settings'), async (req, res) => {
   try {
     const alert = await AlertLog.findOne({
       _id: req.params.id,
-      userId: req.user.id,
+      businessId: req.businessId,
       isDeleted: false
     });
 
@@ -367,6 +375,8 @@ router.delete('/:id', auth, async (req, res) => {
 // @access  Private
 router.put('/bulk/mark-read', [
   auth,
+  requireBusiness,
+  requireBusinessPermission('manage_settings'),
   check('alertIds', 'Alert IDs array is required').isArray()
 ], async (req, res) => {
   const errors = validationResult(req);
@@ -378,7 +388,7 @@ router.put('/bulk/mark-read', [
     const result = await AlertLog.updateMany(
       {
         _id: { $in: req.body.alertIds },
-        userId: req.user.id,
+        businessId: req.businessId,
         status: 'UNREAD',
         isDeleted: false
       },
@@ -402,6 +412,8 @@ router.put('/bulk/mark-read', [
 // @access  Private
 router.delete('/bulk/delete', [
   auth,
+  requireBusiness,
+  requireBusinessPermission('manage_settings'),
   check('alertIds', 'Alert IDs array is required').isArray()
 ], async (req, res) => {
   const errors = validationResult(req);
@@ -413,7 +425,7 @@ router.delete('/bulk/delete', [
     const result = await AlertLog.updateMany(
       {
         _id: { $in: req.body.alertIds },
-        userId: req.user.id,
+        businessId: req.businessId,
         isDeleted: false
       },
       {

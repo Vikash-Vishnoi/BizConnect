@@ -15,6 +15,8 @@ import type {CreateTemplatePayload} from '../types/template';
 import {templateService} from '../services/templateService';
 import TemplateBuilder from '../components/templates/TemplateBuilder';
 import TemplatePreview from '../components/templates/TemplatePreview';
+import {EnhancedButton, Skeleton, SkeletonCard} from '../components/common';
+import theme from '../theme';
 
 type CreateTemplateScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -105,7 +107,10 @@ const CreateTemplateScreen: React.FC<Props> = ({navigation}) => {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#3B82F6" />
+          <SkeletonCard />
+          <View style={{height: theme.spacing.md}} />
+          <Skeleton width="80%" height={100} />
+          <View style={{height: theme.spacing.md}} />
           <Text style={styles.loadingText}>Creating template...</Text>
         </View>
       </SafeAreaView>
@@ -181,16 +186,23 @@ const CreateTemplateScreen: React.FC<Props> = ({navigation}) => {
             }}
           />
           <View style={styles.previewFooter}>
-            <TouchableOpacity
-              style={styles.editButton}
-              onPress={() => setActiveTab('build')}>
-              <Text style={styles.editButtonText}>← Edit Template</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.savePreviewButton}
-              onPress={() => handleSaveTemplate(templateData)}>
-              <Text style={styles.savePreviewButtonText}>Save Template</Text>
-            </TouchableOpacity>
+            <View style={{flex: 1, marginRight: theme.spacing.sm}}>
+              <EnhancedButton
+                title="← Edit Template"
+                onPress={() => setActiveTab('build')}
+                variant="outline"
+                size="large"
+              />
+            </View>
+            <View style={{flex: 1, marginLeft: theme.spacing.sm}}>
+              <EnhancedButton
+                title="Save Template"
+                onPress={() => handleSaveTemplate(templateData)}
+                variant="primary"
+                size="large"
+                gradient
+              />
+            </View>
           </View>
         </View>
       ) : null}

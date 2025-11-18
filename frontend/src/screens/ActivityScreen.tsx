@@ -4,14 +4,15 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
   RefreshControl,
-  ActivityIndicator,
 } from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {RootStackParamList} from '../types/navigation';
 import api from '../services/api';
+import {EnhancedCard, EnhancedButton, Badge, EmptyState, SkeletonList} from '../components/common';
+import LinearGradient from 'react-native-linear-gradient';
+import theme from '../theme';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -103,9 +104,9 @@ const ActivityScreen: React.FC = () => {
   };
 
   const renderActivity = (activity: Activity) => (
-    <TouchableOpacity
+    <EnhancedCard
       key={activity._id}
-      style={styles.activityCard}
+      elevated
       onPress={() => {
         // Navigate to related screen based on resourceType
         if (activity.resourceType === 'CONVERSATION') {
@@ -115,7 +116,8 @@ const ActivityScreen: React.FC = () => {
         } else if (activity.resourceType === 'TEMPLATE') {
           navigation.navigate('TemplateDetails', {templateId: activity.resourceId});
         }
-      }}>
+      }}
+      style={styles.activityCard}>
       <View style={styles.activityHeader}>
         <View style={styles.activityIcon}>
           <Text style={styles.iconText}>{getActionIcon(activity.action)}</Text>
@@ -125,11 +127,11 @@ const ActivityScreen: React.FC = () => {
           <Text style={styles.userText}>{activity.userId?.name || 'Unknown User'}</Text>
         </View>
         <View style={styles.activityMeta}>
-          <View style={[styles.statusBadge, {backgroundColor: getStatusColor(activity.status) + '20'}]}>
-            <Text style={[styles.statusText, {color: getStatusColor(activity.status)}]}>
-              {activity.status}
-            </Text>
-          </View>
+          <Badge
+            label={activity.status}
+            variant={activity.status === 'SUCCESS' ? 'success' : activity.status === 'FAILURE' ? 'error' : 'warning'}
+            size="small"
+          />
           <Text style={styles.timeText}>{formatTime(activity.createdAt)}</Text>
         </View>
       </View>
@@ -138,74 +140,71 @@ const ActivityScreen: React.FC = () => {
           {activity.details}
         </Text>
       )}
-      <View style={styles.resourceBadge}>
-        <Text style={styles.resourceText}>{activity.resourceType}</Text>
-      </View>
-    </TouchableOpacity>
+      <Badge label={activity.resourceType} variant="info" size="small" />
+    </EnhancedCard>
   );
-
-  if (loading && !refreshing) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#25D366" />
-        <Text style={styles.loadingText}>Loading activities...</Text>
-      </View>
-    );
-  }
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <LinearGradient
+        colors={[theme.colors.primary, theme.colors.primaryDark]}
+        start={{x: 0, y: 0}}
+        end={{x: 1, y: 1}}
+        style={styles.header}>
         <Text style={styles.title}>Recent Activity</Text>
         <Text style={styles.subtitle}>Track all recent actions and events</Text>
-      </View>
+      </LinearGradient>
 
       <View style={styles.filterContainer}>
-        <TouchableOpacity
-          style={[styles.filterButton, filter === 'all' && styles.filterButtonActive]}
-          onPress={() => setFilter('all')}>
-          <Text style={[styles.filterText, filter === 'all' && styles.filterTextActive]}>
-            All
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.filterButton, filter === 'success' && styles.filterButtonActive]}
-          onPress={() => setFilter('success')}>
-          <Text style={[styles.filterText, filter === 'success' && styles.filterTextActive]}>
-            Success
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.filterButton, filter === 'failure' && styles.filterButtonActive]}
-          onPress={() => setFilter('failure')}>
-          <Text style={[styles.filterText, filter === 'failure' && styles.filterTextActive]}>
-            Failed
-          </Text>
-        </TouchableOpacity>
+        <EnhancedButton
+          title="All"
+          variant={filter === 'all' ? 'primary' : 'outline'}
+          size="small"
+          onPress={() => setFilter('all')}
+          style={styles.filterButton}
+        />
+        <EnhancedButton
+          title="Success"
+          variant={filter === 'success' ? 'primary' : 'outline'}
+          size="small"
+          onPress={() => setFilter('success')}
+          style={styles.filterButton}
+        />
+        <EnhancedButton
+          title="Failed"
+          variant={filter === 'failure' ? 'primary' : 'outline'}
+          size="small"
+          onPress={() => setFilter('failure')}
+          style={styles.filterButton}
+        />
       </View>
 
       <ScrollView
         style={styles.scrollView}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#25D366']} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[theme.colors.primary]} />
         }>
-        {activities.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>📊</Text>
-            <Text style={styles.emptyTitle}>No activities yet</Text>
-            <Text style={styles.emptySubtitle}>Your recent actions will appear here</Text>
-          </View>
+        {loading && !refreshing ? (
+          <SkeletonList count={5} />
+        ) : activities.length === 0 ? (
+          <EmptyState
+            icon="📊"
+            title="No activities yet"
+            description="Your recent actions will appear here"
+          />
         ) : (
           activities.map(renderActivity)
         )}
       </ScrollView>
 
-      <TouchableOpacity
-        style={styles.viewAllButton}
-        onPress={() => navigation.navigate('AuditLogs')}>
-        <Text style={styles.viewAllText}>View Full Audit Logs</Text>
-        <Text style={styles.arrowText}>→</Text>
-      </TouchableOpacity>
+      <View style={styles.buttonContainer}>
+        <EnhancedButton
+          title="View Full Audit Logs"
+          variant="outline"
+          onPress={() => navigation.navigate('AuditLogs')}
+          fullWidth
+        />
+      </View>
     </View>
   );
 };
@@ -213,93 +212,53 @@ const ActivityScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: '#6B7280',
+    backgroundColor: theme.colors.background,
   },
   header: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 20,
+    paddingHorizontal: theme.spacing.lg,
     paddingTop: 60,
-    paddingBottom: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    paddingBottom: theme.spacing.lg,
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#111827',
-    marginBottom: 4,
+    ...theme.typography.h2,
+    color: theme.colors.white,
+    marginBottom: theme.spacing.xs,
   },
   subtitle: {
-    fontSize: 14,
-    color: '#6B7280',
+    ...theme.typography.body,
+    color: theme.colors.white,
+    opacity: 0.9,
   },
   filterContainer: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
-    gap: 8,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.base,
+    backgroundColor: theme.colors.surface,
+    gap: theme.spacing.sm,
   },
   filterButton: {
     flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    backgroundColor: '#F3F4F6',
-    alignItems: 'center',
-  },
-  filterButtonActive: {
-    backgroundColor: '#25D366',
-  },
-  filterText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6B7280',
-  },
-  filterTextActive: {
-    color: '#FFFFFF',
   },
   scrollView: {
     flex: 1,
   },
   activityCard: {
-    backgroundColor: '#FFFFFF',
-    marginHorizontal: 16,
-    marginTop: 12,
-    padding: 16,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: {width: 0, height: 2},
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    marginHorizontal: theme.spacing.base,
+    marginTop: theme.spacing.md,
   },
   activityHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: theme.spacing.sm,
   },
   activityIcon: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: theme.colors.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: theme.spacing.md,
   },
   iconText: {
     fontSize: 20,
@@ -308,92 +267,31 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   actionText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#111827',
+    ...theme.typography.bodyMedium,
+    color: theme.colors.text,
     marginBottom: 2,
   },
   userText: {
-    fontSize: 12,
-    color: '#6B7280',
+    ...theme.typography.caption,
+    color: theme.colors.textSecondary,
   },
   activityMeta: {
     alignItems: 'flex-end',
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    marginBottom: 4,
-  },
-  statusText: {
-    fontSize: 10,
-    fontWeight: '600',
+    gap: theme.spacing.xs,
   },
   timeText: {
-    fontSize: 11,
-    color: '#9CA3AF',
+    ...theme.typography.caption,
+    color: theme.colors.textTertiary,
   },
   detailsText: {
-    fontSize: 13,
-    color: '#6B7280',
-    marginBottom: 8,
-    lineHeight: 18,
+    ...theme.typography.body,
+    color: theme.colors.textSecondary,
+    marginBottom: theme.spacing.sm,
+    lineHeight: 20,
   },
-  resourceBadge: {
-    alignSelf: 'flex-start',
-    backgroundColor: '#EEF2FF',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  resourceText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#4F46E5',
-  },
-  emptyState: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 80,
-  },
-  emptyIcon: {
-    fontSize: 64,
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 8,
-  },
-  emptySubtitle: {
-    fontSize: 14,
-    color: '#6B7280',
-    textAlign: 'center',
-  },
-  viewAllButton: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    marginHorizontal: 16,
-    marginVertical: 16,
-    paddingVertical: 14,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#25D366',
-    gap: 8,
-  },
-  viewAllText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#25D366',
-  },
-  arrowText: {
-    fontSize: 18,
-    color: '#25D366',
+  buttonContainer: {
+    padding: theme.spacing.base,
+    backgroundColor: theme.colors.surface,
   },
 });
 

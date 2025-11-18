@@ -38,6 +38,29 @@ const userSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
+  // Multi-Business Support
+  businesses: [{
+    businessId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Business',
+      required: true
+    },
+    role: {
+      type: String,
+      enum: ['owner', 'admin', 'agent', 'viewer'],
+      default: 'agent'
+    },
+    joinedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  // Currently selected business (for UI state)
+  currentBusiness: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Business',
+    default: null
+  },
   // Welcome message configuration per user
   welcomeMessageConfig: {
     enabled: {

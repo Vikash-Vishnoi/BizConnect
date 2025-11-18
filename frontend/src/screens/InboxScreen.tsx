@@ -20,6 +20,7 @@ import ConversationCard from '../components/conversations/ConversationCard';
 import FilterModal, { type ConversationFilters } from '../components/common/FilterModal';
 import ConnectionStatus from '../components/ConnectionStatus';
 import {useSocket} from '../contexts/SocketProvider';
+import {EmptyState, SkeletonList, EnhancedButton} from '../components/common';
 import theme from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Inbox'>;
@@ -261,41 +262,19 @@ const InboxScreen: React.FC<Props> = ({navigation}) => {
     setActiveFilter(filter);
   };
 
-  const renderFilter = (filter: FilterType, label: string, emoji: string) => {
-    const isActive = activeFilter === filter;
-    return (
-      <TouchableOpacity
-        key={filter}
-        style={[styles.filterButton, isActive && styles.filterButtonActive]}
-        onPress={() => handleFilterPress(filter)}>
-        <Text style={styles.filterEmoji}>{emoji}</Text>
-        <Text
-          style={[styles.filterText, isActive && styles.filterTextActive]}>
-          {label}
-        </Text>
-      </TouchableOpacity>
-    );
-  };
+
 
   const renderEmpty = () => (
-    <View style={styles.emptyContainer}>
-      <Text style={styles.emptyIcon}>💬</Text>
-      <Text style={styles.emptyText}>No conversations found</Text>
-      <Text style={styles.emptySubtext}>
-        {searchQuery || activeFilter !== 'all'
+    <EmptyState
+      icon="💬"
+      title="No conversations found"
+      description={
+        searchQuery || activeFilter !== 'all'
           ? 'Try adjusting your filters'
-          : 'Conversations will appear here when patients contact you'}
-      </Text>
-    </View>
+          : 'Conversations will appear here when patients contact you'
+      }
+    />
   );
-
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-      </View>
-    );
-  }
 
   return (
     <View style={styles.container}>
@@ -386,43 +365,98 @@ const InboxScreen: React.FC<Props> = ({navigation}) => {
         </Text>
       </View>
 
-      {}
+      {/* Filters */}
       <View style={styles.filtersContainer}>
-        {renderFilter('all', 'All', '📋')}
-        {renderFilter('active', 'Active', '📂')}
-        {renderFilter('archived', 'Archived', '📦')}
-        {renderFilter('blocked', 'Blocked', '🚫')}
-        {renderFilter('closed', 'Closed', '✅')}
+        <TouchableOpacity
+          style={[
+            styles.filterButton,
+            activeFilter === 'all' && styles.filterButtonActive,
+          ]}
+          onPress={() => handleFilterPress('all')}
+          activeOpacity={0.7}>
+          <Text
+            style={[
+              styles.filterButtonText,
+              activeFilter === 'all' && styles.filterButtonTextActive,
+            ]}>
+            All
+          </Text>
+          {activeFilter === 'all' && (
+            <View style={styles.activeIndicator} />
+          )}
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.filterButton,
+            activeFilter === 'active' && styles.filterButtonActive,
+          ]}
+          onPress={() => handleFilterPress('active')}
+          activeOpacity={0.7}>
+          <Text
+            style={[
+              styles.filterButtonText,
+              activeFilter === 'active' && styles.filterButtonTextActive,
+            ]}>
+            Active
+          </Text>
+          {activeFilter === 'active' && (
+            <View style={styles.activeIndicator} />
+          )}
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.filterButton,
+            activeFilter === 'archived' && styles.filterButtonActive,
+          ]}
+          onPress={() => handleFilterPress('archived')}
+          activeOpacity={0.7}>
+          <Text
+            style={[
+              styles.filterButtonText,
+              activeFilter === 'archived' && styles.filterButtonTextActive,
+            ]}>
+            Archived
+          </Text>
+          {activeFilter === 'archived' && (
+            <View style={styles.activeIndicator} />
+          )}
+        </TouchableOpacity>
       </View>
 
-      {}
-      <FlatList
-        data={filteredConversations}
-        keyExtractor={item => String(item._id)}
-        renderItem={({item}) => {
-          const draft = drafts.find(d => d.conversationId === item._id);
-          return (
-            <ConversationCard
-              conversation={item}
-              onPress={() => handleConversationPress(item)}
-              hasDraft={!!draft}
-              draftText={draft?.text}
+      {/* Conversation List */}
+      {loading && !refreshing ? (
+        <View style={styles.listContainer}>
+          <SkeletonList count={6} />
+        </View>
+      ) : (
+        <FlatList
+          data={filteredConversations}
+          keyExtractor={item => String(item._id)}
+          renderItem={({item}) => {
+            const draft = drafts.find(d => d.conversationId === item._id);
+            return (
+              <ConversationCard
+                conversation={item}
+                onPress={() => handleConversationPress(item)}
+                hasDraft={!!draft}
+                draftText={draft?.text}
+              />
+            );
+          }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={[theme.colors.primary]}
+              tintColor={theme.colors.primary}
             />
-          );
-        }}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={handleRefresh}
-            colors={[theme.colors.primary]}
-            tintColor={theme.colors.primary}
-          />
-        }
-        ListEmptyComponent={renderEmpty}
-        contentContainerStyle={
-          filteredConversations.length === 0 && styles.emptyList
-        }
-      />
+          }
+          ListEmptyComponent={renderEmpty}
+          contentContainerStyle={
+            filteredConversations.length === 0 && styles.emptyList
+          }
+        />
+      )}
 
       {/* Filter Modal */}
       <FilterModal
@@ -622,33 +656,48 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: theme.spacing.md,
     paddingBottom: theme.spacing.sm,
-    gap: theme.spacing.xs,
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.background,
   },
   filterButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.sm,
-    borderRadius: theme.borderRadius.full,
+    flex: 1,
+    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.xs,
+    borderRadius: theme.borderRadius.base,
     backgroundColor: theme.colors.surface,
-    ...theme.shadows.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    minHeight: 42,
   },
   filterButtonActive: {
     backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
   },
-  filterIcon: {
-    marginRight: 4,
-  },
-  filterText: {
-    ...theme.typography.caption,
-    color: theme.colors.textSecondary,
+  filterButtonText: {
+    ...theme.typography.body,
     fontWeight: '600',
+    color: theme.colors.text,
+    fontSize: 14,
   },
-  filterTextActive: {
+  filterButtonTextActive: {
     color: theme.colors.textInverse,
+  },
+  activeIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    backgroundColor: theme.colors.secondary,
+    borderRadius: theme.borderRadius.base,
   },
   emptyList: {
     flexGrow: 1,
+  },
+  listContainer: {
+    paddingHorizontal: theme.spacing.base,
   },
   emptyContainer: {
     flex: 1,

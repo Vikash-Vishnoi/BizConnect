@@ -1,14 +1,14 @@
 const express = require('express');
 const router = express.Router();
-const { auth, isAdmin } = require('../middleware/auth');
+const { auth, isAdmin, requireBusiness, requireBusinessPermission } = require('../middleware/auth');
 const rateLimitService = require('../services/rateLimitService');
 
 // @route GET /api/rate-limits
-// @desc  Get recent rate limit records (user-level)
+// @desc  Get recent rate limit records (business-level)
 // @access Private
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
-    const items = await rateLimitService.getLatest(50);
+    const items = await rateLimitService.getLatest(req.businessId, 50);
     res.json({ items });
   } catch (err) {
     console.error('Get rate limits error:', err);
@@ -19,9 +19,9 @@ router.get('/', auth, async (req, res) => {
 // @route GET /api/admin/rate-limits
 // @desc  Admin: get more detailed rate limit records
 // @access Private + Admin
-router.get('/admin', auth, isAdmin, async (req, res) => {
+router.get('/admin', auth, requireBusiness, isAdmin, async (req, res) => {
   try {
-    const items = await rateLimitService.getLatest(500);
+    const items = await rateLimitService.getLatest(req.businessId, 500);
     res.json({ items });
   } catch (err) {
     console.error('Admin get rate limits error:', err);

@@ -96,6 +96,13 @@ const templateSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
+  },
+  // Multi-Business Support
+  businessId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Business',
+    required: true,
+    index: true
   }
 }, {
   timestamps: true
@@ -105,6 +112,7 @@ const templateSchema = new mongoose.Schema({
 templateSchema.index({ status: 1, createdAt: -1 });
 templateSchema.index({ userId: 1, createdAt: -1 });
 templateSchema.index({ whatsappTemplateId: 1 });
+templateSchema.index({ businessId: 1, status: 1, createdAt: -1 });
 
 // Extract variables from template text
 templateSchema.methods.extractVariables = function() {

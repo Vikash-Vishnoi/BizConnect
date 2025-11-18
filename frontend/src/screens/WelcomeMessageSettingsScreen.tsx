@@ -19,6 +19,8 @@ import {
   WelcomeMessageConfig,
   Template,
 } from '../services/settingsService';
+import {EnhancedButton, EnhancedInput, Skeleton, SkeletonCard} from '../components/common';
+import theme from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'WelcomeMessageSettings'>;
 
@@ -115,8 +117,23 @@ const WelcomeMessageSettingsScreen = ({navigation}: Props) => {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}>
+            <Text style={styles.iconText}>←</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Welcome Message</Text>
+          <View style={{width: 40}} />
+        </View>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#25D366" />
+          <View style={{width: '100%', padding: theme.spacing.md}}>
+            <SkeletonCard />
+            <View style={{height: theme.spacing.md}} />
+            <Skeleton width="100%" height={120} />
+            <View style={{height: theme.spacing.md}} />
+            <Skeleton width="100%" height={80} />
+          </View>
           <Text style={styles.loadingText}>Loading settings...</Text>
         </View>
       </SafeAreaView>
@@ -334,16 +351,18 @@ const WelcomeMessageSettingsScreen = ({navigation}: Props) => {
         )}
 
         {/* Save Button */}
-        <TouchableOpacity
-          style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-          onPress={handleSave}
-          disabled={saving}>
-          {saving ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.saveButtonText}>💾 Save Settings</Text>
-          )}
-        </TouchableOpacity>
+        <View style={{marginTop: theme.spacing.lg, marginBottom: theme.spacing.xl}}>
+          <EnhancedButton
+            title="💾 Save Settings"
+            onPress={handleSave}
+            loading={saving}
+            disabled={saving}
+            variant="primary"
+            size="large"
+            fullWidth
+            gradient
+          />
+        </View>
       </ScrollView>
     </SafeAreaView>
   );

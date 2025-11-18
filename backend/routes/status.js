@@ -19,9 +19,9 @@
 
 const express = require('express');
 const router = express.Router();
-const { auth } = require('../middleware/auth');
+const { auth, requireBusiness, requireBusinessPermission } = require('../middleware/auth');
 const Status = require('../models/Status');
-const whatsappService = require('../services/whatsappService');
+const WhatsAppService = require('../services/whatsappService');
 
 /**
  * POST /api/status
@@ -39,7 +39,7 @@ const whatsappService = require('../services/whatsappService');
  * - allowedViewers: array of phone numbers
  * - blockedViewers: array of phone numbers
  */
-router.post('/', auth, async (req, res) => {
+router.post('/', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const {
       type,
@@ -77,6 +77,10 @@ router.post('/', auth, async (req, res) => {
       });
     }
 
+    // Get business credentials and create WhatsApp service instance
+    const credentials = await req.business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
+
     // Send to WhatsApp (note: API has limitations)
     let whatsappResult;
     if (type === 'text') {
@@ -95,7 +99,7 @@ router.post('/', auth, async (req, res) => {
 
     // Create status in database
     const status = await Status.create({
-      userId: req.userId,
+      businessId: req.businessId,
       type,
       content,
       mediaId,
@@ -137,17 +141,17 @@ router.post('/', auth, async (req, res) => {
 
 /**
  * GET /api/status
- * Get all statuses for current user
+ * Get all statuses for current business
  * Query params:
  * - limit: number (default 20)
  * - skip: number (default 0)
  * - includeExpired: boolean (default true)
  */
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { limit = 20, skip = 0, includeExpired = 'true' } = req.query;
     
-    const query = { userId: req.userId };
+    const query = { businessId: req.businessId };
     if (includeExpired === 'false') {
       query.isExpired = false;
     }
@@ -197,9 +201,9 @@ router.get('/', auth, async (req, res) => {
  * GET /api/status/active
  * Get only active (non-expired) statuses
  */
-router.get('/active', auth, async (req, res) => {
+router.get('/active', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
-    const statuses = await Status.getActiveStatuses(req.userId);
+    const statuses = await Status.getActiveStatuses(req.businessId);
 
     res.json({
       success: true,
@@ -232,13 +236,13 @@ router.get('/active', auth, async (req, res) => {
  * GET /api/status/:id
  * Get specific status details
  */
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { id } = req.params;
 
     const status = await Status.findOne({
       _id: id,
-      userId: req.userId
+      businessId: req.businessId
     });
 
     if (!status) {
@@ -288,13 +292,13 @@ router.get('/:id', auth, async (req, res) => {
  * DELETE /api/status/:id
  * Delete status before expiry
  */
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { id } = req.params;
 
     const status = await Status.findOne({
       _id: id,
-      userId: req.userId
+      businessId: req.businessId
     });
 
     if (!status) {
@@ -308,6 +312,10 @@ router.delete('/:id', auth, async (req, res) => {
     status.isExpired = true;
     status.expiredAt = new Date();
     await status.save();
+
+    // Get business credentials and create WhatsApp service instance
+    const credentials = await req.business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
 
     // Try to delete from WhatsApp (though API doesn't support it)
     if (status.whatsappMessageId) {
@@ -333,13 +341,13 @@ router.delete('/:id', auth, async (req, res) => {
  * GET /api/status/:id/views
  * Get status view analytics
  */
-router.get('/:id/views', auth, async (req, res) => {
+router.get('/:id/views', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
     const { id } = req.params;
 
     const status = await Status.findOne({
       _id: id,
-      userId: req.userId
+      businessId: req.businessId
     });
 
     if (!status) {

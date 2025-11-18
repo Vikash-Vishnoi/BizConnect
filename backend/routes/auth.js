@@ -98,11 +98,12 @@ router.post('/login', validateLogin, async (req, res) => {
 });
 
 // @route   GET /api/auth/me
-// @desc    Get current user
+// @desc    Get current user with businesses
 // @access  Private
 router.get('/me', auth, async (req, res) => {
   try {
-    const user = await User.findById(req.userId);
+    const user = await User.findById(req.userId)
+      .populate('businesses.businessId', 'name phoneNumberId settings.businessHours');
     
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
@@ -115,7 +116,9 @@ router.get('/me', auth, async (req, res) => {
         email: user.email,
         role: user.role,
         lastLogin: user.lastLogin,
-        createdAt: user.createdAt
+        createdAt: user.createdAt,
+        businesses: user.businesses,
+        currentBusiness: user.currentBusiness
       }
     });
   } catch (error) {

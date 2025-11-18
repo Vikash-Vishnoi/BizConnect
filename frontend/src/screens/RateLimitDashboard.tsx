@@ -25,8 +25,12 @@ const RateLimitDashboard: React.FC = () => {
 
   if (loading) {
     return (
-      <View style={styles.loading}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
+      <View style={styles.container}>
+        <View style={{padding: theme.spacing.md}}>
+          <SkeletonCard />
+          <View style={{height: theme.spacing.md}} />
+          <Skeleton width="100%" height={200} />
+        </View>
       </View>
     );
   }

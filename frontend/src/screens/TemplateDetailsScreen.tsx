@@ -16,6 +16,8 @@ import type {Template} from '../types/template';
 import {templateService} from '../services/templateService';
 import TemplatePreview from '../components/templates/TemplatePreview';
 import TemplateStatusBadge from '../components/templates/TemplateStatusBadge';
+import {EnhancedButton, EnhancedCard, Skeleton, SkeletonCard} from '../components/common';
+import theme from '../theme';
 
 type TemplateDetailsScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -156,7 +158,12 @@ const TemplateDetailsScreen: React.FC<Props> = ({navigation, route}) => {
           <View style={styles.placeholder} />
         </View>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#3B82F6" />
+          <SkeletonCard />
+          <View style={{height: theme.spacing.md}} />
+          <Skeleton width="100%" height={150} />
+          <View style={{height: theme.spacing.md}} />
+          <Skeleton width="80%" height={40} />
+          <View style={{height: theme.spacing.xs}} />
           <Text style={styles.loadingText}>
             {loading ? 'Loading template...' : 'Processing...'}
           </Text>

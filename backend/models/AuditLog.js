@@ -14,6 +14,11 @@ const auditLogSchema = new mongoose.Schema({
     required: true,
     index: true
   },
+  businessId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Business',
+    index: true
+  },
 
   userName: {
     type: String,

@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { auth } = require('../middleware/auth');
+const { auth, requireBusiness, requireBusinessPermission } = require('../middleware/auth');
 const { body, validationResult } = require('express-validator');
 const AutomationRule = require('../models/AutomationRule');
 const AutomationLog = require('../models/AutomationLog');
@@ -8,9 +8,9 @@ const AutomationLog = require('../models/AutomationLog');
 // @route   GET /api/automations
 // @desc    Get all automation rules for user
 // @access  Private
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, requireBusiness, requireBusinessPermission('manage_automations'), async (req, res) => {
   try {
-    const rules = await AutomationRule.find({ userId: req.userId })
+    const rules = await AutomationRule.find({ businessId: req.businessId })
       .populate('actions.templateId', 'name language status')
       .populate('actions.assignTo', 'name email')
       .sort({ priority: -1, createdAt: -1 });
@@ -25,11 +25,11 @@ router.get('/', auth, async (req, res) => {
 // @route   GET /api/automations/:id
 // @desc    Get single automation rule
 // @access  Private
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', auth, requireBusiness, requireBusinessPermission('manage_automations'), async (req, res) => {
   try {
     const rule = await AutomationRule.findOne({
       _id: req.params.id,
-      userId: req.userId
+      businessId: req.businessId
     })
       .populate('actions.templateId', 'name language status category')
       .populate('actions.assignTo', 'name email');
@@ -50,6 +50,8 @@ router.get('/:id', auth, async (req, res) => {
 // @access  Private
 router.post('/', [
   auth,
+  requireBusiness,
+  requireBusinessPermission('manage_automations'),
   body('name').trim().isLength({ min: 1, max: 100 }).withMessage('Name is required (max 100 chars)'),
   body('trigger.type').isIn(['new_conversation', 'keyword', 'after_hours', 'no_response', 'message_received', 'specific_time'])
     .withMessage('Invalid trigger type'),
@@ -62,7 +64,7 @@ router.post('/', [
     }
     
     const ruleData = {
-      userId: req.userId,
+      businessId: req.businessId,
       name: req.body.name,
       description: req.body.description,
       isActive: req.body.isActive !== undefined ? req.body.isActive : true,
@@ -108,11 +110,11 @@ router.post('/', [
 // @route   PUT /api/automations/:id
 // @desc    Update automation rule
 // @access  Private
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', auth, requireBusiness, requireBusinessPermission('manage_automations'), async (req, res) => {
   try {
     const rule = await AutomationRule.findOne({
       _id: req.params.id,
-      userId: req.userId
+      businessId: req.businessId
     });
     
     if (!rule) {
@@ -145,11 +147,11 @@ router.put('/:id', auth, async (req, res) => {
 // @route   DELETE /api/automations/:id
 // @desc    Delete automation rule
 // @access  Private
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', auth, requireBusiness, requireBusinessPermission('manage_automations'), async (req, res) => {
   try {
     const rule = await AutomationRule.findOneAndDelete({
       _id: req.params.id,
-      userId: req.userId
+      businessId: req.businessId
     });
     
     if (!rule) {
@@ -168,11 +170,11 @@ router.delete('/:id', auth, async (req, res) => {
 // @route   PATCH /api/automations/:id/toggle
 // @desc    Toggle automation rule active/inactive
 // @access  Private
-router.patch('/:id/toggle', auth, async (req, res) => {
+router.patch('/:id/toggle', auth, requireBusiness, requireBusinessPermission('manage_automations'), async (req, res) => {
   try {
     const rule = await AutomationRule.findOne({
       _id: req.params.id,
-      userId: req.userId
+      businessId: req.businessId
     });
     
     if (!rule) {
@@ -194,11 +196,11 @@ router.patch('/:id/toggle', auth, async (req, res) => {
 // @route   GET /api/automations/:id/logs
 // @desc    Get execution logs for automation rule
 // @access  Private
-router.get('/:id/logs', auth, async (req, res) => {
+router.get('/:id/logs', auth, requireBusiness, requireBusinessPermission('manage_automations'), async (req, res) => {
   try {
     const rule = await AutomationRule.findOne({
       _id: req.params.id,
-      userId: req.userId
+      businessId: req.businessId
     });
     
     if (!rule) {
@@ -236,9 +238,9 @@ router.get('/:id/logs', auth, async (req, res) => {
 // @route   GET /api/automations/stats/overview
 // @desc    Get automation statistics overview
 // @access  Private
-router.get('/stats/overview', auth, async (req, res) => {
+router.get('/stats/overview', auth, requireBusiness, requireBusinessPermission('manage_automations'), async (req, res) => {
   try {
-    const rules = await AutomationRule.find({ userId: req.userId });
+    const rules = await AutomationRule.find({ businessId: req.businessId });
     
     const stats = {
       totalRules: rules.length,

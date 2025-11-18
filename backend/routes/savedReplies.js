@@ -1,16 +1,16 @@
 const express = require('express');
 const router = express.Router();
 const SavedReply = require('../models/SavedReply');
-const { auth } = require('../middleware/auth');
+const { auth, requireBusiness, requireBusinessPermission } = require('../middleware/auth');
 
 // Get all saved replies for the authenticated user
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { category, search, isActive = 'true' } = req.query;
 
     // Build filter
     const filter = {
-      userId: req.userId,
+      businessId: req.businessId,
     };
 
     if (category && category !== 'all') {
@@ -48,11 +48,11 @@ router.get('/', auth, async (req, res) => {
 });
 
 // Get a single saved reply by ID
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const savedReply = await SavedReply.findOne({
       _id: req.params.id,
-      userId: req.userId,
+      businessId: req.businessId,
     });
 
     if (!savedReply) {
@@ -77,7 +77,7 @@ router.get('/:id', auth, async (req, res) => {
 });
 
 // Create a new saved reply
-router.post('/', auth, async (req, res) => {
+router.post('/', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { shortcut, message, category } = req.body;
 
@@ -105,7 +105,7 @@ router.post('/', auth, async (req, res) => {
 
     // Check for duplicate shortcut
     const existingReply = await SavedReply.findOne({
-      userId: req.userId,
+      businessId: req.businessId,
       shortcut: shortcut.trim(),
       isActive: true,
     });
@@ -119,7 +119,7 @@ router.post('/', auth, async (req, res) => {
 
     // Create saved reply
     const savedReply = new SavedReply({
-      userId: req.userId,
+      businessId: req.businessId,
       shortcut: shortcut.trim(),
       message: message.trim(),
       category: category || 'other',
@@ -143,13 +143,13 @@ router.post('/', auth, async (req, res) => {
 });
 
 // Update a saved reply
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { shortcut, message, category, isActive } = req.body;
 
     const savedReply = await SavedReply.findOne({
       _id: req.params.id,
-      userId: req.userId,
+      businessId: req.businessId,
     });
 
     if (!savedReply) {
@@ -170,7 +170,7 @@ router.put('/:id', auth, async (req, res) => {
     // Check for duplicate shortcut (if changing shortcut)
     if (shortcut && shortcut.trim() !== savedReply.shortcut) {
       const existingReply = await SavedReply.findOne({
-        userId: req.userId,
+        businessId: req.businessId,
         shortcut: shortcut.trim(),
         isActive: true,
         _id: { $ne: req.params.id },
@@ -208,11 +208,11 @@ router.put('/:id', auth, async (req, res) => {
 });
 
 // Delete a saved reply
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const savedReply = await SavedReply.findOneAndDelete({
       _id: req.params.id,
-      userId: req.userId,
+      businessId: req.businessId,
     });
 
     if (!savedReply) {
@@ -237,11 +237,11 @@ router.delete('/:id', auth, async (req, res) => {
 });
 
 // Increment usage count for a saved reply
-router.post('/:id/use', auth, async (req, res) => {
+router.post('/:id/use', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const savedReply = await SavedReply.findOne({
       _id: req.params.id,
-      userId: req.userId,
+      businessId: req.businessId,
     });
 
     if (!savedReply) {
@@ -269,12 +269,12 @@ router.post('/:id/use', auth, async (req, res) => {
 });
 
 // Get popular saved replies (most used)
-router.get('/stats/popular', auth, async (req, res) => {
+router.get('/stats/popular', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 10;
 
     const popularReplies = await SavedReply.find({
-      userId: req.userId,
+      businessId: req.businessId,
       isActive: true,
       usageCount: { $gt: 0 },
     })

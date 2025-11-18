@@ -15,6 +15,7 @@ import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '../types/navigation';
 import api from '../services/api';
 import theme from '../theme';
+import {EnhancedCard, SkeletonList, EmptyState} from '../components/common';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -159,26 +160,21 @@ const SearchScreen: React.FC = () => {
 
       {/* Results */}
       {loading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={styles.loadingText}>Searching...</Text>
+        <View style={{padding: theme.spacing.md}}>
+          <SkeletonList count={6} />
         </View>
       ) : !searched ? (
-        <View style={styles.centerContainer}>
-          <Icon name="search" size={64} color={theme.colors.textTertiary} />
-          <Text style={styles.emptyTitle}>Search Your Messages</Text>
-          <Text style={styles.emptyText}>
-            Find messages across all your conversations
-          </Text>
-        </View>
+        <EmptyState
+          icon="search"
+          title="Search Your Messages"
+          description="Find messages across all your conversations"
+        />
       ) : results.length === 0 ? (
-        <View style={styles.centerContainer}>
-          <Icon name="inbox" size={64} color={theme.colors.textTertiary} />
-          <Text style={styles.emptyTitle}>No Results Found</Text>
-          <Text style={styles.emptyText}>
-            Try different keywords or check spelling
-          </Text>
-        </View>
+        <EmptyState
+          icon="inbox"
+          title="No Results Found"
+          description="Try different keywords or check spelling"
+        />
       ) : (
         <View style={styles.resultsContainer}>
           <Text style={styles.resultsCount}>

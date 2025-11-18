@@ -30,6 +30,7 @@ import CTAComposer from '../components/conversations/CTAComposer';
 import LiveLocationComposer from '../components/conversations/LiveLocationComposer';
 import ConnectionStatus from '../components/ConnectionStatus';
 import {useSocket} from '../contexts/SocketProvider';
+import {EnhancedButton, EnhancedInput, Skeleton, SkeletonCard} from '../components/common';
 import theme from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Conversation'>;
@@ -968,7 +969,17 @@ const ConversationScreen: React.FC<Props> = ({navigation, route}) => {
   if (loading || !conversation) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <View style={{width: '100%', padding: theme.spacing.md}}>
+          <SkeletonCard />
+          <View style={{height: theme.spacing.md}} />
+          <Skeleton width="80%" height={60} />
+          <View style={{height: theme.spacing.xs}} />
+          <Skeleton width="70%" height={60} style={{alignSelf: 'flex-end'}} />
+          <View style={{height: theme.spacing.xs}} />
+          <Skeleton width="85%" height={60} />
+          <View style={{height: theme.spacing.xs}} />
+          <Skeleton width="75%" height={60} style={{alignSelf: 'flex-end'}} />
+        </View>
       </View>
     );
   }

@@ -8,9 +8,9 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const { auth } = require('../middleware/auth');
+const { auth, requireBusiness, requireBusinessPermission } = require('../middleware/auth');
 const Media = require('../models/Media');
-const whatsappService = require('../services/whatsappService');
+const WhatsAppService = require('../services/whatsappService');
 
 // Configure multer for file uploads (in-memory storage)
 const storage = multer.memoryStorage();
@@ -46,7 +46,7 @@ const upload = multer({
 // @route   POST /api/media/upload
 // @desc    Upload media file to WhatsApp
 // @access  Private
-router.post('/upload', auth, upload.single('file'), async (req, res) => {
+router.post('/upload', auth, requireBusiness, requireBusinessPermission('manage_conversations'), upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
@@ -58,6 +58,10 @@ router.post('/upload', auth, upload.single('file'), async (req, res) => {
     console.log('   Filename:', req.file.originalname);
     console.log('   Size:', req.file.size);
     console.log('   MIME type:', req.file.mimetype);
+
+    // Get business credentials and create WhatsApp service instance
+    const credentials = await req.business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
 
     // Upload to WhatsApp
     const result = await whatsappService.uploadMedia(
@@ -79,7 +83,7 @@ router.post('/upload', auth, upload.single('file'), async (req, res) => {
 
     // Save media record to database
     const media = new Media({
-      userId: req.userId,
+      businessId: req.businessId,
       whatsappMediaId: result.mediaId,
       filename: req.file.originalname,
       originalFilename: req.file.originalname,
@@ -122,13 +126,13 @@ router.post('/upload', auth, upload.single('file'), async (req, res) => {
 });
 
 // @route   GET /api/media
-// @desc    Get user's media files with filters
+// @desc    Get business's media files with filters
 // @access  Private
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { mediaType, status, page, limit, sortBy, sortOrder } = req.query;
 
-    const result = await Media.getUserMedia(req.userId, {
+    const result = await Media.getUserMedia(req.businessId, {
       mediaType,
       status,
       page: parseInt(page) || 1,
@@ -147,9 +151,9 @@ router.get('/', auth, async (req, res) => {
 // @route   GET /api/media/stats
 // @desc    Get media statistics
 // @access  Private
-router.get('/stats', auth, async (req, res) => {
+router.get('/stats', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
-    const stats = await Media.getStats(req.userId);
+    const stats = await Media.getStats(req.businessId);
     res.json(stats);
   } catch (error) {
     console.error('Get media stats error:', error);
@@ -160,11 +164,11 @@ router.get('/stats', auth, async (req, res) => {
 // @route   GET /api/media/:id
 // @desc    Get single media file details
 // @access  Private
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const media = await Media.findOne({
       _id: req.params.id,
-      userId: req.userId
+      businessId: req.businessId
     });
 
     if (!media) {
@@ -181,16 +185,20 @@ router.get('/:id', auth, async (req, res) => {
 // @route   GET /api/media/:id/url
 // @desc    Get WhatsApp download URL for media
 // @access  Private
-router.get('/:id/url', auth, async (req, res) => {
+router.get('/:id/url', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const media = await Media.findOne({
       _id: req.params.id,
-      userId: req.userId
+      businessId: req.businessId
     });
 
     if (!media) {
       return res.status(404).json({ error: 'Media not found' });
     }
+
+    // Get business credentials and create WhatsApp service instance
+    const credentials = await req.business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
 
     // Get URL from WhatsApp
     const result = await whatsappService.getMediaUrl(media.whatsappMediaId);
@@ -219,16 +227,20 @@ router.get('/:id/url', auth, async (req, res) => {
 // @route   GET /api/media/:id/download
 // @desc    Download media file
 // @access  Private
-router.get('/:id/download', auth, async (req, res) => {
+router.get('/:id/download', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const media = await Media.findOne({
       _id: req.params.id,
-      userId: req.userId
+      businessId: req.businessId
     });
 
     if (!media) {
       return res.status(404).json({ error: 'Media not found' });
     }
+
+    // Get business credentials and create WhatsApp service instance
+    const credentials = await req.business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
 
     // Download from WhatsApp
     const result = await whatsappService.downloadMedia(media.whatsappMediaId);
@@ -253,16 +265,20 @@ router.get('/:id/download', auth, async (req, res) => {
 // @route   DELETE /api/media/:id
 // @desc    Delete media file
 // @access  Private
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const media = await Media.findOne({
       _id: req.params.id,
-      userId: req.userId
+      businessId: req.businessId
     });
 
     if (!media) {
       return res.status(404).json({ error: 'Media not found' });
     }
+
+    // Get business credentials and create WhatsApp service instance
+    const credentials = await req.business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
 
     // Delete from WhatsApp
     const result = await whatsappService.deleteMedia(media.whatsappMediaId);
@@ -284,7 +300,7 @@ router.delete('/:id', auth, async (req, res) => {
 // @route   DELETE /api/media
 // @desc    Bulk delete media files
 // @access  Private
-router.delete('/', auth, async (req, res) => {
+router.delete('/', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { mediaIds } = req.body;
 
@@ -295,12 +311,16 @@ router.delete('/', auth, async (req, res) => {
     // Find media files
     const mediaFiles = await Media.find({
       _id: { $in: mediaIds },
-      userId: req.userId
+      businessId: req.businessId
     });
 
     if (mediaFiles.length === 0) {
       return res.status(404).json({ error: 'No media files found' });
     }
+
+    // Get business credentials and create WhatsApp service instance
+    const credentials = await req.business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
 
     // Delete from WhatsApp
     const deleteResults = await Promise.all(
@@ -327,13 +347,13 @@ router.delete('/', auth, async (req, res) => {
 // @route   PUT /api/media/:id
 // @desc    Update media metadata
 // @access  Private
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { category, description, tags, autoDelete, autoDeleteAfterDays } = req.body;
 
     const media = await Media.findOne({
       _id: req.params.id,
-      userId: req.userId
+      businessId: req.businessId
     });
 
     if (!media) {

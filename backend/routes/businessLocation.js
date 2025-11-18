@@ -1,27 +1,27 @@
 const express = require('express');
 const router = express.Router();
-const { auth } = require('../middleware/auth');
-const User = require('../models/User');
+const { auth, requireBusiness, requireBusinessPermission } = require('../middleware/auth');
+const Business = require('../models/Business');
 
 /**
  * @route   GET /api/business-location
- * @desc    Get business location for current user
+ * @desc    Get business location for current business
  * @access  Private
  */
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, requireBusiness, async (req, res) => {
   try {
-    const user = await User.findById(req.user.userId).select('businessLocation');
+    const business = await Business.findById(req.businessId).select('businessLocation');
 
-    if (!user) {
+    if (!business) {
       return res.status(404).json({ 
         success: false, 
-        message: 'User not found' 
+        message: 'Business not found' 
       });
     }
 
     res.json({
       success: true,
-      data: user.businessLocation || {
+      data: business.businessLocation || {
         enabled: false,
         address: '',
         latitude: null,
@@ -45,7 +45,7 @@ router.get('/', auth, async (req, res) => {
  * @desc    Update business location
  * @access  Private
  */
-router.put('/', auth, async (req, res) => {
+router.put('/', auth, requireBusiness, requireBusinessPermission('manage_settings'), async (req, res) => {
   try {
     const { enabled, address, latitude, longitude, description } = req.body;
 
@@ -102,29 +102,31 @@ router.put('/', auth, async (req, res) => {
     if (longitude !== undefined) updateData['businessLocation.longitude'] = longitude;
     if (description !== undefined) updateData['businessLocation.description'] = description;
 
-    const user = await User.findByIdAndUpdate(
-      req.user.userId,
+    const business = await Business.findByIdAndUpdate(
+      req.businessId,
       { $set: updateData },
       { new: true, runValidators: true }
     ).select('businessLocation');
 
-    if (!user) {
+    if (!business) {
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: 'Business not found'
       });
     }
 
+    // Ensure businessLocation exists before reading properties
+    const bl = business.businessLocation || { enabled: false, latitude: null, longitude: null };
     console.log('✅ Business location updated:', {
-      userId: req.user.userId,
-      enabled: user.businessLocation.enabled,
-      hasCoordinates: user.businessLocation.latitude !== null
+      businessId: req.businessId,
+      enabled: bl.enabled,
+      hasCoordinates: bl.latitude !== null && bl.longitude !== null
     });
 
     res.json({
       success: true,
       message: 'Business location updated successfully',
-      data: user.businessLocation
+      data: business.businessLocation
     });
   } catch (error) {
     console.error('❌ Error updating business location:', error);
@@ -141,10 +143,10 @@ router.put('/', auth, async (req, res) => {
  * @desc    Clear business location
  * @access  Private
  */
-router.delete('/', auth, async (req, res) => {
+router.delete('/', auth, requireBusiness, requireBusinessPermission('manage_settings'), async (req, res) => {
   try {
-    const user = await User.findByIdAndUpdate(
-      req.user.userId,
+    const business = await Business.findByIdAndUpdate(
+      req.businessId,
       {
         $set: {
           'businessLocation.enabled': false,
@@ -158,21 +160,21 @@ router.delete('/', auth, async (req, res) => {
       { new: true }
     ).select('businessLocation');
 
-    if (!user) {
+    if (!business) {
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: 'Business not found'
       });
     }
 
     console.log('✅ Business location cleared:', {
-      userId: req.user.userId
+      businessId: req.businessId
     });
 
     res.json({
       success: true,
       message: 'Business location cleared successfully',
-      data: user.businessLocation
+      data: business.businessLocation
     });
   } catch (error) {
     console.error('❌ Error clearing business location:', error);
@@ -189,7 +191,7 @@ router.delete('/', auth, async (req, res) => {
  * @desc    Validate coordinates without saving
  * @access  Private
  */
-router.post('/validate-coordinates', auth, async (req, res) => {
+router.post('/validate-coordinates', auth, requireBusiness, async (req, res) => {
   try {
     const { latitude, longitude } = req.body;
 
@@ -241,7 +243,7 @@ router.post('/validate-coordinates', auth, async (req, res) => {
  * @access  Private
  * @note    In production, integrate with Google Maps Geocoding API or similar service
  */
-router.post('/geocode', auth, async (req, res) => {
+router.post('/geocode', auth, requireBusiness, async (req, res) => {
   try {
     const { address } = req.body;
 
@@ -289,7 +291,7 @@ router.post('/geocode', auth, async (req, res) => {
  * @access  Private
  * @note    In production, integrate with Google Maps Reverse Geocoding API
  */
-router.post('/reverse-geocode', auth, async (req, res) => {
+router.post('/reverse-geocode', auth, requireBusiness, async (req, res) => {
   try {
     const { latitude, longitude } = req.body;
 

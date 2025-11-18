@@ -1,12 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const { auth } = require('../middleware/auth');
+const { auth, requireBusiness, requireBusinessPermission } = require('../middleware/auth');
 const ContactHistory = require('../models/ContactHistory');
 
 // @route   GET /api/contacts/history
 // @desc    Get contact history for all contacts
 // @access  Private
-router.get('/history', auth, async (req, res) => {
+router.get('/history', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const {
       limit = 50,
@@ -18,7 +18,7 @@ router.get('/history', auth, async (req, res) => {
       hours = 24
     } = req.query;
 
-    let query = { userId: req.userId };
+    let query = { businessId: req.businessId };
 
     if (phoneNumber) {
       query.phoneNumber = phoneNumber;
@@ -71,12 +71,12 @@ router.get('/history', auth, async (req, res) => {
 // @route   GET /api/contacts/history/:phoneNumber
 // @desc    Get history for a specific contact
 // @access  Private
-router.get('/history/:phoneNumber', auth, async (req, res) => {
+router.get('/history/:phoneNumber', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { phoneNumber } = req.params;
     const { limit = 50, skip = 0, eventType } = req.query;
 
-    const result = await ContactHistory.getHistory(req.userId, phoneNumber, {
+    const result = await ContactHistory.getHistory(req.businessId, phoneNumber, {
       limit: parseInt(limit),
       skip: parseInt(skip),
       eventType
@@ -107,11 +107,11 @@ router.get('/history/:phoneNumber', auth, async (req, res) => {
 // @route   GET /api/contacts/recent-changes
 // @desc    Get recent contact changes (last 24 hours by default)
 // @access  Private
-router.get('/recent-changes', auth, async (req, res) => {
+router.get('/recent-changes', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { limit = 20, hours = 24 } = req.query;
 
-    const result = await ContactHistory.getRecentChanges(req.userId, {
+    const result = await ContactHistory.getRecentChanges(req.businessId, {
       limit: parseInt(limit),
       hours: parseInt(hours)
     });
@@ -147,11 +147,11 @@ router.get('/recent-changes', auth, async (req, res) => {
 // @route   GET /api/contacts/change-summary
 // @desc    Get summary of contact changes
 // @access  Private
-router.get('/change-summary', auth, async (req, res) => {
+router.get('/change-summary', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { days = 7 } = req.query;
 
-    const summary = await ContactHistory.getChangeSummary(req.userId, parseInt(days));
+    const summary = await ContactHistory.getChangeSummary(req.businessId, parseInt(days));
 
     res.json(summary);
   } catch (error) {
@@ -163,11 +163,11 @@ router.get('/change-summary', auth, async (req, res) => {
 // @route   GET /api/contacts/unprocessed
 // @desc    Get unprocessed contact changes
 // @access  Private
-router.get('/unprocessed', auth, async (req, res) => {
+router.get('/unprocessed', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { limit = 50 } = req.query;
 
-    const unprocessed = await ContactHistory.getUnprocessed(req.userId, parseInt(limit));
+    const unprocessed = await ContactHistory.getUnprocessed(req.businessId, parseInt(limit));
 
     // Format for display
     const formatted = unprocessed.map(item => {
@@ -188,7 +188,7 @@ router.get('/unprocessed', auth, async (req, res) => {
 // @route   POST /api/contacts/mark-processed
 // @desc    Mark contact changes as processed
 // @access  Private
-router.post('/mark-processed', auth, async (req, res) => {
+router.post('/mark-processed', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { ids } = req.body;
 
@@ -211,20 +211,20 @@ router.post('/mark-processed', auth, async (req, res) => {
 // @route   GET /api/contacts/stats
 // @desc    Get contact change statistics
 // @access  Private
-router.get('/stats', auth, async (req, res) => {
+router.get('/stats', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
     const { days = 7 } = req.query;
     const since = new Date(Date.now() - parseInt(days) * 24 * 60 * 60 * 1000);
 
     const [total, byType, unprocessedCount, uniqueContacts] = await Promise.all([
       ContactHistory.countDocuments({
-        userId: req.userId,
+        businessId: req.businessId,
         timestamp: { $gte: since }
       }),
       ContactHistory.aggregate([
         {
           $match: {
-            userId: req.userId,
+            businessId: req.businessId,
             timestamp: { $gte: since }
           }
         },
@@ -239,11 +239,11 @@ router.get('/stats', auth, async (req, res) => {
         }
       ]),
       ContactHistory.countDocuments({
-        userId: req.userId,
+        businessId: req.businessId,
         'metadata.processed': false
       }),
       ContactHistory.distinct('phoneNumber', {
-        userId: req.userId,
+        businessId: req.businessId,
         timestamp: { $gte: since }
       })
     ]);
@@ -252,7 +252,7 @@ router.get('/stats', auth, async (req, res) => {
     const dailyBreakdown = await ContactHistory.aggregate([
       {
         $match: {
-          userId: req.userId,
+          businessId: req.businessId,
           timestamp: { $gte: since }
         }
       },

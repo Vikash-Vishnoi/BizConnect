@@ -8,7 +8,7 @@
 
 const express = require('express');
 const router = express.Router();
-const { auth } = require('../middleware/auth');
+const { auth, requireBusiness, requireBusinessPermission } = require('../middleware/auth');
 const messageForwardingService = require('../services/messageForwardingService');
 
 /**
@@ -16,7 +16,7 @@ const messageForwardingService = require('../services/messageForwardingService')
  * @desc    Forward a single message to one or more conversations
  * @access  Private
  */
-router.post('/message', auth, async (req, res) => {
+router.post('/message', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const {
       sourceConversationId,
@@ -52,7 +52,7 @@ router.post('/message', auth, async (req, res) => {
       sourceConversationId,
       messageId,
       targetConversationIds,
-      req.user._id,
+      req.businessId,
       { addCaption, keepOriginalCaption }
     );
 
@@ -60,7 +60,7 @@ router.post('/message', auth, async (req, res) => {
     const io = req.app.get('io');
     if (io && result.results.success.length > 0) {
       result.results.success.forEach(forward => {
-        io.to(`user:${req.user._id}`).emit('message:forwarded', {
+        io.to(`business:${req.businessId}`).emit('message:forwarded', {
           sourceConversationId,
           targetConversationId: forward.conversationId,
           messageId: forward.messageId,
@@ -89,7 +89,7 @@ router.post('/message', auth, async (req, res) => {
  * @desc    Forward multiple messages to one or more conversations
  * @access  Private
  */
-router.post('/messages', auth, async (req, res) => {
+router.post('/messages', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const {
       sourceConversationId,
@@ -137,13 +137,13 @@ router.post('/messages', auth, async (req, res) => {
       sourceConversationId,
       messageIds,
       targetConversationIds,
-      req.user._id
+      req.businessId
     );
 
     // Emit real-time event
     const io = req.app.get('io');
     if (io) {
-      io.to(`user:${req.user._id}`).emit('messages:bulk_forwarded', {
+      io.to(`business:${req.businessId}`).emit('messages:bulk_forwarded', {
         sourceConversationId,
         targetConversationIds,
         messageCount: messageIds.length,
@@ -172,12 +172,12 @@ router.post('/messages', auth, async (req, res) => {
  * @desc    Get list of conversations available for forwarding
  * @access  Private
  */
-router.get('/conversations', auth, async (req, res) => {
+router.get('/conversations', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { excludeConversationId } = req.query;
 
     const conversations = await messageForwardingService.getForwardableConversations(
-      req.user._id,
+      req.businessId,
       excludeConversationId
     );
 
@@ -203,14 +203,14 @@ router.get('/conversations', auth, async (req, res) => {
  * @desc    Check if a message can be forwarded
  * @access  Private
  */
-router.get('/check/:conversationId/:messageId', auth, async (req, res) => {
+router.get('/check/:conversationId/:messageId', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { conversationId, messageId } = req.params;
 
     const Conversation = require('../models/Conversation');
     const conversation = await Conversation.findOne({
       _id: conversationId,
-      userId: req.user._id
+      businessId: req.businessId
     });
 
     if (!conversation) {

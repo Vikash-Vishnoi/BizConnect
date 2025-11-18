@@ -1,17 +1,17 @@
 const express = require('express');
 const router = express.Router();
 const Template = require('../models/Template');
-const { auth } = require('../middleware/auth');
-const whatsappService = require('../services/whatsappService');
+const { auth, requireBusiness, requireBusinessPermission } = require('../middleware/auth');
+const WhatsAppService = require('../services/whatsappService');
 
 // @route   GET /api/templates
 // @desc    Get all templates for user
 // @access  Private
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, requireBusiness, requireBusinessPermission('manage_templates'), async (req, res) => {
   try {
     const { status, category, page = 1, limit = 20 } = req.query;
     
-    const query = { userId: req.userId };
+    const query = { businessId: req.businessId };
     if (status) query.status = status;
     if (category) query.category = category;
 
@@ -38,24 +38,24 @@ router.get('/', auth, async (req, res) => {
 // @route   GET /api/templates/stats
 // @desc    Get template statistics
 // @access  Private
-router.get('/stats', auth, async (req, res) => {
+router.get('/stats', auth, requireBusiness, requireBusinessPermission('manage_templates'), async (req, res) => {
   try {
-    const totalTemplates = await Template.countDocuments({ userId: req.userId });
+    const totalTemplates = await Template.countDocuments({ businessId: req.businessId });
     const approvedTemplates = await Template.countDocuments({ 
-      userId: req.userId, 
+      businessId: req.businessId, 
       status: 'approved' 
     });
     const pendingTemplates = await Template.countDocuments({ 
-      userId: req.userId, 
+      businessId: req.businessId, 
       status: 'pending' 
     });
     const draftTemplates = await Template.countDocuments({ 
-      userId: req.userId, 
+      businessId: req.businessId, 
       status: 'draft' 
     });
 
     // Get most used templates
-    const mostUsed = await Template.find({ userId: req.userId })
+    const mostUsed = await Template.find({ businessId: req.businessId })
       .sort({ 'usage.messages': -1 })
       .limit(5)
       .select('name category usage status');
@@ -76,11 +76,11 @@ router.get('/stats', auth, async (req, res) => {
 // @route   GET /api/templates/:id
 // @desc    Get template by ID
 // @access  Private
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', auth, requireBusiness, requireBusinessPermission('manage_templates'), async (req, res) => {
   try {
     const template = await Template.findOne({
       _id: req.params.id,
-      userId: req.userId
+      businessId: req.businessId
     });
 
     if (!template) {
@@ -97,7 +97,7 @@ router.get('/:id', auth, async (req, res) => {
 // @route   POST /api/templates
 // @desc    Create new template
 // @access  Private
-router.post('/', auth, async (req, res) => {
+router.post('/', auth, requireBusiness, requireBusinessPermission('manage_templates'), async (req, res) => {
   try {
     const { name, category, language, components, variables } = req.body;
 
@@ -112,7 +112,8 @@ router.post('/', auth, async (req, res) => {
       components,
       variables: variables || [],
       status: 'draft',
-      userId: req.userId
+      userId: req.userId,
+      businessId: req.businessId
     });
 
     await template.save();
@@ -130,11 +131,11 @@ router.post('/', auth, async (req, res) => {
 // @route   PUT /api/templates/:id
 // @desc    Update template
 // @access  Private
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', auth, requireBusiness, requireBusinessPermission('manage_templates'), async (req, res) => {
   try {
     const template = await Template.findOne({
       _id: req.params.id,
-      userId: req.userId
+      businessId: req.businessId
     });
 
     if (!template) {
@@ -169,11 +170,11 @@ router.put('/:id', auth, async (req, res) => {
 // @route   POST /api/templates/:id/submit
 // @desc    Submit template for WhatsApp approval
 // @access  Private
-router.post('/:id/submit', auth, async (req, res) => {
+router.post('/:id/submit', auth, requireBusiness, requireBusinessPermission('manage_templates'), async (req, res) => {
   try {
     const template = await Template.findOne({
       _id: req.params.id,
-      userId: req.userId
+      businessId: req.businessId
     });
 
     if (!template) {
@@ -206,7 +207,10 @@ router.post('/:id/submit', auth, async (req, res) => {
       return component;
     });
 
-    // Submit to WhatsApp
+    // Submit to WhatsApp using business credentials
+    const credentials = await req.business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
+    
     const result = await whatsappService.createTemplate(
       template.name.toLowerCase().replace(/\s+/g, '_'),
       template.category,
@@ -239,11 +243,11 @@ router.post('/:id/submit', auth, async (req, res) => {
 // @route   GET /api/templates/:id/status
 // @desc    Check template approval status from WhatsApp
 // @access  Private
-router.get('/:id/status', auth, async (req, res) => {
+router.get('/:id/status', auth, requireBusiness, requireBusinessPermission('manage_templates'), async (req, res) => {
   try {
     const template = await Template.findOne({
       _id: req.params.id,
-      userId: req.userId
+      businessId: req.businessId
     });
 
     if (!template) {
@@ -254,7 +258,10 @@ router.get('/:id/status', auth, async (req, res) => {
       return res.status(400).json({ error: 'Template not submitted to WhatsApp yet' });
     }
 
-    // Get status from WhatsApp
+    // Get status from WhatsApp using business credentials
+    const credentials = await req.business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
+    
     const result = await whatsappService.getTemplateStatus(template.whatsappTemplateId);
 
     if (result.success) {
@@ -288,11 +295,11 @@ router.get('/:id/status', auth, async (req, res) => {
 // @route   DELETE /api/templates/:id
 // @desc    Delete template
 // @access  Private
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', auth, requireBusiness, requireBusinessPermission('manage_templates'), async (req, res) => {
   try {
     const template = await Template.findOne({
       _id: req.params.id,
-      userId: req.userId
+      businessId: req.businessId
     });
 
     if (!template) {

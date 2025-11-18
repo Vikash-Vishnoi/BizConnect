@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { auth, isAdmin, requirePermission } = require('../middleware/auth');
+const { auth, isAdmin, requirePermission, requireBusiness } = require('../middleware/auth');
 const { Role, Permission, User } = require('../models');
 
 /**
@@ -12,7 +12,7 @@ const { Role, Permission, User } = require('../models');
 // @route   GET /api/rbac/roles
 // @desc    Get all roles
 // @access  Private (Admin)
-router.get('/roles', auth, isAdmin, async (req, res) => {
+router.get('/roles', auth, requireBusiness, isAdmin, async (req, res) => {
   try {
     const roles = await Role.getActiveRoles();
     
@@ -44,7 +44,7 @@ router.get('/roles', auth, isAdmin, async (req, res) => {
 // @route   GET /api/rbac/roles/:id
 // @desc    Get role details with permissions
 // @access  Private (Admin)
-router.get('/roles/:id', auth, isAdmin, async (req, res) => {
+router.get('/roles/:id', auth, requireBusiness, isAdmin, async (req, res) => {
   try {
     const role = await Role.getRoleWithPermissions(req.params.id);
     
@@ -78,7 +78,7 @@ router.get('/roles/:id', auth, isAdmin, async (req, res) => {
 // @route   POST /api/rbac/roles
 // @desc    Create a new custom role
 // @access  Private (Admin)
-router.post('/roles', auth, isAdmin, async (req, res) => {
+router.post('/roles', auth, requireBusiness, isAdmin, async (req, res) => {
   try {
     const { name, code, description, permissions } = req.body;
     
@@ -123,7 +123,7 @@ router.post('/roles', auth, isAdmin, async (req, res) => {
 // @route   PUT /api/rbac/roles/:id
 // @desc    Update role details
 // @access  Private (Admin)
-router.put('/roles/:id', auth, isAdmin, async (req, res) => {
+router.put('/roles/:id', auth, requireBusiness, isAdmin, async (req, res) => {
   try {
     const role = await Role.findById(req.params.id);
     
@@ -169,7 +169,7 @@ router.put('/roles/:id', auth, isAdmin, async (req, res) => {
 // @route   DELETE /api/rbac/roles/:id
 // @desc    Delete a custom role
 // @access  Private (Admin)
-router.delete('/roles/:id', auth, isAdmin, async (req, res) => {
+router.delete('/roles/:id', auth, requireBusiness, isAdmin, async (req, res) => {
   try {
     const role = await Role.findById(req.params.id);
     
@@ -218,7 +218,7 @@ router.delete('/roles/:id', auth, isAdmin, async (req, res) => {
 // @route   GET /api/rbac/permissions
 // @desc    Get all permissions grouped by category
 // @access  Private (Admin)
-router.get('/permissions', auth, isAdmin, async (req, res) => {
+router.get('/permissions', auth, requireBusiness, isAdmin, async (req, res) => {
   try {
     const grouped = await Permission.getGroupedPermissions();
     
@@ -238,7 +238,7 @@ router.get('/permissions', auth, isAdmin, async (req, res) => {
 // @route   POST /api/rbac/roles/:id/permissions
 // @desc    Assign permissions to a role
 // @access  Private (Admin)
-router.post('/roles/:id/permissions', auth, isAdmin, async (req, res) => {
+router.post('/roles/:id/permissions', auth, requireBusiness, isAdmin, async (req, res) => {
   try {
     const role = await Role.findById(req.params.id);
     
@@ -303,7 +303,7 @@ router.post('/roles/:id/permissions', auth, isAdmin, async (req, res) => {
 // @route   DELETE /api/rbac/roles/:id/permissions/:permissionId
 // @desc    Remove permission from a role
 // @access  Private (Admin)
-router.delete('/roles/:id/permissions/:permissionId', auth, isAdmin, async (req, res) => {
+router.delete('/roles/:id/permissions/:permissionId', auth, requireBusiness, isAdmin, async (req, res) => {
   try {
     const role = await Role.findById(req.params.id);
     
@@ -343,7 +343,7 @@ router.delete('/roles/:id/permissions/:permissionId', auth, isAdmin, async (req,
 // @route   GET /api/rbac/users/:userId/permissions
 // @desc    Get user's effective permissions
 // @access  Private (Admin or Self)
-router.get('/users/:userId/permissions', auth, async (req, res) => {
+router.get('/users/:userId/permissions', auth, requireBusiness, async (req, res) => {
   try {
     // Only allow users to view their own permissions or admins to view any
     if (req.userId.toString() !== req.params.userId && req.user.role !== 'admin') {
@@ -399,7 +399,7 @@ router.get('/users/:userId/permissions', auth, async (req, res) => {
 // @route   PUT /api/rbac/users/:userId/role
 // @desc    Assign role to a user
 // @access  Private (Admin)
-router.put('/users/:userId/role', auth, isAdmin, async (req, res) => {
+router.put('/users/:userId/role', auth, requireBusiness, isAdmin, async (req, res) => {
   try {
     const user = await User.findById(req.params.userId);
     
@@ -460,7 +460,7 @@ router.put('/users/:userId/role', auth, isAdmin, async (req, res) => {
 // @route   POST /api/rbac/seed
 // @desc    Seed default permissions and roles (development only)
 // @access  Private (Admin)
-router.post('/seed', auth, isAdmin, async (req, res) => {
+router.post('/seed', auth, requireBusiness, isAdmin, async (req, res) => {
   try {
     // Seed permissions first
     const permResult = await Permission.seedPermissions();

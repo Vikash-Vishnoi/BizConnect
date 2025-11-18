@@ -230,7 +230,9 @@ class GDPRService {
     const exportDir = path.join(__dirname, '../exports');
     await fs.mkdir(exportDir, { recursive: true });
 
-    const filename = `gdpr_export_${request.userId}_${Date.now()}`;
+    // Fix: Use userId string instead of full user object
+    const userId = typeof request.userId === 'object' ? request.userId._id.toString() : request.userId.toString();
+    const filename = `gdpr_export_${userId}_${Date.now()}`;
     
     switch (request.format) {
       case 'JSON':

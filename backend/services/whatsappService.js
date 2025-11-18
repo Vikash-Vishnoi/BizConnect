@@ -2,19 +2,39 @@ const axios = require('axios');
 const rateLimitService = require('./rateLimitService');
 
 class WhatsAppService {
-  constructor() {
-    this.apiUrl = process.env.WHATSAPP_API_URL;
-    this.phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
-    this.accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
-    this.businessAccountId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
-    
-    // Warn about token expiration
-    if (this.accessToken && !process.env.WHATSAPP_SYSTEM_USER_TOKEN) {
-      console.warn('⚠️  WARNING: Using temporary WhatsApp access token!');
-      console.warn('⚠️  This token will expire. For production:');
-      console.warn('⚠️  1. Create a System User in Meta Business Settings');
-      console.warn('⚠️  2. Generate a permanent token with System User');
-      console.warn('⚠️  3. Set WHATSAPP_SYSTEM_USER_TOKEN in .env');
+  /**
+   * Create WhatsApp Service instance
+   * @param {Object} credentials - Business-specific WhatsApp credentials
+   * @param {string} credentials.phoneNumberId - WhatsApp Phone Number ID
+   * @param {string} credentials.accessToken - WhatsApp Access Token
+   * @param {string} credentials.wabaId - WhatsApp Business Account ID
+   * @param {string} credentials.apiVersion - API version (defaults to v18.0)
+   */
+  constructor(credentials = null) {
+    // Multi-business support: Accept credentials or fallback to env variables
+    if (credentials) {
+      this.phoneNumberId = credentials.phoneNumberId;
+      this.accessToken = credentials.accessToken;
+      this.businessAccountId = credentials.wabaId;
+      this.apiVersion = credentials.apiVersion || 'v18.0';
+      this.apiUrl = `https://graph.facebook.com/${this.apiVersion}`;
+      console.log(`✅ WhatsAppService initialized for business phone: ${this.phoneNumberId}`);
+    } else {
+      // Fallback to environment variables for backward compatibility
+      this.apiUrl = process.env.WHATSAPP_API_URL || 'https://graph.facebook.com/v18.0';
+      this.phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+      this.accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
+      this.businessAccountId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
+      this.apiVersion = 'v18.0';
+      
+      // Warn about token expiration
+      if (this.accessToken && !process.env.WHATSAPP_SYSTEM_USER_TOKEN) {
+        console.warn('⚠️  WARNING: Using temporary WhatsApp access token from env!');
+        console.warn('⚠️  This token will expire. For production:');
+        console.warn('⚠️  1. Create a System User in Meta Business Settings');
+        console.warn('⚠️  2. Generate a permanent token with System User');
+        console.warn('⚠️  3. Store credentials in Business model, not .env');
+      }
     }
   }
 
@@ -419,15 +439,16 @@ class WhatsAppService {
   }
 
   // Verify webhook signature
-  verifyWebhookSignature(payload, signature) {
+  verifyWebhookSignature(payload, signature, appSecret = null) {
     const crypto = require('crypto');
-    const appSecret = process.env.WHATSAPP_APP_SECRET || process.env.APP_SECRET;
-    if (!appSecret) {
-      console.warn('⚠️  WHATSAPP_APP_SECRET or APP_SECRET not configured');
+    // Use provided appSecret (from business) or fallback to env
+    const secret = appSecret || process.env.WHATSAPP_APP_SECRET || process.env.APP_SECRET;
+    if (!secret) {
+      console.warn('⚠️  WHATSAPP_APP_SECRET not configured');
       return false;
     }
     const expectedSignature = crypto
-      .createHmac('sha256', appSecret)
+      .createHmac('sha256', secret)
       .update(payload)
       .digest('hex');
     

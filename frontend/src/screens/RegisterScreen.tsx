@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -16,6 +15,7 @@ import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {RootStackParamList} from '../types/navigation';
 import {authAPI} from '../services/api';
 import {storageService} from '../services/storage';
+import {EnhancedInput, EnhancedButton} from '../components/common';
 import theme from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Register'>;
@@ -308,26 +308,16 @@ const RegisterScreen = ({navigation}: Props) => {
               ) : null}
             </View>
 
-            {}
-            <TouchableOpacity
-              style={styles.registerButtonWrapper}
+            {/* Register Button */}
+            <EnhancedButton
+              title="Create Account"
               onPress={handleRegister}
+              loading={isLoading}
               disabled={isLoading}
-              activeOpacity={0.8}>
-              <LinearGradient
-                colors={isLoading
-                  ? [theme.colors.textSecondary, theme.colors.textSecondary]
-                  : [theme.colors.gradientStart, theme.colors.gradientEnd]}
-                style={styles.registerButton}
-                start={{x: 0, y: 0}}
-                end={{x: 1, y: 0}}>
-                {isLoading ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
-                ) : (
-                  <Text style={styles.registerButtonText}>Create Account</Text>
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
+              gradient
+              size="large"
+              fullWidth
+            />
           </View>
 
           {}

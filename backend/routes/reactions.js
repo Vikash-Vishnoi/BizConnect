@@ -8,7 +8,7 @@
 
 const express = require('express');
 const router = express.Router();
-const { auth } = require('../middleware/auth');
+const { auth, requireBusiness, requireBusinessPermission } = require('../middleware/auth');
 const messageReactionsService = require('../services/messageReactionsService');
 
 /**
@@ -16,7 +16,7 @@ const messageReactionsService = require('../services/messageReactionsService');
  * @desc    Add emoji reaction to a message
  * @access  Private
  */
-router.post('/conversations/:conversationId/messages/:messageId', auth, async (req, res) => {
+router.post('/conversations/:conversationId/messages/:messageId', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { conversationId, messageId } = req.params;
     const { emoji } = req.body;
@@ -40,13 +40,13 @@ router.post('/conversations/:conversationId/messages/:messageId', auth, async (r
       conversationId,
       messageId,
       emoji,
-      req.user._id
+      req.businessId
     );
 
     // Emit real-time event via Socket.IO
     const io = req.app.get('io');
     if (io) {
-      io.to(`user:${req.user._id}`).emit('message:reacted', {
+      io.to(`business:${req.businessId}`).emit('message:reacted', {
         conversationId,
         messageId,
         emoji,
@@ -80,20 +80,20 @@ router.post('/conversations/:conversationId/messages/:messageId', auth, async (r
  * @desc    Remove reaction from a message
  * @access  Private
  */
-router.delete('/conversations/:conversationId/messages/:messageId', auth, async (req, res) => {
+router.delete('/conversations/:conversationId/messages/:messageId', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { conversationId, messageId } = req.params;
 
     const result = await messageReactionsService.removeReaction(
       conversationId,
       messageId,
-      req.user._id
+      req.businessId
     );
 
     // Emit real-time event via Socket.IO
     const io = req.app.get('io');
     if (io) {
-      io.to(`user:${req.user._id}`).emit('message:reaction_removed', {
+      io.to(`business:${req.businessId}`).emit('message:reaction_removed', {
         conversationId,
         messageId,
         from: req.user._id,
@@ -124,14 +124,14 @@ router.delete('/conversations/:conversationId/messages/:messageId', auth, async 
  * @desc    Get all reactions for a specific message
  * @access  Private
  */
-router.get('/conversations/:conversationId/messages/:messageId', auth, async (req, res) => {
+router.get('/conversations/:conversationId/messages/:messageId', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { conversationId, messageId } = req.params;
 
     const result = await messageReactionsService.getMessageReactions(
       conversationId,
       messageId,
-      req.user._id
+      req.businessId
     );
 
     res.json({
@@ -153,13 +153,13 @@ router.get('/conversations/:conversationId/messages/:messageId', auth, async (re
  * @desc    Get reaction statistics for a conversation
  * @access  Private
  */
-router.get('/conversations/:conversationId/stats', auth, async (req, res) => {
+router.get('/conversations/:conversationId/stats', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
     const { conversationId } = req.params;
 
     const result = await messageReactionsService.getConversationReactionStats(
       conversationId,
-      req.user._id
+      req.businessId
     );
 
     res.json({
@@ -181,12 +181,12 @@ router.get('/conversations/:conversationId/stats', auth, async (req, res) => {
  * @desc    Get recent reactions across all conversations
  * @access  Private
  */
-router.get('/recent', auth, async (req, res) => {
+router.get('/recent', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 20;
 
     const result = await messageReactionsService.getRecentReactions(
-      req.user._id,
+      req.businessId,
       limit
     );
 
@@ -238,7 +238,7 @@ router.get('/emojis', (req, res) => {
  * @desc    Quick reaction (commonly used emojis with shortcuts)
  * @access  Private
  */
-router.post('/quick', auth, async (req, res) => {
+router.post('/quick', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { conversationId, messageId, reactionType } = req.body;
 
@@ -277,13 +277,13 @@ router.post('/quick', auth, async (req, res) => {
       conversationId,
       messageId,
       emoji,
-      req.user._id
+      req.businessId
     );
 
     // Emit real-time event
     const io = req.app.get('io');
     if (io) {
-      io.to(`user:${req.user._id}`).emit('message:reacted', {
+      io.to(`business:${req.businessId}`).emit('message:reacted', {
         conversationId,
         messageId,
         emoji,

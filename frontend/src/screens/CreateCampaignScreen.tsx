@@ -18,6 +18,8 @@ import {RootStackParamList} from '../types/navigation';
 import {campaignAPI} from '../services/campaignService';
 import {templateService} from '../services/templateService';
 import type {Template} from '../types/template';
+import {EnhancedButton, EnhancedInput, Skeleton, SkeletonCard} from '../components/common';
+import theme from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CreateCampaign'>;
 
@@ -395,7 +397,9 @@ const CreateCampaignScreen = ({navigation, route}: Props) => {
           <Text style={styles.sectionTitle}>2️⃣ Select Template</Text>
 
           {loadingTemplates ? (
-            <ActivityIndicator color="#25D366" />
+            <View style={{paddingVertical: theme.spacing.md}}>
+              <Skeleton width="100%" height={40} />
+            </View>
           ) : (
             <>
               <View style={styles.inputContainer}>
@@ -584,16 +588,18 @@ const CreateCampaignScreen = ({navigation, route}: Props) => {
         </View>
 
         {/* Create Button */}
-        <TouchableOpacity
-          style={[styles.createButton, loading && styles.createButtonDisabled]}
-          onPress={handleCreate}
-          disabled={loading}>
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.createButtonText}>✨ Create Campaign</Text>
-          )}
-        </TouchableOpacity>
+        <View style={{marginTop: theme.spacing.lg, marginBottom: theme.spacing.xl}}>
+          <EnhancedButton
+            title="✨ Create Campaign"
+            onPress={handleCreate}
+            loading={loading}
+            disabled={loading}
+            variant="primary"
+            size="large"
+            fullWidth
+            gradient
+          />
+        </View>
       </ScrollView>
     </View>
   );

@@ -56,6 +56,23 @@ const connectDB = async () => {
 // Connect to MongoDB
 connectDB();
 
+// Ensure required directories exist
+const fs = require('fs');
+const path = require('path');
+
+const ensureDirectories = () => {
+  const directories = ['exports', 'uploads', 'logs'];
+  directories.forEach(dir => {
+    const dirPath = path.join(__dirname, dir);
+    if (!fs.existsSync(dirPath)) {
+      fs.mkdirSync(dirPath, { recursive: true });
+      console.log(`✅ Created ${dir}/ directory`);
+    }
+  });
+};
+
+ensureDirectories();
+
 // Socket.io connection handling
 io.on('connection', (socket) => {
   console.log('📱 New client connected:', socket.id);
@@ -173,6 +190,7 @@ app.get('/debug/sockets', (req, res) => {
 
 // API Routes
 app.use('/api/auth', require('./routes/auth'));
+app.use('/api/business', require('./routes/business')); // ✅ MULTI-BUSINESS: Business management
 app.use('/api/profile', require('./routes/profile')); // ✅ NEW: Comprehensive profile management
 app.use('/api/campaigns', require('./routes/campaigns'));
 app.use('/api/templates', require('./routes/templates'));
@@ -200,9 +218,7 @@ app.use('/api/view-once', require('./routes/viewOnce')); // ✅ FEATURE 26: View
 app.use('/api/status', require('./routes/status')); // ✅ FEATURE 27: Status/story updates
 app.use('/api/phone-health', require('./routes/phoneHealth')); // ✅ FEATURE 28: Phone number health monitoring
 app.use('/api/rbac', require('./routes/rbac')); // ✅ FEATURE 30: Advanced RBAC (roles & permissions)
-app.use('/api/groups', require('./routes/groups')); // ✅ FEATURE 31: WhatsApp group messaging
 app.use('/api/flows', require('./routes/flows')); // ✅ FEATURE 32: WhatsApp Flows (interactive forms)
-app.use('/api/channels', require('./routes/channels')); // ✅ FEATURE 33: WhatsApp Channels (one-way broadcast)
 app.use('/api/audit-logs', require('./routes/auditLogs')); // ✅ FEATURE 36: Audit logs for compliance
 app.use('/api/gdpr', require('./routes/gdpr')); // ✅ FEATURE 37: GDPR Tools (data export & deletion)
 

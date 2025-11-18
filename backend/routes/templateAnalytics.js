@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { auth } = require('../middleware/auth');
+const { auth, requireBusiness, requireBusinessPermission } = require('../middleware/auth');
 const TemplateAnalytics = require('../models/TemplateAnalytics');
 const Template = require('../models/Template');
 
@@ -9,12 +9,12 @@ const Template = require('../models/Template');
  * @desc    Get analytics for all templates
  * @access  Private
  */
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
     const { period = 'all-time' } = req.query;
     
     const analytics = await TemplateAnalytics.find({
-      userId: req.userId,
+      businessId: req.businessId,
       period
     }).populate('templateId');
     
@@ -35,11 +35,11 @@ router.get('/', auth, async (req, res) => {
  * @desc    Get overall statistics across all templates
  * @access  Private
  */
-router.get('/overall', auth, async (req, res) => {
+router.get('/overall', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
     const { period = 'all-time' } = req.query;
     
-    const stats = await TemplateAnalytics.getOverallStats(req.userId, period);
+    const stats = await TemplateAnalytics.getOverallStats(req.businessId, period);
     
     res.json(stats);
   } catch (error) {
@@ -53,12 +53,12 @@ router.get('/overall', auth, async (req, res) => {
  * @desc    Get top performing templates
  * @access  Private
  */
-router.get('/top-performers', auth, async (req, res) => {
+router.get('/top-performers', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
     const { metric = 'engagementRate', limit = 10 } = req.query;
     
     const topPerformers = await TemplateAnalytics.getTopPerformers(
-      req.userId,
+      req.businessId,
       metric,
       parseInt(limit)
     );
@@ -89,12 +89,12 @@ router.get('/top-performers', auth, async (req, res) => {
  * @desc    Get analytics for a specific template
  * @access  Private
  */
-router.get('/template/:templateId', auth, async (req, res) => {
+router.get('/template/:templateId', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
     const { period = 'all-time' } = req.query;
     
     const analytics = await TemplateAnalytics.findOne({
-      userId: req.userId,
+      businessId: req.businessId,
       templateId: req.params.templateId,
       period
     }).populate('templateId');
@@ -121,7 +121,7 @@ router.get('/template/:templateId', auth, async (req, res) => {
  * @desc    Compare analytics for multiple templates
  * @access  Private
  */
-router.get('/compare', auth, async (req, res) => {
+router.get('/compare', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
     const { templateIds, period = 'all-time' } = req.query;
     
@@ -132,7 +132,7 @@ router.get('/compare', auth, async (req, res) => {
     const ids = Array.isArray(templateIds) ? templateIds : templateIds.split(',');
     
     const comparison = await TemplateAnalytics.compareTemplates(
-      req.userId,
+      req.businessId,
       ids,
       period
     );
@@ -152,28 +152,26 @@ router.get('/compare', auth, async (req, res) => {
  * @desc    Manually track an event for a template
  * @access  Private
  */
-router.post('/:templateId/track', auth, async (req, res) => {
+router.post('/:templateId/track', auth, requireBusiness, requireBusinessPermission('manage_templates'), async (req, res) => {
   try {
     const { event, data } = req.body;
     
     // Get template
     const template = await Template.findOne({
       _id: req.params.templateId,
-      userId: req.userId
+      businessId: req.businessId
     });
-    
+
     if (!template) {
       return res.status(404).json({ error: 'Template not found' });
     }
     
     // Get or create analytics
     const analytics = await TemplateAnalytics.getOrCreateAnalytics(
-      req.userId,
+      req.businessId,
       template._id,
       template.name
-    );
-    
-    // Track event
+    );    // Track event
     const updateData = {};
     
     switch (event) {
@@ -234,10 +232,10 @@ router.post('/:templateId/track', auth, async (req, res) => {
  * @desc    Get button/quick reply performance for a template
  * @access  Private
  */
-router.get('/:templateId/button-performance', auth, async (req, res) => {
+router.get('/:templateId/button-performance', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
     const analytics = await TemplateAnalytics.findOne({
-      userId: req.userId,
+      businessId: req.businessId,
       templateId: req.params.templateId,
       period: 'all-time'
     });
@@ -262,10 +260,10 @@ router.get('/:templateId/button-performance', auth, async (req, res) => {
  * @desc    Get timing analytics for a template
  * @access  Private
  */
-router.get('/:templateId/timing', auth, async (req, res) => {
+router.get('/:templateId/timing', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
     const analytics = await TemplateAnalytics.findOne({
-      userId: req.userId,
+      businessId: req.businessId,
       templateId: req.params.templateId,
       period: 'all-time'
     });
@@ -295,10 +293,10 @@ router.get('/:templateId/timing', auth, async (req, res) => {
  * @desc    Get campaign performance for a template
  * @access  Private
  */
-router.get('/:templateId/campaigns', auth, async (req, res) => {
+router.get('/:templateId/campaigns', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
     const analytics = await TemplateAnalytics.findOne({
-      userId: req.userId,
+      businessId: req.businessId,
       templateId: req.params.templateId,
       period: 'all-time'
     }).populate('campaigns.campaignId');
@@ -336,10 +334,10 @@ router.get('/:templateId/campaigns', auth, async (req, res) => {
  * @desc    Delete analytics for a template (admin/cleanup)
  * @access  Private
  */
-router.delete('/:templateId', auth, async (req, res) => {
+router.delete('/:templateId', auth, requireBusiness, requireBusinessPermission('manage_templates'), async (req, res) => {
   try {
     const result = await TemplateAnalytics.deleteMany({
-      userId: req.userId,
+      businessId: req.businessId,
       templateId: req.params.templateId
     });
     
@@ -358,10 +356,10 @@ router.delete('/:templateId', auth, async (req, res) => {
  * @desc    Reset analytics for a template
  * @access  Private
  */
-router.post('/:templateId/reset', auth, async (req, res) => {
+router.post('/:templateId/reset', auth, requireBusiness, requireBusinessPermission('manage_templates'), async (req, res) => {
   try {
     const analytics = await TemplateAnalytics.findOne({
-      userId: req.userId,
+      businessId: req.businessId,
       templateId: req.params.templateId,
       period: 'all-time'
     });

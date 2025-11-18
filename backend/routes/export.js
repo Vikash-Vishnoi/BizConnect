@@ -7,13 +7,13 @@
 
 const express = require('express');
 const router = express.Router();
-const { auth } = require('../middleware/auth');
+const { auth, requireBusiness, requireBusinessPermission } = require('../middleware/auth');
 const exportService = require('../services/exportService');
 
 // @route   POST /api/export/conversation/:id/pdf
 // @desc    Export single conversation to PDF
 // @access  Private
-router.post('/conversation/:id/pdf', auth, async (req, res) => {
+router.post('/conversation/:id/pdf', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { startDate, endDate } = req.body;
 
@@ -21,7 +21,7 @@ router.post('/conversation/:id/pdf', auth, async (req, res) => {
 
     const pdfDoc = await exportService.exportConversationToPDF(
       req.params.id,
-      req.userId,
+      req.businessId,
       { startDate, endDate }
     );
 
@@ -40,7 +40,7 @@ router.post('/conversation/:id/pdf', auth, async (req, res) => {
 // @route   POST /api/export/conversation/:id/json
 // @desc    Export single conversation to JSON
 // @access  Private
-router.post('/conversation/:id/json', auth, async (req, res) => {
+router.post('/conversation/:id/json', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { startDate, endDate } = req.body;
 
@@ -48,7 +48,7 @@ router.post('/conversation/:id/json', auth, async (req, res) => {
 
     const jsonData = await exportService.exportConversationToJSON(
       req.params.id,
-      req.userId,
+      req.businessId,
       { startDate, endDate }
     );
 
@@ -66,7 +66,7 @@ router.post('/conversation/:id/json', auth, async (req, res) => {
 // @route   POST /api/export/conversation/:id/csv
 // @desc    Export single conversation to CSV
 // @access  Private
-router.post('/conversation/:id/csv', auth, async (req, res) => {
+router.post('/conversation/:id/csv', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { startDate, endDate } = req.body;
 
@@ -74,7 +74,7 @@ router.post('/conversation/:id/csv', auth, async (req, res) => {
 
     const csvData = await exportService.exportConversationToCSV(
       req.params.id,
-      req.userId,
+      req.businessId,
       { startDate, endDate }
     );
 
@@ -92,7 +92,7 @@ router.post('/conversation/:id/csv', auth, async (req, res) => {
 // @route   POST /api/export/bulk
 // @desc    Export multiple conversations
 // @access  Private
-router.post('/bulk', auth, async (req, res) => {
+router.post('/bulk', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { conversationIds, format = 'json', startDate, endDate } = req.body;
 
@@ -108,7 +108,7 @@ router.post('/bulk', auth, async (req, res) => {
 
     const exportData = await exportService.exportBulkConversations(
       conversationIds,
-      req.userId,
+      req.businessId,
       format,
       { startDate, endDate }
     );
@@ -130,14 +130,14 @@ router.post('/bulk', auth, async (req, res) => {
 // @route   POST /api/export/stats
 // @desc    Get export statistics (preview before export)
 // @access  Private
-router.post('/stats', auth, async (req, res) => {
+router.post('/stats', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
     const { conversationIds = [], startDate, endDate } = req.body;
 
     console.log('📊 Getting export stats...');
 
     const stats = await exportService.getExportStats(
-      req.userId,
+      req.businessId,
       conversationIds,
       { startDate, endDate }
     );
@@ -150,9 +150,9 @@ router.post('/stats', auth, async (req, res) => {
 });
 
 // @route   POST /api/export/all
-// @desc    Export all user conversations
+// @desc    Export all business conversations
 // @access  Private
-router.post('/all', auth, async (req, res) => {
+router.post('/all', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { format = 'json', startDate, endDate } = req.body;
 
@@ -162,10 +162,10 @@ router.post('/all', auth, async (req, res) => {
 
     console.log(`📦 Exporting all conversations as ${format.toUpperCase()}`);
 
-    // Get all conversation IDs for user
+    // Get all conversation IDs for business
     const Conversation = require('../models/Conversation');
     const conversations = await Conversation.find({
-      userId: req.userId,
+      businessId: req.businessId,
       isDeleted: false
     }).select('_id').lean();
 
@@ -177,7 +177,7 @@ router.post('/all', auth, async (req, res) => {
 
     const exportData = await exportService.exportBulkConversations(
       conversationIds,
-      req.userId,
+      req.businessId,
       format,
       { startDate, endDate }
     );

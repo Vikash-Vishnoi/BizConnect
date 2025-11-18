@@ -7,7 +7,6 @@ import {
   RefreshControl,
   TouchableOpacity,
   ScrollView,
-  ActivityIndicator,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/Feather';
@@ -18,6 +17,7 @@ import {campaignAPI} from '../services/campaignService';
 import CampaignCard from '../components/campaigns/CampaignCard';
 import SearchBar from '../components/campaigns/SearchBar';
 import Button from '../components/common/Button';
+import {SkeletonList, EmptyState, EnhancedButton} from '../components/common';
 import theme from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Campaigns'>;
@@ -112,26 +112,25 @@ const CampaignsScreen = ({navigation}: Props) => {
   };
 
   const renderEmpty = () => (
-    <View style={styles.emptyContainer}>
-      <View style={styles.emptyIconContainer}>
-        <Text style={styles.emptyIcon}>🎯</Text>
-      </View>
-      <Text style={styles.emptyTitle}>No campaigns found</Text>
-      <Text style={styles.emptyText}>
-        {searchQuery || statusFilter !== 'all'
+    <EmptyState
+      icon="🎯"
+      title="No campaigns found"
+      description={
+        searchQuery || statusFilter !== 'all'
           ? 'Try adjusting your filters'
-          : 'Create your first campaign to get started'}
-      </Text>
-      {!searchQuery && statusFilter === 'all' && (
-        <Button
-          title="Create Campaign"
-          onPress={handleCreateCampaign}
-          icon="plus"
-          variant="primary"
-          style={styles.emptyButton}
-        />
-      )}
-    </View>
+          : 'Create your first campaign to get started'
+      }
+      action={
+        !searchQuery && statusFilter === 'all' ? (
+          <EnhancedButton
+            title="Create Campaign"
+            onPress={handleCreateCampaign}
+            variant="primary"
+            gradient
+          />
+        ) : undefined
+      }
+    />
   );
 
   if (loading) {
@@ -145,8 +144,7 @@ const CampaignsScreen = ({navigation}: Props) => {
           <Text style={styles.headerTitle}>Campaigns</Text>
         </LinearGradient>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={styles.loadingText}>Loading campaigns...</Text>
+          <SkeletonList count={5} />
         </View>
       </View>
     );

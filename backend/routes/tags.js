@@ -14,16 +14,16 @@
 const express = require('express');
 const router = express.Router();
 const contactTagsService = require('../services/contactTagsService');
-const { auth } = require('../middleware/auth');
+const { auth, requireBusiness, requireBusinessPermission } = require('../middleware/auth');
 
 /**
  * @route   GET /api/tags
- * @desc    Get all tags for the authd user
+ * @desc    Get all tags for the business
  * @access  Private
  */
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
-    const result = await contactTagsService.getAllTags(req.user.userId);
+    const result = await contactTagsService.getAllTags(req.businessId);
     
     res.json(result);
   } catch (error) {
@@ -41,13 +41,13 @@ router.get('/', auth, async (req, res) => {
  * @desc    Get conversations with a specific tag
  * @access  Private
  */
-router.get('/:tagName/conversations', auth, async (req, res) => {
+router.get('/:tagName/conversations', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { tagName } = req.params;
     const { page, limit } = req.query;
     
     const result = await contactTagsService.getConversationsByTag(
-      req.user.userId,
+      req.businessId,
       tagName,
       { page: parseInt(page) || 1, limit: parseInt(limit) || 20 }
     );
@@ -69,7 +69,7 @@ router.get('/:tagName/conversations', auth, async (req, res) => {
  * @access  Private
  * @body    { tagName: string }
  */
-router.post('/conversation/:conversationId/add', auth, async (req, res) => {
+router.post('/conversation/:conversationId/add', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { conversationId } = req.params;
     const { tagName } = req.body;
@@ -92,14 +92,14 @@ router.post('/conversation/:conversationId/add', auth, async (req, res) => {
     
     const result = await contactTagsService.addTagToConversation(
       conversationId,
-      req.user.userId,
+      req.businessId,
       tagName
     );
     
     // Emit real-time event
     const io = req.app.get('io');
     if (io) {
-      io.to(`user:${req.user.userId}`).emit('conversation:tag:added', {
+      io.to(`business:${req.businessId}`).emit('conversation:tag:added', {
         conversationId,
         tag: result.tag,
         tags: result.conversation.tags,
@@ -132,7 +132,7 @@ router.post('/conversation/:conversationId/add', auth, async (req, res) => {
  * @access  Private
  * @body    { tagName: string }
  */
-router.post('/conversation/:conversationId/remove', auth, async (req, res) => {
+router.post('/conversation/:conversationId/remove', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { conversationId } = req.params;
     const { tagName } = req.body;
@@ -146,14 +146,14 @@ router.post('/conversation/:conversationId/remove', auth, async (req, res) => {
     
     const result = await contactTagsService.removeTagFromConversation(
       conversationId,
-      req.user.userId,
+      req.businessId,
       tagName
     );
     
     // Emit real-time event
     const io = req.app.get('io');
     if (io) {
-      io.to(`user:${req.user.userId}`).emit('conversation:tag:removed', {
+      io.to(`business:${req.businessId}`).emit('conversation:tag:removed', {
         conversationId,
         tag: result.tag,
         tags: result.conversation.tags,
@@ -186,7 +186,7 @@ router.post('/conversation/:conversationId/remove', auth, async (req, res) => {
  * @access  Private
  * @body    { newTagName: string }
  */
-router.put('/:oldTagName/rename', auth, async (req, res) => {
+router.put('/:oldTagName/rename', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { oldTagName } = req.params;
     const { newTagName } = req.body;
@@ -208,7 +208,7 @@ router.put('/:oldTagName/rename', auth, async (req, res) => {
     }
     
     const result = await contactTagsService.renameTag(
-      req.user.userId,
+      req.businessId,
       oldTagName,
       newTagName
     );
@@ -216,7 +216,7 @@ router.put('/:oldTagName/rename', auth, async (req, res) => {
     // Emit real-time event
     const io = req.app.get('io');
     if (io) {
-      io.to(`user:${req.user.userId}`).emit('tag:renamed', {
+      io.to(`business:${req.businessId}`).emit('tag:renamed', {
         oldTag: result.oldTag,
         newTag: result.newTag,
         updatedCount: result.updatedCount,
@@ -240,19 +240,19 @@ router.put('/:oldTagName/rename', auth, async (req, res) => {
  * @desc    Delete a tag from all conversations
  * @access  Private
  */
-router.delete('/:tagName', auth, async (req, res) => {
+router.delete('/:tagName', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { tagName } = req.params;
     
     const result = await contactTagsService.deleteTag(
-      req.user.userId,
+      req.businessId,
       tagName
     );
     
     // Emit real-time event
     const io = req.app.get('io');
     if (io) {
-      io.to(`user:${req.user.userId}`).emit('tag:deleted', {
+      io.to(`business:${req.businessId}`).emit('tag:deleted', {
         tag: result.tag,
         deletedFromCount: result.deletedFromCount,
         timestamp: new Date()
@@ -276,7 +276,7 @@ router.delete('/:tagName', auth, async (req, res) => {
  * @access  Private
  * @body    { tagsToMerge: string[], targetTag: string }
  */
-router.post('/merge', auth, async (req, res) => {
+router.post('/merge', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { tagsToMerge, targetTag } = req.body;
     
@@ -311,7 +311,7 @@ router.post('/merge', auth, async (req, res) => {
     }
     
     const result = await contactTagsService.mergeTags(
-      req.user.userId,
+      req.businessId,
       tagsToMerge,
       targetTag
     );
@@ -319,7 +319,7 @@ router.post('/merge', auth, async (req, res) => {
     // Emit real-time event
     const io = req.app.get('io');
     if (io) {
-      io.to(`user:${req.user.userId}`).emit('tags:merged', {
+      io.to(`business:${req.businessId}`).emit('tags:merged', {
         mergedTags: result.mergedTags,
         targetTag: result.targetTag,
         updatedCount: result.updatedCount,
@@ -344,12 +344,12 @@ router.post('/merge', auth, async (req, res) => {
  * @access  Private
  * @query   { q: string, limit: number }
  */
-router.get('/suggestions', auth, async (req, res) => {
+router.get('/suggestions', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { q, limit } = req.query;
     
     const result = await contactTagsService.getTagSuggestions(
-      req.user.userId,
+      req.businessId,
       q || '',
       parseInt(limit) || 10
     );
@@ -370,9 +370,9 @@ router.get('/suggestions', auth, async (req, res) => {
  * @desc    Get tag analytics and statistics
  * @access  Private
  */
-router.get('/analytics', auth, async (req, res) => {
+router.get('/analytics', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
-    const result = await contactTagsService.getTagAnalytics(req.user.userId);
+    const result = await contactTagsService.getTagAnalytics(req.businessId);
     
     res.json(result);
   } catch (error) {

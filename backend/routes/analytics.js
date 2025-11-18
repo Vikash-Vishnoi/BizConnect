@@ -5,12 +5,12 @@ const Campaign = require('../models/Campaign');
 // ✅ REMOVED: Message model no longer exists - using Conversation.messages
 const Conversation = require('../models/Conversation');
 const Template = require('../models/Template');
-const { auth } = require('../middleware/auth');
+const { auth, requireBusiness, requireBusinessPermission } = require('../middleware/auth');
 
 // @route   GET /api/analytics/overview
 // @desc    Get analytics overview (alias for dashboard)
 // @access  Private
-router.get('/overview', auth, async (req, res) => {
+router.get('/overview', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   // Redirect to dashboard
   req.url = '/dashboard';
   router.handle(req, res);
@@ -19,7 +19,7 @@ router.get('/overview', auth, async (req, res) => {
 // @route   GET /api/analytics/dashboard
 // @desc    Get dashboard analytics summary
 // @access  Private
-router.get('/dashboard', auth, async (req, res) => {
+router.get('/dashboard', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     
@@ -27,11 +27,11 @@ router.get('/dashboard', auth, async (req, res) => {
     const end = endDate ? new Date(endDate) : new Date();
 
     // Get summary from Analytics collection
-    const summary = await Analytics.getSummary(req.userId, start, end);
+    const summary = await Analytics.getSummary(req.businessId, start, end);
 
     // Get real-time counts
     // ✅ FIXED: Calculate totalMessages from embedded messages in conversations
-    const conversations = await Conversation.find({ userId: req.userId }, 'messages');
+    const conversations = await Conversation.find({ businessId: req.businessId }, 'messages');
     const totalMessages = conversations.reduce((sum, conv) => sum + (conv.messages?.length || 0), 0);
 
     const [
@@ -43,18 +43,18 @@ router.get('/dashboard', auth, async (req, res) => {
       totalConversations,
       activeConversations
     ] = await Promise.all([
-      Campaign.countDocuments({ userId: req.userId }),
-      Campaign.countDocuments({ userId: req.userId, status: 'active' }),
-      Campaign.countDocuments({ userId: req.userId, status: 'completed' }),
-      Template.countDocuments({ userId: req.userId }),
-      Template.countDocuments({ userId: req.userId, status: 'approved' }),
-      Conversation.countDocuments({ userId: req.userId }),
-      Conversation.countDocuments({ userId: req.userId, status: 'active' })
+      Campaign.countDocuments({ businessId: req.businessId }),
+      Campaign.countDocuments({ businessId: req.businessId, status: 'active' }),
+      Campaign.countDocuments({ businessId: req.businessId, status: 'completed' }),
+      Template.countDocuments({ businessId: req.businessId }),
+      Template.countDocuments({ businessId: req.businessId, status: 'approved' }),
+      Conversation.countDocuments({ businessId: req.businessId }),
+      Conversation.countDocuments({ businessId: req.businessId, status: 'active' })
     ]);
 
     // Calculate growth rates (compare with previous period)
     const previousStart = new Date(start.getTime() - (end.getTime() - start.getTime()));
-    const previousSummary = await Analytics.getSummary(req.userId, previousStart, start);
+    const previousSummary = await Analytics.getSummary(req.businessId, previousStart, start);
 
     const calculateGrowth = (current, previous) => {
       if (!previous || previous === 0) return 0;
@@ -109,7 +109,7 @@ router.get('/dashboard', auth, async (req, res) => {
 // @route   GET /api/analytics/daily
 // @desc    Get daily analytics data
 // @access  Private
-router.get('/daily', auth, async (req, res) => {
+router.get('/daily', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     
@@ -117,7 +117,7 @@ router.get('/daily', auth, async (req, res) => {
     const end = endDate ? new Date(endDate) : new Date();
 
     const analytics = await Analytics.find({
-      userId: req.userId,
+      businessId: req.businessId,
       date: { $gte: start, $lte: end },
       campaignId: null // Only daily aggregates
     }).sort({ date: 1 });
@@ -132,10 +132,10 @@ router.get('/daily', auth, async (req, res) => {
 // @route   GET /api/analytics/campaigns
 // @desc    Get campaign performance analytics
 // @access  Private
-router.get('/campaigns', auth, async (req, res) => {
+router.get('/campaigns', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
     const campaigns = await Campaign.find({
-      userId: req.userId,
+      businessId: req.businessId,
       status: { $in: ['completed', 'active'] }
     })
     .select('name status stats createdAt completedAt')
@@ -173,9 +173,9 @@ router.get('/campaigns', auth, async (req, res) => {
 // @route   GET /api/analytics/templates
 // @desc    Get template usage analytics
 // @access  Private
-router.get('/templates', auth, async (req, res) => {
+router.get('/templates', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
-    const templates = await Template.find({ userId: req.userId })
+    const templates = await Template.find({ businessId: req.businessId })
       .select('name category status usage')
       .sort({ 'usage.messagesSent': -1 })
       .limit(20);
@@ -190,7 +190,7 @@ router.get('/templates', auth, async (req, res) => {
 // @route   GET /api/analytics/conversations
 // @desc    Get conversation analytics
 // @access  Private
-router.get('/conversations', auth, async (req, res) => {
+router.get('/conversations', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
     // ✅ FIXED: Get analytics from embedded messages in conversations
     const [
@@ -198,13 +198,13 @@ router.get('/conversations', auth, async (req, res) => {
       activeConversations,
       archivedConversations
     ] = await Promise.all([
-      Conversation.countDocuments({ userId: req.userId }),
-      Conversation.countDocuments({ userId: req.userId, status: 'active' }),
-      Conversation.countDocuments({ userId: req.userId, status: 'archived' })
+      Conversation.countDocuments({ businessId: req.businessId }),
+      Conversation.countDocuments({ businessId: req.businessId, status: 'active' }),
+      Conversation.countDocuments({ businessId: req.businessId, status: 'archived' })
     ]);
 
     // Calculate average messages per conversation and response rates from embedded messages
-    const conversations = await Conversation.find({ userId: req.userId }, 'messages');
+    const conversations = await Conversation.find({ businessId: req.businessId }, 'messages');
     
     let totalMessagesCount = 0;
     let incomingCount = 0;
@@ -244,14 +244,14 @@ router.get('/conversations', auth, async (req, res) => {
 // @route   POST /api/analytics/update
 // @desc    Update daily analytics (typically called by cron job)
 // @access  Private
-router.post('/update', auth, async (req, res) => {
+router.post('/update', auth, requireBusiness, requireBusinessPermission('manage_analytics'), async (req, res) => {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     // ✅ FIXED: Get today's statistics from embedded messages
     const conversations = await Conversation.find({
-      userId: req.userId,
+      businessId: req.businessId,
       'messages.timestamp': { $gte: today }
     }, 'messages');
 
@@ -275,12 +275,12 @@ router.post('/update', auth, async (req, res) => {
     // Get campaign stats
     const [activeCampaigns, completedCampaigns] = await Promise.all([
       Campaign.countDocuments({
-        userId: req.userId,
+        businessId: req.businessId,
         status: 'active',
         startedAt: { $gte: today }
       }),
       Campaign.countDocuments({
-        userId: req.userId,
+        businessId: req.businessId,
         status: 'completed',
         completedAt: { $gte: today }
       })
@@ -289,11 +289,11 @@ router.post('/update', auth, async (req, res) => {
     // Get conversation stats
     const [activeConversations, newConversations] = await Promise.all([
       Conversation.countDocuments({
-        userId: req.userId,
+        businessId: req.businessId,
         status: 'active'
       }),
       Conversation.countDocuments({
-        userId: req.userId,
+        businessId: req.businessId,
         createdAt: { $gte: today }
       })
     ]);
@@ -301,11 +301,11 @@ router.post('/update', auth, async (req, res) => {
     // Get template stats
     const [templatesCreated, templatesApproved] = await Promise.all([
       Template.countDocuments({
-        userId: req.userId,
+        businessId: req.businessId,
         createdAt: { $gte: today }
       }),
       Template.countDocuments({
-        userId: req.userId,
+        businessId: req.businessId,
         status: 'approved',
         updatedAt: { $gte: today }
       })
@@ -314,7 +314,7 @@ router.post('/update', auth, async (req, res) => {
     // Update or create analytics document
     await Analytics.findOneAndUpdate(
       {
-        userId: req.userId,
+        businessId: req.businessId,
         date: today,
         campaignId: null
       },
@@ -348,21 +348,21 @@ router.post('/update', auth, async (req, res) => {
 // @route   GET /api/analytics/recent-activity
 // @desc    Get recent activity feed
 // @access  Private
-router.get('/recent-activity', auth, async (req, res) => {
+router.get('/recent-activity', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
     const { limit = 10 } = req.query;
     
     // Get recent campaigns, conversations, and templates
     const [recentCampaigns, recentConversations, recentTemplates] = await Promise.all([
-      Campaign.find({ userId: req.userId })
+      Campaign.find({ businessId: req.businessId })
         .sort({ updatedAt: -1 })
         .limit(5)
         .select('name status updatedAt'),
-      Conversation.find({ userId: req.userId })
+      Conversation.find({ businessId: req.businessId })
         .sort({ updatedAt: -1 })
         .limit(10)
         .select('contact messages updatedAt'),
-      Template.find({ userId: req.userId })
+      Template.find({ businessId: req.businessId })
         .sort({ updatedAt: -1 })
         .limit(3)
         .select('name status updatedAt')
@@ -428,9 +428,9 @@ router.get('/recent-activity', auth, async (req, res) => {
 // @route   GET /api/analytics/quality
 // @desc    Get quality score analytics
 // @access  Private
-router.get('/quality', auth, async (req, res) => {
+router.get('/quality', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
-    const campaigns = await Campaign.find({ userId: req.userId });
+    const campaigns = await Campaign.find({ businessId: req.businessId });
     const totalCampaigns = campaigns.length;
     
     if (totalCampaigns === 0) {
@@ -451,7 +451,7 @@ router.get('/quality', auth, async (req, res) => {
     const responseRate = totalDelivered > 0 ? Math.round((totalRead / totalDelivered) * 100) : 0;
     
     // Get template quality
-    const templates = await Template.find({ userId: req.userId });
+    const templates = await Template.find({ businessId: req.businessId });
     const approvedTemplates = templates.filter(t => t.status === 'approved').length;
     const templateQuality = templates.length > 0 ? Math.round((approvedTemplates / templates.length) * 100) : 0;
     
@@ -478,7 +478,7 @@ router.get('/quality', auth, async (req, res) => {
 // @route   GET /api/analytics/trends
 // @desc    Get message trends
 // @access  Private
-router.get('/trends', auth, async (req, res) => {
+router.get('/trends', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
     const start = startDate ? new Date(startDate) : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
@@ -486,7 +486,7 @@ router.get('/trends', auth, async (req, res) => {
 
     // ✅ FIXED: Get messages from embedded conversation messages
     const conversations = await Conversation.find({
-      userId: req.userId,
+      businessId: req.businessId,
       'messages.timestamp': { $gte: start, $lte: end }
     }, 'messages');
 
@@ -532,10 +532,10 @@ router.get('/trends', auth, async (req, res) => {
 // @route   GET /api/analytics/status-distribution
 // @desc    Get message status distribution
 // @access  Private
-router.get('/status-distribution', auth, async (req, res) => {
+router.get('/status-distribution', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
     // ✅ FIXED: Get messages from embedded conversation messages
-    const conversations = await Conversation.find({ userId: req.userId }, 'messages');
+    const conversations = await Conversation.find({ businessId: req.businessId }, 'messages');
     
     const distribution = {
       sent: 0,
@@ -573,10 +573,10 @@ router.get('/status-distribution', auth, async (req, res) => {
 // @route   GET /api/analytics/campaign-performance
 // @desc    Get campaign performance metrics
 // @access  Private
-router.get('/campaign-performance', auth, async (req, res) => {
+router.get('/campaign-performance', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
-    const query = { userId: req.userId };
+    const query = { businessId: req.businessId };
     
     if (startDate && endDate) {
       query.createdAt = {
@@ -612,7 +612,7 @@ router.get('/campaign-performance', auth, async (req, res) => {
 // @route   GET /api/analytics/conversation-categories
 // @desc    Get conversation analytics by category with cost estimation (FEATURE 18)
 // @access  Private
-router.get('/conversation-categories', auth, async (req, res) => {
+router.get('/conversation-categories', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
     const { startDate, endDate, period = '30d' } = req.query;
 
@@ -628,7 +628,7 @@ router.get('/conversation-categories', auth, async (req, res) => {
 
     // Get all conversations with messages in date range
     const conversations = await Conversation.find({
-      userId: req.userId,
+      businessId: req.businessId,
       'messages.timestamp': { $gte: start, $lte: end }
     }, 'messages contactName contactPhone tags');
 
@@ -739,7 +739,7 @@ function categorizeConversation(conversation, messages) {
 // @route   GET /api/analytics/cost-breakdown
 // @desc    Get detailed cost breakdown with daily/weekly trends
 // @access  Private
-router.get('/cost-breakdown', auth, async (req, res) => {
+router.get('/cost-breakdown', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
     const { period = '30d' } = req.query;
 
@@ -751,7 +751,7 @@ router.get('/cost-breakdown', auth, async (req, res) => {
 
     // Get all conversations in range
     const conversations = await Conversation.find({
-      userId: req.userId,
+      businessId: req.businessId,
       'messages.timestamp': { $gte: start, $lte: end }
     }, 'messages createdAt');
 

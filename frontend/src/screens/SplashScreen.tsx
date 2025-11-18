@@ -10,6 +10,8 @@ import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {RootStackParamList} from '../types/navigation';
 import {storageService} from '../services/storage';
 import {authAPI} from '../services/api';
+import LinearGradient from 'react-native-linear-gradient';
+import theme from '../theme';
 
 type SplashScreenNavigationProp = NativeStackNavigationProp<
   RootStackParamList,
@@ -60,8 +62,12 @@ const SplashScreen: React.FC<Props> = ({navigation}) => {
   };
 
   return (
-    <View style={styles.container}>
-      <Animated.View style={[styles.content, {opacity: fadeAnim}]}>
+    <LinearGradient
+      colors={[theme.colors.gradientStart, theme.colors.gradientEnd]}
+      start={{x: 0, y: 0}}
+      end={{x: 1, y: 1}}
+      style={styles.container}>
+      <Animated.View style={[styles.content, {opacity: fadeAnim, transform: [{scale: fadeAnim}]}]}>
         {}
         <View style={styles.iconContainer}>
           <Text style={styles.icon}>📱</Text>
@@ -73,21 +79,20 @@ const SplashScreen: React.FC<Props> = ({navigation}) => {
 
         {}
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#25D366" />
+          <ActivityIndicator size="large" color={theme.colors.textInverse} />
           <Text style={styles.loadingText}>Loading...</Text>
         </View>
       </Animated.View>
 
       {}
       <Text style={styles.version}>Version 1.0.0</Text>
-    </View>
+    </LinearGradient>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -97,42 +102,48 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   iconContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 20,
-    backgroundColor: '#25D366',
+    width: 120,
+    height: 120,
+    borderRadius: 30,
+    backgroundColor: theme.colors.surface,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: theme.spacing.xl,
+    ...theme.shadows.lg,
   },
   icon: {
-    fontSize: 50,
+    fontSize: 60,
   },
   title: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: 'bold',
-    color: '#25D366',
-    marginBottom: 8,
+    color: theme.colors.textInverse,
+    marginBottom: theme.spacing.xs,
+    textAlign: 'center',
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
-    marginBottom: 40,
+    color: theme.colors.textInverse,
+    marginBottom: theme.spacing.xxl,
+    opacity: 0.9,
+    textAlign: 'center',
   },
   loadingContainer: {
     alignItems: 'center',
-    marginTop: 20,
+    marginTop: theme.spacing.xl,
   },
   loadingText: {
-    marginTop: 12,
+    marginTop: theme.spacing.sm,
     fontSize: 14,
-    color: '#999',
+    color: theme.colors.textInverse,
+    opacity: 0.8,
   },
   version: {
     position: 'absolute',
-    bottom: 30,
+    bottom: theme.spacing.xl,
     fontSize: 12,
-    color: '#999',
+    color: theme.colors.textInverse,
+    opacity: 0.7,
   },
 });
 

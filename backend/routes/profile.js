@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
-const { auth } = require('../middleware/auth');
+const { auth, requireBusiness, requireBusinessPermission } = require('../middleware/auth');
 const { body, validationResult } = require('express-validator');
 const whatsappService = require('../services/whatsappService');
 
@@ -116,9 +116,10 @@ router.put('/', [
 // @route   GET /api/profile/whatsapp
 // @desc    Get WhatsApp Business Profile information
 // @access  Private
-router.get('/whatsapp', auth, async (req, res) => {
+router.get('/whatsapp', auth, requireBusiness, requireBusinessPermission('manage_settings'), async (req, res) => {
   try {
-    const result = await whatsappService.getBusinessProfile();
+    const whatsappServiceInstance = new whatsappService.constructor(req.business.whatsappCredentials);
+    const result = await whatsappServiceInstance.getBusinessProfile();
     
     if (result.success) {
       res.json({
@@ -142,6 +143,8 @@ router.get('/whatsapp', auth, async (req, res) => {
 // @access  Private
 router.put('/whatsapp', [
   auth,
+  requireBusiness,
+  requireBusinessPermission('manage_settings'),
   body('about')
     .optional()
     .trim()
@@ -210,7 +213,8 @@ router.put('/whatsapp', [
       });
     }
 
-    const result = await whatsappService.updateBusinessProfile(profileData);
+    const whatsappServiceInstance = new whatsappService.constructor(req.business.whatsappCredentials);
+    const result = await whatsappServiceInstance.updateBusinessProfile(profileData);
     
     if (result.success) {
       res.json({
@@ -234,6 +238,8 @@ router.put('/whatsapp', [
 // @access  Private
 router.post('/whatsapp/photo', [
   auth,
+  requireBusiness,
+  requireBusinessPermission('manage_settings'),
   body('mediaId')
     .notEmpty()
     .withMessage('Media ID is required')
@@ -248,7 +254,8 @@ router.post('/whatsapp/photo', [
 
     const { mediaId } = req.body;
 
-    const result = await whatsappService.updateProfilePhoto(mediaId);
+    const whatsappServiceInstance = new whatsappService.constructor(req.business.whatsappCredentials);
+    const result = await whatsappServiceInstance.updateProfilePhoto(mediaId);
     
     if (result.success) {
       res.json({
@@ -270,10 +277,11 @@ router.post('/whatsapp/photo', [
 // @route   DELETE /api/profile/whatsapp/photo
 // @desc    Remove WhatsApp Business Profile photo
 // @access  Private
-router.delete('/whatsapp/photo', auth, async (req, res) => {
+router.delete('/whatsapp/photo', auth, requireBusiness, requireBusinessPermission('manage_settings'), async (req, res) => {
   try {
     // To remove profile photo, update with empty handle
-    const result = await whatsappService.updateBusinessProfile({
+    const whatsappServiceInstance = new whatsappService.constructor(req.business.whatsappCredentials);
+    const result = await whatsappServiceInstance.updateBusinessProfile({
       profile_picture_handle: ''
     });
     
@@ -300,9 +308,10 @@ router.delete('/whatsapp/photo', auth, async (req, res) => {
 // @route   GET /api/profile/whatsapp/business-hours
 // @desc    Get business hours configuration
 // @access  Private
-router.get('/whatsapp/business-hours', auth, async (req, res) => {
+router.get('/whatsapp/business-hours', auth, requireBusiness, requireBusinessPermission('manage_settings'), async (req, res) => {
   try {
-    const result = await whatsappService.getBusinessHours();
+    const whatsappServiceInstance = new whatsappService.constructor(req.business.whatsappCredentials);
+    const result = await whatsappServiceInstance.getBusinessHours();
     
     if (result.success) {
       res.json({
@@ -326,6 +335,8 @@ router.get('/whatsapp/business-hours', auth, async (req, res) => {
 // @access  Private
 router.put('/whatsapp/business-hours', [
   auth,
+  requireBusiness,
+  requireBusinessPermission('manage_settings'),
   body('businessHours')
     .notEmpty()
     .withMessage('Business hours configuration is required')
@@ -369,7 +380,8 @@ router.put('/whatsapp/business-hours', [
       }
     }
 
-    const result = await whatsappService.updateBusinessHours(businessHours);
+    const whatsappServiceInstance = new whatsappService.constructor(req.business.whatsappCredentials);
+    const result = await whatsappServiceInstance.updateBusinessHours(businessHours);
     
     if (result.success) {
       res.json({
@@ -395,7 +407,7 @@ router.put('/whatsapp/business-hours', [
 // @route   GET /api/profile/whatsapp/verticals
 // @desc    Get list of available business verticals
 // @access  Private
-router.get('/whatsapp/verticals', auth, (req, res) => {
+router.get('/whatsapp/verticals', auth, requireBusiness, (req, res) => {
   const verticals = [
     { value: 'UNDEFINED', label: 'Undefined' },
     { value: 'OTHER', label: 'Other' },
@@ -428,7 +440,7 @@ router.get('/whatsapp/verticals', auth, (req, res) => {
 // @route   GET /api/profile/summary
 // @desc    Get complete profile summary (user + WhatsApp business)
 // @access  Private
-router.get('/summary', auth, async (req, res) => {
+router.get('/summary', auth, requireBusiness, async (req, res) => {
   try {
     // Get user profile
     const user = await User.findById(req.userId)
@@ -439,9 +451,10 @@ router.get('/summary', auth, async (req, res) => {
     }
 
     // Get WhatsApp Business Profile
-    const whatsappResult = await whatsappService.getBusinessProfile();
+    const whatsappServiceInstance = new whatsappService.constructor(req.business.whatsappCredentials);
+    const whatsappResult = await whatsappServiceInstance.getBusinessProfile();
 
-    // Get user statistics
+    // Get business statistics
     const Campaign = require('../models/Campaign');
     const Template = require('../models/Template');
     const Conversation = require('../models/Conversation');
@@ -454,12 +467,12 @@ router.get('/summary', auth, async (req, res) => {
       totalConversations,
       activeConversations
     ] = await Promise.all([
-      Campaign.countDocuments({ userId: req.userId }),
-      Campaign.countDocuments({ userId: req.userId, status: 'active' }),
-      Template.countDocuments({ userId: req.userId }),
-      Template.countDocuments({ userId: req.userId, status: 'approved' }),
-      Conversation.countDocuments({ userId: req.userId, isDeleted: false }),
-      Conversation.countDocuments({ userId: req.userId, status: 'active', isDeleted: false })
+      Campaign.countDocuments({ businessId: req.businessId }),
+      Campaign.countDocuments({ businessId: req.businessId, status: 'active' }),
+      Template.countDocuments({ businessId: req.businessId }),
+      Template.countDocuments({ businessId: req.businessId, status: 'approved' }),
+      Conversation.countDocuments({ businessId: req.businessId, isDeleted: false }),
+      Conversation.countDocuments({ businessId: req.businessId, status: 'active', isDeleted: false })
     ]);
 
     res.json({

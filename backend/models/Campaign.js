@@ -149,6 +149,13 @@ const campaignSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
+  },
+  // Multi-Business Support
+  businessId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Business',
+    required: true,
+    index: true
   }
 }, {
   timestamps: true
@@ -157,6 +164,7 @@ const campaignSchema = new mongoose.Schema({
 // Index for faster queries
 campaignSchema.index({ status: 1, createdAt: -1 });
 campaignSchema.index({ userId: 1, createdAt: -1 });
+campaignSchema.index({ businessId: 1, status: 1, createdAt: -1 });
 
 // Update stats before saving
 campaignSchema.pre('save', function(next) {

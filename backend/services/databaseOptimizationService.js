@@ -20,6 +20,7 @@ const AutomationRule = require('../models/AutomationRule');
 const AutomationLog = require('../models/AutomationLog');
 const Media = require('../models/Media');
 const User = require('../models/User');
+const Business = require('../models/Business');
 
 class DatabaseOptimizationService {
   /**
@@ -31,15 +32,15 @@ class DatabaseOptimizationService {
     try {
       // Conversation indexes (most critical for performance)
       await Conversation.collection.createIndexes([
-        // Primary query patterns
-        { key: { userId: 1, lastMessageAt: -1 }, name: 'user_lastmessage_idx' },
-        { key: { userId: 1, status: 1, lastMessageAt: -1 }, name: 'user_status_lastmessage_idx' },
-        { key: { userId: 1, unreadCount: 1 }, name: 'user_unread_idx' },
+        // Primary query patterns (multi-business)
+        { key: { businessId: 1, lastMessageAt: -1 }, name: 'business_lastmessage_idx' },
+        { key: { businessId: 1, status: 1, lastMessageAt: -1 }, name: 'business_status_lastmessage_idx' },
+        { key: { businessId: 1, unreadCount: 1 }, name: 'business_unread_idx' },
         
-        // Phone lookup (unique constraint)
+        // Phone lookup (unique per business)
         { 
-          key: { 'contact.phoneNumber': 1, userId: 1 }, 
-          name: 'phone_user_unique_idx',
+          key: { 'contact.phoneNumber': 1, businessId: 1 }, 
+          name: 'phone_business_unique_idx',
           unique: true 
         },
         
@@ -69,7 +70,7 @@ class DatabaseOptimizationService {
 
       // Campaign indexes
       await Campaign.collection.createIndexes([
-        { key: { userId: 1, status: 1, createdAt: -1 }, name: 'user_status_created_idx' },
+        { key: { businessId: 1, status: 1, createdAt: -1 }, name: 'business_status_created_idx' },
         { key: { status: 1, startedAt: -1 }, name: 'status_started_idx' },
         { key: { templateId: 1 }, name: 'template_lookup_idx' },
         { key: { 'recipients.phoneNumber': 1 }, name: 'recipient_phone_idx' },
@@ -80,8 +81,8 @@ class DatabaseOptimizationService {
 
       // Template indexes
       await Template.collection.createIndexes([
-        { key: { userId: 1, status: 1 }, name: 'user_status_idx' },
-        { key: { name: 1, userId: 1 }, name: 'name_user_idx' },
+        { key: { businessId: 1, status: 1 }, name: 'business_status_idx' },
+        { key: { name: 1, businessId: 1 }, name: 'name_business_idx' },
         { key: { category: 1, status: 1 }, name: 'category_status_idx' },
         { key: { isDeleted: 1 }, name: 'soft_delete_idx' }
       ]);
@@ -89,7 +90,7 @@ class DatabaseOptimizationService {
 
       // Analytics indexes
       await Analytics.collection.createIndexes([
-        { key: { userId: 1, date: -1 }, name: 'user_date_idx', unique: true },
+        { key: { businessId: 1, date: -1 }, name: 'business_date_idx', unique: true },
         { key: { campaignId: 1, date: -1 }, name: 'campaign_date_idx' },
         { key: { date: -1 }, name: 'date_range_idx' }
       ]);
@@ -97,7 +98,7 @@ class DatabaseOptimizationService {
 
       // Automation indexes
       await AutomationRule.collection.createIndexes([
-        { key: { userId: 1, isActive: 1 }, name: 'user_active_idx' },
+        { key: { businessId: 1, isActive: 1 }, name: 'business_active_idx' },
         { key: { 'trigger.type': 1, isActive: 1 }, name: 'trigger_active_idx' }
       ]);
       console.log('✅ AutomationRule indexes created');
@@ -111,7 +112,7 @@ class DatabaseOptimizationService {
 
       // Media indexes
       await Media.collection.createIndexes([
-        { key: { userId: 1, uploadedAt: -1 }, name: 'user_uploaded_idx' },
+        { key: { businessId: 1, uploadedAt: -1 }, name: 'business_uploaded_idx' },
         { key: { whatsappMediaId: 1 }, name: 'whatsapp_media_id_idx', unique: true, sparse: true },
         { key: { scheduledDeleteAt: 1 }, name: 'scheduled_delete_idx', sparse: true },
         { key: { type: 1, uploadedAt: -1 }, name: 'type_uploaded_idx' }
@@ -171,19 +172,26 @@ class DatabaseOptimizationService {
   /**
    * Archive old completed campaigns (older than specified days)
    * @param {number} daysOld - Archive campaigns older than this many days
+   * @param {string} businessId - Business ID to filter by (optional, archives all if not provided)
    */
-  static async archiveOldCampaigns(daysOld = 90) {
-    console.log(`📦 Archiving campaigns older than ${daysOld} days...`);
+  static async archiveOldCampaigns(daysOld = 90, businessId = null) {
+    console.log(`📦 Archiving campaigns older than ${daysOld} days${businessId ? ' for business ' + businessId : ''}...`);
     
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - daysOld);
 
+    const filter = {
+      status: 'completed',
+      completedAt: { $lt: cutoffDate },
+      isArchived: { $ne: true }
+    };
+    
+    if (businessId) {
+      filter.businessId = businessId;
+    }
+
     const result = await Campaign.updateMany(
-      {
-        status: 'completed',
-        completedAt: { $lt: cutoffDate },
-        isArchived: { $ne: true }
-      },
+      filter,
       {
         $set: {
           isArchived: true,
@@ -203,19 +211,26 @@ class DatabaseOptimizationService {
   /**
    * Archive old conversations (older than specified days and no recent activity)
    * @param {number} daysOld - Archive conversations older than this many days
+   * @param {string} businessId - Business ID to filter by (optional, archives all if not provided)
    */
-  static async archiveOldConversations(daysOld = 180) {
-    console.log(`📦 Archiving conversations older than ${daysOld} days...`);
+  static async archiveOldConversations(daysOld = 180, businessId = null) {
+    console.log(`📦 Archiving conversations older than ${daysOld} days${businessId ? ' for business ' + businessId : ''}...`);
     
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - daysOld);
 
+    const filter = {
+      status: 'active',
+      lastMessageAt: { $lt: cutoffDate },
+      unreadCount: 0 // Only archive if no unread messages
+    };
+    
+    if (businessId) {
+      filter.businessId = businessId;
+    }
+
     const result = await Conversation.updateMany(
-      {
-        status: 'active',
-        lastMessageAt: { $lt: cutoffDate },
-        unreadCount: 0 // Only archive if no unread messages
-      },
+      filter,
       {
         $set: {
           status: 'archived',
@@ -241,14 +256,21 @@ class DatabaseOptimizationService {
    * Optimize conversation documents by limiting message array size
    * Move old messages to archive collection if array gets too large
    * @param {number} maxMessages - Maximum messages to keep in main document
+   * @param {string} businessId - Business ID to filter by (optional, optimizes all if not provided)
    */
-  static async optimizeConversationSize(maxMessages = 1000) {
-    console.log(`🔧 Optimizing conversations with more than ${maxMessages} messages...`);
+  static async optimizeConversationSize(maxMessages = 1000, businessId = null) {
+    console.log(`🔧 Optimizing conversations with more than ${maxMessages} messages${businessId ? ' for business ' + businessId : ''}...`);
     
     // Find conversations with too many messages
-    const largeConversations = await Conversation.find({
+    const filter = {
       $expr: { $gt: [{ $size: '$messages' }, maxMessages] }
-    }).select('_id messages');
+    };
+    
+    if (businessId) {
+      filter.businessId = businessId;
+    }
+    
+    const largeConversations = await Conversation.find(filter).select('_id messages');
 
     let optimizedCount = 0;
 
@@ -277,9 +299,10 @@ class DatabaseOptimizationService {
 
   /**
    * Get database statistics and health metrics
+   * @param {string} businessId - Business ID to filter by (optional, all data if not provided)
    */
-  static async getDatabaseStats() {
-    console.log('📊 Gathering database statistics...');
+  static async getDatabaseStats(businessId = null) {
+    console.log(`📊 Gathering database statistics${businessId ? ' for business ' + businessId : ''}...`);
     
     const stats = {
       collections: {},
@@ -302,7 +325,8 @@ class DatabaseOptimizationService {
 
       for (const { name, model } of collections) {
         try {
-          const count = await model.countDocuments();
+          const countFilter = businessId && name !== 'users' ? { businessId } : {};
+          const count = await model.countDocuments(countFilter);
           const collStats = await mongoose.connection.db.collection(name).stats();
           
           stats.collections[name] = {
@@ -343,9 +367,10 @@ class DatabaseOptimizationService {
 
   /**
    * Identify slow queries and performance issues
+   * @param {string} businessId - Business ID to filter by (optional, all data if not provided)
    */
-  static async analyzePerformance() {
-    console.log('🔍 Analyzing query performance...');
+  static async analyzePerformance(businessId = null) {
+    console.log(`🔍 Analyzing query performance${businessId ? ' for business ' + businessId : ''}...`);
     
     const analysis = {
       slowQueries: [],
@@ -366,9 +391,10 @@ class DatabaseOptimizationService {
       };
 
       // Recommendations based on data patterns
-      const conversationCount = await Conversation.countDocuments();
-      const campaignCount = await Campaign.countDocuments();
-      const analyticsCount = await Analytics.countDocuments();
+      const filter = businessId ? { businessId } : {};
+      const conversationCount = await Conversation.countDocuments(filter);
+      const campaignCount = await Campaign.countDocuments(filter);
+      const analyticsCount = await Analytics.countDocuments(filter);
 
       if (conversationCount > 10000) {
         analysis.recommendations.push({
@@ -395,9 +421,13 @@ class DatabaseOptimizationService {
       }
 
       // Check for conversations with too many messages
-      const largeConversations = await Conversation.countDocuments({
+      const largeFilter = {
         $expr: { $gt: [{ $size: '$messages' }, 500] }
-      });
+      };
+      if (businessId) {
+        largeFilter.businessId = businessId;
+      }
+      const largeConversations = await Conversation.countDocuments(largeFilter);
 
       if (largeConversations > 0) {
         analysis.recommendations.push({
@@ -419,8 +449,9 @@ class DatabaseOptimizationService {
   /**
    * Run full database optimization (indexes + archiving only, NO deletion)
    * @param {Object} options - Optimization options
+   * @param {string} businessId - Business ID to filter by (optional)
    */
-  static async runFullOptimization(options = {}) {
+  static async runFullOptimization(options = {}, businessId = null) {
     const {
       createIndexes = true,
       archiveCampaigns = true,
@@ -449,14 +480,14 @@ class DatabaseOptimizationService {
       // Archive old campaigns
       if (archiveCampaigns) {
         console.log('\n--- Task 2/3: Archiving Campaigns ---');
-        const archiveResult = await this.archiveOldCampaigns(campaignArchiveDays);
+        const archiveResult = await this.archiveOldCampaigns(campaignArchiveDays, businessId);
         results.tasks.push({ task: 'archiveCampaigns', ...archiveResult });
       }
 
       // Archive old conversations
       if (archiveConversations) {
         console.log('\n--- Task 3/3: Archiving Conversations ---');
-        const conversationResult = await this.archiveOldConversations(conversationArchiveDays);
+        const conversationResult = await this.archiveOldConversations(conversationArchiveDays, businessId);
         results.tasks.push({ task: 'archiveConversations', ...conversationResult });
       }
 

@@ -6,7 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const AuditLog = require('../models/AuditLog');
-const { auth, requirePermission } = require('../middleware/auth');
+const { auth, requirePermission, requireBusiness } = require('../middleware/auth');
 
 // Helper middleware for checking audit permissions
 const checkPermission = (permission) => requirePermission(permission);
@@ -16,7 +16,7 @@ const checkPermission = (permission) => requirePermission(permission);
  * @desc    Get filtered audit logs with pagination
  * @access  Private (VIEW_AUDIT_LOGS permission)
  */
-router.get('/', auth, checkPermission('VIEW_AUDIT_LOGS'), async (req, res) => {
+router.get('/', auth, requireBusiness, checkPermission('VIEW_AUDIT_LOGS'), async (req, res) => {
   try {
     const {
       userId,
@@ -34,7 +34,7 @@ router.get('/', auth, checkPermission('VIEW_AUDIT_LOGS'), async (req, res) => {
     } = req.query;
 
     // Build filters
-    const filters = {};
+    const filters = { businessId: req.businessId };
     
     if (userId) filters.userId = userId;
     if (action) filters.action = action;
@@ -80,14 +80,14 @@ router.get('/', auth, checkPermission('VIEW_AUDIT_LOGS'), async (req, res) => {
  * @desc    Get audit log statistics
  * @access  Private (VIEW_AUDIT_LOGS permission)
  */
-router.get('/stats', auth, checkPermission('VIEW_AUDIT_LOGS'), async (req, res) => {
+router.get('/stats', auth, requireBusiness, checkPermission('VIEW_AUDIT_LOGS'), async (req, res) => {
   try {
     const { userId, startDate, endDate } = req.query;
 
     const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const end = endDate ? new Date(endDate) : new Date();
 
-    const stats = await AuditLog.getStatistics(userId || null, start, end);
+    const stats = await AuditLog.getStatistics(req.businessId, userId || null, start, end);
 
     res.json({
       success: true,
@@ -109,12 +109,12 @@ router.get('/stats', auth, checkPermission('VIEW_AUDIT_LOGS'), async (req, res) 
  * @desc    Get audit log timeline for a specific user
  * @access  Private (VIEW_AUDIT_LOGS permission)
  */
-router.get('/user/:userId', auth, checkPermission('VIEW_AUDIT_LOGS'), async (req, res) => {
+router.get('/user/:userId', auth, requireBusiness, checkPermission('VIEW_AUDIT_LOGS'), async (req, res) => {
   try {
     const { userId } = req.params;
     const { days = 30 } = req.query;
 
-    const timeline = await AuditLog.getUserTimeline(userId, parseInt(days));
+    const timeline = await AuditLog.getUserTimeline(req.businessId, userId, parseInt(days));
 
     res.json({
       success: true,
@@ -136,14 +136,14 @@ router.get('/user/:userId', auth, checkPermission('VIEW_AUDIT_LOGS'), async (req
  * @desc    Get sensitive operations logs
  * @access  Private (VIEW_AUDIT_LOGS permission)
  */
-router.get('/sensitive', auth, checkPermission('VIEW_AUDIT_LOGS'), async (req, res) => {
+router.get('/sensitive', auth, requireBusiness, checkPermission('VIEW_AUDIT_LOGS'), async (req, res) => {
   try {
     const { startDate, endDate } = req.query;
 
     const start = startDate ? new Date(startDate) : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const end = endDate ? new Date(endDate) : new Date();
 
-    const operations = await AuditLog.getSensitiveOperations(start, end);
+    const operations = await AuditLog.getSensitiveOperations(req.businessId, start, end);
 
     res.json({
       success: true,
@@ -166,7 +166,7 @@ router.get('/sensitive', auth, checkPermission('VIEW_AUDIT_LOGS'), async (req, r
  * @desc    Get list of all available actions
  * @access  Private (VIEW_AUDIT_LOGS permission)
  */
-router.get('/actions', auth, checkPermission('VIEW_AUDIT_LOGS'), async (req, res) => {
+router.get('/actions', auth, requireBusiness, checkPermission('VIEW_AUDIT_LOGS'), async (req, res) => {
   try {
     const actions = [
       // Authentication
@@ -227,7 +227,7 @@ router.get('/actions', auth, checkPermission('VIEW_AUDIT_LOGS'), async (req, res
  * @desc    Get list of all resource types
  * @access  Private (VIEW_AUDIT_LOGS permission)
  */
-router.get('/resource-types', auth, checkPermission('VIEW_AUDIT_LOGS'), async (req, res) => {
+router.get('/resource-types', auth, requireBusiness, checkPermission('VIEW_AUDIT_LOGS'), async (req, res) => {
   try {
     const resourceTypes = [
       'USER', 'MESSAGE', 'TEMPLATE', 'CAMPAIGN', 'CONVERSATION',
@@ -255,7 +255,7 @@ router.get('/resource-types', auth, checkPermission('VIEW_AUDIT_LOGS'), async (r
  * @desc    Export audit logs to CSV
  * @access  Private (VIEW_AUDIT_LOGS permission)
  */
-router.post('/export', auth, checkPermission('VIEW_AUDIT_LOGS'), async (req, res) => {
+router.post('/export', auth, requireBusiness, checkPermission('VIEW_AUDIT_LOGS'), async (req, res) => {
   try {
     const {
       userId,
@@ -267,7 +267,7 @@ router.post('/export', auth, checkPermission('VIEW_AUDIT_LOGS'), async (req, res
     } = req.body;
 
     // Build filters
-    const filters = {};
+    const filters = { businessId: req.businessId };
     if (userId) filters.userId = userId;
     if (action) filters.action = action;
     if (resourceType) filters.resourceType = resourceType;

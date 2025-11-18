@@ -6,7 +6,6 @@ import {
   FlatList,
   TouchableOpacity,
   TextInput,
-  ActivityIndicator,
   SafeAreaView,
   RefreshControl,
 } from 'react-native';
@@ -18,6 +17,7 @@ import type {Template, TemplateStatus, TemplateCategory} from '../types/template
 import {templateService} from '../services/templateService';
 import TemplateCard from '../components/templates/TemplateCard';
 import {useFocusEffect} from '@react-navigation/native';
+import {SkeletonList, EmptyState, EnhancedButton} from '../components/common';
 import theme from '../theme';
 import Button from '../components/common/Button';
 
@@ -164,8 +164,7 @@ const TemplatesScreen: React.FC<Props> = ({navigation}) => {
           <View style={styles.placeholder} />
         </LinearGradient>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-          <Text style={styles.loadingText}>Loading templates...</Text>
+          <SkeletonList count={5} />
         </View>
       </SafeAreaView>
     );
@@ -298,22 +297,25 @@ const TemplatesScreen: React.FC<Props> = ({navigation}) => {
           />
         }
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyIcon}>📄</Text>
-            <Text style={styles.emptyTitle}>No Templates Found</Text>
-            <Text style={styles.emptySubtitle}>
-              {searchQuery || statusFilter !== 'all' || categoryFilter !== 'all'
+          <EmptyState
+            icon="📄"
+            title="No Templates Found"
+            description={
+              searchQuery || statusFilter !== 'all' || categoryFilter !== 'all'
                 ? 'Try adjusting your filters'
-                : 'Create your first template to get started'}
-            </Text>
-            {templates.length === 0 && (
-              <Button
-                title="Create Template"
-                onPress={handleCreateTemplate}
-                icon="plus"
-              />
-            )}
-          </View>
+                : 'Create your first template to get started'
+            }
+            action={
+              templates.length === 0 ? (
+                <EnhancedButton
+                  title="Create Template"
+                  onPress={handleCreateTemplate}
+                  variant="primary"
+                  gradient
+                />
+              ) : undefined
+            }
+          />
         }
       />
 

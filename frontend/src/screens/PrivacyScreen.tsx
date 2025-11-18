@@ -33,6 +33,8 @@ import {
   type GDPRRequest,
 } from '../services/gdprService';
 import { useToast } from '../hooks/useToast';
+import {EnhancedButton, EnhancedCard, Skeleton, SkeletonCard, EmptyState} from '../components/common';
+import theme from '../theme';
 
 const PrivacyScreen = () => {
   const [activeTab, setActiveTab] = useState<'requests' | 'export' | 'delete'>('requests');
@@ -46,7 +48,7 @@ const PrivacyScreen = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
-  const showToast = useToast();
+  const { showToast } = useToast();
 
   useEffect(() => {
     loadRequests();
@@ -274,7 +276,11 @@ const PrivacyScreen = () => {
       </View>
 
       {loading && !refreshing ? (
-        <ActivityIndicator size="large" color="#6366F1" style={{ marginTop: 40 }} />
+        <View style={{padding: theme.spacing.md}}>
+          <SkeletonCard />
+          <View style={{height: theme.spacing.md}} />
+          <SkeletonCard />
+        </View>
       ) : requests.length === 0 ? (
         <View style={styles.emptyState}>
           <Text style={styles.emptyIcon}>📭</Text>
@@ -436,17 +442,18 @@ const PrivacyScreen = () => {
         </View>
       </View>
 
-      <TouchableOpacity
-        style={[styles.submitButton, loading && styles.submitButtonDisabled]}
-        onPress={handleExportRequest}
-        disabled={loading}
-      >
-        {loading ? (
-          <ActivityIndicator size="small" color="#FFF" />
-        ) : (
-          <Text style={styles.submitButtonText}>📥 Request Export</Text>
-        )}
-      </TouchableOpacity>
+      <View style={{marginTop: theme.spacing.md, marginBottom: theme.spacing.lg}}>
+        <EnhancedButton
+          title="📥 Request Export"
+          onPress={handleExportRequest}
+          loading={loading}
+          disabled={loading}
+          variant="primary"
+          size="large"
+          fullWidth
+          gradient
+        />
+      </View>
 
       <View style={styles.gdprInfo}>
         <Text style={styles.gdprInfoTitle}>🔒 GDPR Compliance</Text>
@@ -518,17 +525,17 @@ const PrivacyScreen = () => {
         </View>
       </View>
 
-      <TouchableOpacity
-        style={[styles.submitButton, styles.deleteButton, loading && styles.submitButtonDisabled]}
-        onPress={handleDeleteRequest}
-        disabled={loading}
-      >
-        {loading ? (
-          <ActivityIndicator size="small" color="#FFF" />
-        ) : (
-          <Text style={styles.submitButtonText}>🗑️ Request Deletion</Text>
-        )}
-      </TouchableOpacity>
+      <View style={{marginTop: theme.spacing.md, marginBottom: theme.spacing.lg}}>
+        <EnhancedButton
+          title="🗑️ Request Deletion"
+          onPress={handleDeleteRequest}
+          loading={loading}
+          disabled={loading}
+          variant="danger"
+          size="large"
+          fullWidth
+        />
+      </View>
 
       <View style={styles.gdprInfo}>
         <Text style={styles.gdprInfoTitle}>🔒 GDPR Compliance</Text>

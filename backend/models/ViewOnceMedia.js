@@ -22,6 +22,12 @@ const viewOnceMediaSchema = new mongoose.Schema({
     required: true,
     index: true
   },
+  businessId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Business',
+    required: true,
+    index: true
+  },
   
   // Recipient Information
   phoneNumber: {

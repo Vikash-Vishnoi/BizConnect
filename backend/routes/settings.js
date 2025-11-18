@@ -1,25 +1,26 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
+const Business = require('../models/Business');
 const Template = require('../models/Template');
-const { auth } = require('../middleware/auth');
-const whatsappService = require('../services/whatsappService');
+const { auth, requireBusiness, requireBusinessPermission } = require('../middleware/auth');
+const WhatsAppService = require('../services/whatsappService');
 
 // @route   GET /api/settings/welcome-message
-// @desc    Get user's welcome message configuration
+// @desc    Get business welcome message configuration
 // @access  Private
-router.get('/welcome-message', auth, async (req, res) => {
+router.get('/welcome-message', auth, requireBusiness, requireBusinessPermission('manage_settings'), async (req, res) => {
   try {
-    const user = await User.findById(req.userId)
+    const business = await Business.findById(req.businessId)
       .populate('welcomeMessageConfig.templateId', 'name category status language components')
       .select('welcomeMessageConfig');
 
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
     }
 
     res.json({
-      config: user.welcomeMessageConfig || {
+      config: business.welcomeMessageConfig || {
         enabled: true,
         strategy: 'template',
         templateId: null,
@@ -37,14 +38,14 @@ router.get('/welcome-message', auth, async (req, res) => {
 });
 
 // @route   PUT /api/settings/welcome-message
-// @desc    Update user's welcome message configuration
+// @desc    Update business welcome message configuration
 // @access  Private
-router.put('/welcome-message', auth, async (req, res) => {
+router.put('/welcome-message', auth, requireBusiness, requireBusinessPermission('manage_settings'), async (req, res) => {
   try {
-    const user = await User.findById(req.userId);
+    const business = await Business.findById(req.businessId);
 
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+    if (!business) {
+      return res.status(404).json({ error: 'Business not found' });
     }
 
     const {
@@ -62,7 +63,7 @@ router.put('/welcome-message', auth, async (req, res) => {
     if (templateId) {
       const template = await Template.findOne({
         _id: templateId,
-        userId: req.userId,
+        businessId: req.businessId,
         status: 'approved'
       });
 
@@ -74,27 +75,27 @@ router.put('/welcome-message', auth, async (req, res) => {
     }
 
     // Update configuration
-    if (!user.welcomeMessageConfig) {
-      user.welcomeMessageConfig = {};
+    if (!business.welcomeMessageConfig) {
+      business.welcomeMessageConfig = {};
     }
 
-    if (enabled !== undefined) user.welcomeMessageConfig.enabled = enabled;
-    if (strategy) user.welcomeMessageConfig.strategy = strategy;
-    if (templateId !== undefined) user.welcomeMessageConfig.templateId = templateId;
-    if (textMessage) user.welcomeMessageConfig.textMessage = textMessage;
-    if (delay !== undefined) user.welcomeMessageConfig.delay = Math.max(0, Math.min(60000, delay));
-    if (businessHoursEnabled !== undefined) user.welcomeMessageConfig.businessHoursEnabled = businessHoursEnabled;
-    if (businessHours) user.welcomeMessageConfig.businessHours = businessHours;
-    if (outsideHoursMessage) user.welcomeMessageConfig.outsideHoursMessage = outsideHoursMessage;
+    if (enabled !== undefined) business.welcomeMessageConfig.enabled = enabled;
+    if (strategy) business.welcomeMessageConfig.strategy = strategy;
+    if (templateId !== undefined) business.welcomeMessageConfig.templateId = templateId;
+    if (textMessage) business.welcomeMessageConfig.textMessage = textMessage;
+    if (delay !== undefined) business.welcomeMessageConfig.delay = Math.max(0, Math.min(60000, delay));
+    if (businessHoursEnabled !== undefined) business.welcomeMessageConfig.businessHoursEnabled = businessHoursEnabled;
+    if (businessHours) business.welcomeMessageConfig.businessHours = businessHours;
+    if (outsideHoursMessage) business.welcomeMessageConfig.outsideHoursMessage = outsideHoursMessage;
 
-    await user.save();
+    await business.save();
 
     // Populate template for response
-    await user.populate('welcomeMessageConfig.templateId', 'name category status language components');
+    await business.populate('welcomeMessageConfig.templateId', 'name category status language components');
 
     res.json({
       message: 'Welcome message configuration updated successfully',
-      config: user.welcomeMessageConfig
+      config: business.welcomeMessageConfig
     });
   } catch (error) {
     console.error('Update welcome message config error:', error);
@@ -105,10 +106,10 @@ router.put('/welcome-message', auth, async (req, res) => {
 // @route   GET /api/settings/welcome-message/templates
 // @desc    Get approved templates suitable for welcome messages
 // @access  Private
-router.get('/welcome-message/templates', auth, async (req, res) => {
+router.get('/welcome-message/templates', auth, requireBusiness, requireBusinessPermission('manage_settings'), async (req, res) => {
   try {
     const templates = await Template.find({
-      userId: req.userId,
+      businessId: req.businessId,
       status: 'approved',
       category: { $in: ['UTILITY', 'MARKETING'] }
     })
@@ -125,7 +126,7 @@ router.get('/welcome-message/templates', auth, async (req, res) => {
 // @route   POST /api/settings/welcome-message/test
 // @desc    Test welcome message configuration
 // @access  Private
-router.post('/welcome-message/test', auth, async (req, res) => {
+router.post('/welcome-message/test', auth, requireBusiness, requireBusinessPermission('manage_settings'), async (req, res) => {
   try {
     const { phoneNumber } = req.body;
 
@@ -133,15 +134,17 @@ router.post('/welcome-message/test', auth, async (req, res) => {
       return res.status(400).json({ error: 'Phone number is required' });
     }
 
-    const user = await User.findById(req.userId)
+    const business = await Business.findById(req.businessId)
       .populate('welcomeMessageConfig.templateId');
 
-    if (!user || !user.welcomeMessageConfig || !user.welcomeMessageConfig.enabled) {
+    if (!business || !business.welcomeMessageConfig || !business.welcomeMessageConfig.enabled) {
       return res.status(400).json({ error: 'Welcome message is not enabled' });
     }
 
-    const whatsappService = require('../services/whatsappService');
-    const config = user.welcomeMessageConfig;
+    // Use business credentials
+    const credentials = await business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
+    const config = business.welcomeMessageConfig;
 
     let result;
 
@@ -183,8 +186,12 @@ router.post('/welcome-message/test', auth, async (req, res) => {
 // @route   GET /api/settings/business-profile
 // @desc    Get WhatsApp business profile information
 // @access  Private
-router.get('/business-profile', auth, async (req, res) => {
+router.get('/business-profile', auth, requireBusiness, requireBusinessPermission('manage_settings'), async (req, res) => {
   try {
+    // Use business credentials
+    const credentials = await req.business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
+    
     const result = await whatsappService.getBusinessProfile();
     
     if (result.success) {
@@ -201,7 +208,7 @@ router.get('/business-profile', auth, async (req, res) => {
 // @route   PUT /api/settings/business-profile
 // @desc    Update WhatsApp business profile information
 // @access  Private
-router.put('/business-profile', auth, async (req, res) => {
+router.put('/business-profile', auth, requireBusiness, requireBusinessPermission('manage_settings'), async (req, res) => {
   try {
     const {
       about,
@@ -221,6 +228,10 @@ router.put('/business-profile', auth, async (req, res) => {
     if (websites !== undefined) profileData.websites = websites;
     if (vertical !== undefined) profileData.vertical = vertical;
 
+    // Use business credentials
+    const credentials = await req.business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
+    
     const result = await whatsappService.updateBusinessProfile(profileData);
     
     if (result.success) {
@@ -240,7 +251,7 @@ router.put('/business-profile', auth, async (req, res) => {
 // @route   POST /api/settings/business-profile/photo
 // @desc    Update business profile photo
 // @access  Private
-router.post('/business-profile/photo', auth, async (req, res) => {
+router.post('/business-profile/photo', auth, requireBusiness, requireBusinessPermission('manage_settings'), async (req, res) => {
   try {
     const { mediaId } = req.body;
 
@@ -248,6 +259,10 @@ router.post('/business-profile/photo', auth, async (req, res) => {
       return res.status(400).json({ error: 'Media ID is required' });
     }
 
+    // Use business credentials
+    const credentials = await req.business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
+    
     const result = await whatsappService.updateProfilePhoto(mediaId);
     
     if (result.success) {
@@ -269,8 +284,12 @@ router.post('/business-profile/photo', auth, async (req, res) => {
 // @route   GET /api/settings/account-limits
 // @desc    Get WhatsApp Business account limits and tier information
 // @access  Private
-router.get('/account-limits', auth, async (req, res) => {
+router.get('/account-limits', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
+    // Use business credentials
+    const credentials = await req.business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
+    
     const result = await whatsappService.getAccountLimits();
     
     if (result.success) {
@@ -287,11 +306,14 @@ router.get('/account-limits', auth, async (req, res) => {
 // @route   GET /api/settings/messaging-limits
 // @desc    Get current messaging limits and usage statistics
 // @access  Private
-router.get('/messaging-limits', auth, async (req, res) => {
+router.get('/messaging-limits', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
     const Conversation = require('../models/Conversation');
     
-    // Get account tier limits from WhatsApp
+    // Get account tier limits from WhatsApp using business credentials
+    const credentials = await req.business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
+    
     const limitsResult = await whatsappService.getAccountLimits();
     
     if (!limitsResult.success) {
@@ -303,7 +325,7 @@ router.get('/messaging-limits', auth, async (req, res) => {
     today.setHours(0, 0, 0, 0);
     
     const conversations = await Conversation.find({
-      userId: req.userId,
+      businessId: req.businessId,
       'messages.timestamp': { $gte: today }
     }).select('messages');
 
@@ -323,7 +345,7 @@ router.get('/messaging-limits', auth, async (req, res) => {
     weekAgo.setDate(weekAgo.getDate() - 7);
     
     const weekConversations = await Conversation.find({
-      userId: req.userId,
+      businessId: req.businessId,
       'messages.timestamp': { $gte: weekAgo }
     }).select('messages');
 
@@ -355,15 +377,15 @@ router.get('/messaging-limits', auth, async (req, res) => {
 });
 
 // @route   GET /api/settings/quality-rating/history
-// @desc    Get quality rating history for the user
+// @desc    Get quality rating history for the business
 // @access  Private
-router.get('/quality-rating/history', auth, async (req, res) => {
+router.get('/quality-rating/history', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
     const QualityRating = require('../models/QualityRating');
     const { startDate, endDate, limit = 100 } = req.query;
 
     // Build query
-    const query = { userId: req.userId };
+    const query = { businessId: req.businessId };
 
     // Add date filters if provided
     if (startDate || endDate) {
@@ -413,15 +435,13 @@ router.get('/quality-rating/history', auth, async (req, res) => {
 // @route   POST /api/settings/quality-rating/check
 // @desc    Manually trigger a quality rating check
 // @access  Private
-router.post('/quality-rating/check', auth, async (req, res) => {
+router.post('/quality-rating/check', auth, requireBusiness, requireBusinessPermission('manage_settings'), async (req, res) => {
   try {
-    const User = require('../models/User');
     const QualityRating = require('../models/QualityRating');
 
-    const user = await User.findById(req.userId);
-    if (!user || !user.whatsappPhoneNumberId) {
-      return res.status(400).json({ error: 'WhatsApp phone number not configured' });
-    }
+    // Use business credentials
+    const credentials = await req.business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
 
     // Fetch current quality rating from WhatsApp
     const ratingResult = await whatsappService.getQualityRating();
@@ -431,15 +451,15 @@ router.post('/quality-rating/check', auth, async (req, res) => {
     }
 
     // Check if rating changed
-    const hasChanged = await QualityRating.hasRatingChanged(req.userId, ratingResult.rating);
+    const hasChanged = await QualityRating.hasRatingChanged(req.businessId, ratingResult.rating);
 
     // Get account limits for additional context
     const limitsResult = await whatsappService.getAccountLimits();
 
     // Save to database
     const qualityRecord = new QualityRating({
-      userId: req.userId,
-      phoneNumberId: user.whatsappPhoneNumberId,
+      businessId: req.businessId,
+      phoneNumberId: credentials.phoneNumberId,
       rating: ratingResult.rating,
       tier: limitsResult.tier || 'TIER_1K',
       messagingLimit: limitsResult.messagingLimit || 1000,

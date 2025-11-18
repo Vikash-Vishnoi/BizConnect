@@ -4,13 +4,15 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
   Alert,
 } from 'react-native';
 import {useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import {RootStackParamList} from '../types/navigation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {EnhancedCard, EnhancedButton} from '../components/common';
+import LinearGradient from 'react-native-linear-gradient';
+import theme from '../theme';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -93,14 +95,6 @@ const MenuScreen: React.FC = () => {
           color: '#10B981',
           screen: 'SavedReplies' as keyof RootStackParamList,
         },
-        {
-          id: 'groups',
-          icon: '👥',
-          title: 'Group Messaging',
-          subtitle: 'Send to WhatsApp groups',
-          color: '#F59E0B',
-          screen: 'GroupMessage' as keyof RootStackParamList,
-        },
       ],
     },
     {
@@ -113,14 +107,6 @@ const MenuScreen: React.FC = () => {
           subtitle: 'Interactive forms',
           color: '#EC4899',
           screen: 'FlowList' as keyof RootStackParamList,
-        },
-        {
-          id: 'channels',
-          icon: '📡',
-          title: 'Channels',
-          subtitle: 'Broadcast channels',
-          color: '#6366F1',
-          screen: 'Channels' as keyof RootStackParamList,
         },
       ],
     },
@@ -177,10 +163,11 @@ const MenuScreen: React.FC = () => {
   ];
 
   const renderMenuItem = (item: MenuItem) => (
-    <TouchableOpacity
+    <EnhancedCard
       key={item.id}
-      style={styles.menuItem}
-      onPress={() => navigation.navigate(item.screen as any)}>
+      elevated
+      onPress={() => navigation.navigate(item.screen as any)}
+      style={styles.menuItem}>
       <View style={[styles.iconContainer, {backgroundColor: item.color + '15'}]}>
         <Text style={styles.iconText}>{item.icon}</Text>
       </View>
@@ -189,37 +176,37 @@ const MenuScreen: React.FC = () => {
         <Text style={styles.itemSubtitle}>{item.subtitle}</Text>
       </View>
       <Text style={styles.chevron}>›</Text>
-      {item.badge && (
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{item.badge}</Text>
-        </View>
-      )}
-    </TouchableOpacity>
+    </EnhancedCard>
   );
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Hello, {userName}! 👋</Text>
-          <Text style={styles.subtitle}>Manage your WhatsApp Business</Text>
-        </View>
-      </View>
+      <LinearGradient
+        colors={[theme.colors.primary, theme.colors.primaryDark]}
+        start={{x: 0, y: 0}}
+        end={{x: 1, y: 1}}
+        style={styles.header}>
+        <Text style={styles.greeting}>Hello, {userName}! 👋</Text>
+        <Text style={styles.subtitle}>Manage your WhatsApp Business</Text>
+      </LinearGradient>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {menuSections.map((section, index) => (
           <View key={index} style={styles.section}>
             <Text style={styles.sectionTitle}>{section.title}</Text>
-            <View style={styles.sectionContent}>
-              {section.items.map(renderMenuItem)}
-            </View>
+            {section.items.map(renderMenuItem)}
           </View>
         ))}
 
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutIcon}>🚪</Text>
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
+        <View style={styles.buttonContainer}>
+          <EnhancedButton
+            title="Logout"
+            variant="danger"
+            icon={<Text style={{fontSize: 18}}>🚪</Text>}
+            onPress={handleLogout}
+            fullWidth
+          />
+        </View>
 
         <View style={styles.footer}>
           <Text style={styles.footerText}>WhatsApp Business Platform</Text>
@@ -233,52 +220,40 @@ const MenuScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: theme.colors.background,
   },
   header: {
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 20,
+    paddingHorizontal: theme.spacing.lg,
     paddingTop: 60,
-    paddingBottom: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    paddingBottom: theme.spacing.lg,
   },
   greeting: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#111827',
-    marginBottom: 4,
+    ...theme.typography.h2,
+    color: '#FFFFFF',
+    marginBottom: theme.spacing.xs,
   },
   subtitle: {
-    fontSize: 14,
-    color: '#6B7280',
+    ...theme.typography.body,
+    color: '#FFFFFF',
+    opacity: 0.9,
   },
   scrollView: {
     flex: 1,
   },
   section: {
-    marginTop: 24,
-    paddingHorizontal: 16,
+    marginTop: theme.spacing.xl,
+    paddingHorizontal: theme.spacing.base,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#374151',
-    marginBottom: 12,
-    paddingHorizontal: 4,
-  },
-  sectionContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    overflow: 'hidden',
+    ...theme.typography.h5,
+    color: theme.colors.text,
+    marginBottom: theme.spacing.md,
+    paddingHorizontal: theme.spacing.xs,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    marginBottom: theme.spacing.md,
   },
   iconContainer: {
     width: 48,
@@ -286,7 +261,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: theme.spacing.md,
   },
   iconText: {
     fontSize: 24,
@@ -295,72 +270,38 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   itemTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#111827',
+    ...theme.typography.bodyMedium,
+    color: theme.colors.text,
     marginBottom: 2,
   },
   itemSubtitle: {
-    fontSize: 13,
-    color: '#6B7280',
+    ...theme.typography.caption,
+    color: theme.colors.textSecondary,
   },
   chevron: {
     fontSize: 24,
-    color: '#D1D5DB',
-    marginLeft: 8,
+    color: theme.colors.textTertiary,
+    marginLeft: theme.spacing.sm,
   },
-  badge: {
-    position: 'absolute',
-    top: 12,
-    right: 40,
-    backgroundColor: '#EF4444',
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 6,
-  },
-  badgeText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  logoutButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-    marginHorizontal: 16,
-    marginTop: 32,
-    marginBottom: 16,
-    paddingVertical: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#EF4444',
-    gap: 8,
-  },
-  logoutIcon: {
-    fontSize: 20,
-  },
-  logoutText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#EF4444',
+  buttonContainer: {
+    paddingHorizontal: theme.spacing.base,
+    marginTop: theme.spacing.xxl,
+    marginBottom: theme.spacing.base,
   },
   footer: {
     alignItems: 'center',
-    paddingVertical: 24,
+    paddingVertical: theme.spacing.xl,
     paddingBottom: 40,
   },
   footerText: {
-    fontSize: 13,
-    color: '#9CA3AF',
-    marginBottom: 4,
+    ...theme.typography.caption,
+    color: theme.colors.textTertiary,
+    marginBottom: theme.spacing.xs,
   },
   versionText: {
+    ...theme.typography.caption,
     fontSize: 11,
-    color: '#D1D5DB',
+    color: theme.colors.textTertiary,
   },
 });
 

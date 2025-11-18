@@ -1,12 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const { auth } = require('../middleware/auth');
+const { auth, requireBusiness, requireBusinessPermission } = require('../middleware/auth');
 const Conversation = require('../models/Conversation');
 
 // @route   GET /api/search/messages
 // @desc    Search messages across all conversations
 // @access  Private
-router.get('/messages', auth, async (req, res) => {
+router.get('/messages', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { q, limit = 50, page = 1 } = req.query;
 
@@ -22,7 +22,7 @@ router.get('/messages', auth, async (req, res) => {
 
     // Find conversations with matching messages
     const conversations = await Conversation.find({
-      userId: req.userId,
+      businessId: req.businessId,
       isDeleted: false,
       'messages.content.text': searchRegex,
       'messages.isDeleted': { $ne: true }
@@ -83,7 +83,7 @@ router.get('/messages', auth, async (req, res) => {
 // @route   GET /api/search/conversations
 // @desc    Search conversations by contact name or phone
 // @access  Private
-router.get('/conversations', auth, async (req, res) => {
+router.get('/conversations', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { q, limit = 50 } = req.query;
 
@@ -96,7 +96,7 @@ router.get('/conversations', auth, async (req, res) => {
 
     // Search by contact name or phone number
     const conversations = await Conversation.find({
-      userId: req.userId,
+      businessId: req.businessId,
       isDeleted: false,
       $or: [
         { 'contact.name': searchRegex },
@@ -121,7 +121,7 @@ router.get('/conversations', auth, async (req, res) => {
 // @route   GET /api/search/combined
 // @desc    Combined search (messages + conversations)
 // @access  Private
-router.get('/combined', auth, async (req, res) => {
+router.get('/combined', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { q, limit = 20 } = req.query;
 
@@ -134,7 +134,7 @@ router.get('/combined', auth, async (req, res) => {
 
     // Search conversations
     const conversationMatches = await Conversation.find({
-      userId: req.userId,
+      businessId: req.businessId,
       isDeleted: false,
       $or: [
         { 'contact.name': searchRegex },
@@ -148,7 +148,7 @@ router.get('/combined', auth, async (req, res) => {
 
     // Search messages
     const messageMatches = await Conversation.find({
-      userId: req.userId,
+      businessId: req.businessId,
       isDeleted: false,
       'messages.content.text': searchRegex,
       'messages.isDeleted': { $ne: true }

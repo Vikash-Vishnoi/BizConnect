@@ -19,6 +19,17 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // Add business context header for multi-business support
+    const currentBusinessId = await AsyncStorage.getItem('currentBusinessId');
+    if (currentBusinessId) {
+      config.headers['X-Business-ID'] = currentBusinessId;
+      // DEBUG: Log header injection (remove in production)
+      console.log(`[API] X-Business-ID header set: ${currentBusinessId}`);
+    } else {
+      console.log('[API] No currentBusinessId found in AsyncStorage');
+    }
+    
     return config;
   },
   error => {

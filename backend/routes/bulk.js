@@ -15,7 +15,7 @@
 
 const express = require('express');
 const router = express.Router();
-const { auth } = require('../middleware/auth');
+const { auth, requireBusiness, requireBusinessPermission } = require('../middleware/auth');
 const bulkOperationsService = require('../services/bulkOperationsService');
 
 /**
@@ -23,7 +23,7 @@ const bulkOperationsService = require('../services/bulkOperationsService');
  * @desc    Bulk archive conversations
  * @access  Private
  */
-router.post('/archive', auth, async (req, res) => {
+router.post('/archive', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { conversationIds } = req.body;
 
@@ -43,13 +43,13 @@ router.post('/archive', auth, async (req, res) => {
 
     const result = await bulkOperationsService.bulkArchiveConversations(
       conversationIds,
-      req.user._id
+      req.businessId
     );
 
     // Emit real-time event
     const io = req.app.get('io');
     if (io) {
-      io.to(`user:${req.user._id}`).emit('conversations:bulk_archived', {
+      io.to(`business:${req.businessId}`).emit('conversations:bulk_archived', {
         conversationIds,
         count: result.archivedCount,
         timestamp: result.timestamp
@@ -76,7 +76,7 @@ router.post('/archive', auth, async (req, res) => {
  * @desc    Bulk unarchive conversations
  * @access  Private
  */
-router.post('/unarchive', auth, async (req, res) => {
+router.post('/unarchive', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { conversationIds } = req.body;
 
@@ -96,13 +96,13 @@ router.post('/unarchive', auth, async (req, res) => {
 
     const result = await bulkOperationsService.bulkUnarchiveConversations(
       conversationIds,
-      req.user._id
+      req.businessId
     );
 
     // Emit real-time event
     const io = req.app.get('io');
     if (io) {
-      io.to(`user:${req.user._id}`).emit('conversations:bulk_unarchived', {
+      io.to(`business:${req.businessId}`).emit('conversations:bulk_unarchived', {
         conversationIds,
         count: result.unarchivedCount,
         timestamp: result.timestamp
@@ -129,7 +129,7 @@ router.post('/unarchive', auth, async (req, res) => {
  * @desc    Bulk assign conversations to a user
  * @access  Private
  */
-router.post('/assign', auth, async (req, res) => {
+router.post('/assign', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { conversationIds, assignToUserId, assignToUserName } = req.body;
 
@@ -156,7 +156,7 @@ router.post('/assign', auth, async (req, res) => {
 
     const result = await bulkOperationsService.bulkAssignConversations(
       conversationIds,
-      req.user._id,
+      req.businessId,
       assignToUserId,
       assignToUserName
     );
@@ -164,7 +164,7 @@ router.post('/assign', auth, async (req, res) => {
     // Emit real-time event
     const io = req.app.get('io');
     if (io) {
-      io.to(`user:${req.user._id}`).emit('conversations:bulk_assigned', {
+      io.to(`business:${req.businessId}`).emit('conversations:bulk_assigned', {
         conversationIds,
         count: result.assignedCount,
         assignedTo: result.assignedTo,
@@ -192,7 +192,7 @@ router.post('/assign', auth, async (req, res) => {
  * @desc    Bulk unassign conversations
  * @access  Private
  */
-router.post('/unassign', auth, async (req, res) => {
+router.post('/unassign', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { conversationIds } = req.body;
 
@@ -212,13 +212,13 @@ router.post('/unassign', auth, async (req, res) => {
 
     const result = await bulkOperationsService.bulkUnassignConversations(
       conversationIds,
-      req.user._id
+      req.businessId
     );
 
     // Emit real-time event
     const io = req.app.get('io');
     if (io) {
-      io.to(`user:${req.user._id}`).emit('conversations:bulk_unassigned', {
+      io.to(`business:${req.businessId}`).emit('conversations:bulk_unassigned', {
         conversationIds,
         count: result.unassignedCount,
         timestamp: result.timestamp
@@ -279,14 +279,14 @@ router.post('/tags/add', auth, async (req, res) => {
 
     const result = await bulkOperationsService.bulkAddTags(
       conversationIds,
-      req.user._id,
+      req.businessId,
       tags
     );
 
     // Emit real-time event
     const io = req.app.get('io');
     if (io) {
-      io.to(`user:${req.user._id}`).emit('conversations:bulk_tagged', {
+      io.to(`business:${req.businessId}`).emit('conversations:bulk_tagged', {
         conversationIds,
         count: result.taggedCount,
         tags: result.tags,
@@ -314,7 +314,7 @@ router.post('/tags/add', auth, async (req, res) => {
  * @desc    Bulk remove tags from conversations
  * @access  Private
  */
-router.post('/tags/remove', auth, async (req, res) => {
+router.post('/tags/remove', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { conversationIds, tags } = req.body;
 
@@ -341,14 +341,14 @@ router.post('/tags/remove', auth, async (req, res) => {
 
     const result = await bulkOperationsService.bulkRemoveTags(
       conversationIds,
-      req.user._id,
+      req.businessId,
       tags
     );
 
     // Emit real-time event
     const io = req.app.get('io');
     if (io) {
-      io.to(`user:${req.user._id}`).emit('conversations:bulk_untagged', {
+      io.to(`business:${req.businessId}`).emit('conversations:bulk_untagged', {
         conversationIds,
         count: result.untaggedCount,
         tags: result.tags,
@@ -376,7 +376,7 @@ router.post('/tags/remove', auth, async (req, res) => {
  * @desc    Bulk update conversation status
  * @access  Private
  */
-router.post('/status', auth, async (req, res) => {
+router.post('/status', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { conversationIds, status } = req.body;
 
@@ -411,14 +411,14 @@ router.post('/status', auth, async (req, res) => {
 
     const result = await bulkOperationsService.bulkUpdateStatus(
       conversationIds,
-      req.user._id,
+      req.businessId,
       status
     );
 
     // Emit real-time event
     const io = req.app.get('io');
     if (io) {
-      io.to(`user:${req.user._id}`).emit('conversations:bulk_status_updated', {
+      io.to(`business:${req.businessId}`).emit('conversations:bulk_status_updated', {
         conversationIds,
         count: result.updatedCount,
         newStatus: status,
@@ -446,9 +446,9 @@ router.post('/status', auth, async (req, res) => {
  * @desc    Get bulk operation statistics
  * @access  Private
  */
-router.get('/stats', auth, async (req, res) => {
+router.get('/stats', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
-    const stats = await bulkOperationsService.getBulkOperationStats(req.user._id);
+    const stats = await bulkOperationsService.getBulkOperationStats(req.businessId);
 
     res.json({
       success: true,
@@ -469,7 +469,7 @@ router.get('/stats', auth, async (req, res) => {
  * @desc    Validate conversation IDs
  * @access  Private
  */
-router.post('/validate', auth, async (req, res) => {
+router.post('/validate', auth, requireBusiness, async (req, res) => {
   try {
     const { conversationIds } = req.body;
 
@@ -482,7 +482,7 @@ router.post('/validate', auth, async (req, res) => {
 
     const validation = await bulkOperationsService.validateConversationIds(
       conversationIds,
-      req.user._id
+      req.businessId
     );
 
     res.json({
@@ -504,7 +504,7 @@ router.post('/validate', auth, async (req, res) => {
  * @desc    Bulk export conversation metadata
  * @access  Private
  */
-router.post('/export/metadata', auth, async (req, res) => {
+router.post('/export/metadata', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { conversationIds } = req.body;
 
@@ -524,7 +524,7 @@ router.post('/export/metadata', auth, async (req, res) => {
 
     const result = await bulkOperationsService.bulkExportMetadata(
       conversationIds,
-      req.user._id
+      req.businessId
     );
 
     res.json({

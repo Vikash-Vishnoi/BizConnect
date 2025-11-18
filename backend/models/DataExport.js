@@ -20,6 +20,11 @@ const dataExportSchema = new mongoose.Schema({
     required: true,
     index: true
   },
+  businessId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Business',
+    index: true
+  },
   requestType: {
     type: String,
     enum: ['EXPORT', 'DELETE'],

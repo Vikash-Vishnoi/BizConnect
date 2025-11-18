@@ -1,12 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const { auth } = require('../middleware/auth');
+const { auth, requireBusiness, requireBusinessPermission } = require('../middleware/auth');
 const MessageError = require('../models/MessageError');
 
 // @route   GET /api/message-errors
 // @desc    Get all message errors with filters
 // @access  Private
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const {
       limit = 50,
@@ -20,7 +20,7 @@ router.get('/', auth, async (req, res) => {
       canRetry
     } = req.query;
 
-    let query = { userId: req.userId };
+    let query = { businessId: req.businessId };
 
     if (category) {
       query.errorCategory = category;
@@ -81,11 +81,11 @@ router.get('/', auth, async (req, res) => {
 // @route   GET /api/message-errors/stats
 // @desc    Get error statistics
 // @access  Private
-router.get('/stats', auth, async (req, res) => {
+router.get('/stats', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
     const { days = 7 } = req.query;
 
-    const stats = await MessageError.getErrorStats(req.userId, parseInt(days));
+    const stats = await MessageError.getErrorStats(req.businessId, parseInt(days));
 
     res.json(stats);
   } catch (error) {
@@ -97,11 +97,11 @@ router.get('/stats', auth, async (req, res) => {
 // @route   GET /api/message-errors/:id
 // @desc    Get specific error details
 // @access  Private
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const error = await MessageError.findOne({
       _id: req.params.id,
-      userId: req.userId
+      businessId: req.businessId
     }).lean();
 
     if (!error) {
@@ -118,11 +118,11 @@ router.get('/:id', auth, async (req, res) => {
 // @route   POST /api/message-errors/:id/retry
 // @desc    Retry a failed message
 // @access  Private
-router.post('/:id/retry', auth, async (req, res) => {
+router.post('/:id/retry', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const error = await MessageError.findOne({
       _id: req.params.id,
-      userId: req.userId
+      businessId: req.businessId
     });
 
     if (!error) {
@@ -159,13 +159,13 @@ router.post('/:id/retry', auth, async (req, res) => {
 // @route   POST /api/message-errors/:id/resolve
 // @desc    Mark error as resolved
 // @access  Private
-router.post('/:id/resolve', auth, async (req, res) => {
+router.post('/:id/resolve', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { notes, action } = req.body;
 
     const error = await MessageError.findOne({
       _id: req.params.id,
-      userId: req.userId
+      businessId: req.businessId
     });
 
     if (!error) {
@@ -187,11 +187,11 @@ router.post('/:id/resolve', auth, async (req, res) => {
 // @route   POST /api/message-errors/:id/ignore
 // @desc    Mark error as ignored
 // @access  Private
-router.post('/:id/ignore', auth, async (req, res) => {
+router.post('/:id/ignore', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const error = await MessageError.findOne({
       _id: req.params.id,
-      userId: req.userId
+      businessId: req.businessId
     });
 
     if (!error) {
@@ -215,7 +215,7 @@ router.post('/:id/ignore', auth, async (req, res) => {
 // @route   POST /api/message-errors/bulk-resolve
 // @desc    Resolve multiple errors
 // @access  Private
-router.post('/bulk-resolve', auth, async (req, res) => {
+router.post('/bulk-resolve', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { ids, notes, action } = req.body;
 
@@ -225,7 +225,7 @@ router.post('/bulk-resolve', auth, async (req, res) => {
 
     const errors = await MessageError.find({
       _id: { $in: ids },
-      userId: req.userId
+      businessId: req.businessId
     });
 
     for (const error of errors) {
@@ -245,10 +245,10 @@ router.post('/bulk-resolve', auth, async (req, res) => {
 // @route   GET /api/message-errors/pending/count
 // @desc    Get count of pending errors
 // @access  Private
-router.get('/pending/count', auth, async (req, res) => {
+router.get('/pending/count', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const count = await MessageError.countDocuments({
-      userId: req.userId,
+      businessId: req.businessId,
       'resolution.status': 'PENDING'
     });
 
@@ -262,10 +262,10 @@ router.get('/pending/count', auth, async (req, res) => {
 // @route   GET /api/message-errors/retryable
 // @desc    Get retryable errors
 // @access  Private
-router.get('/retryable', auth, async (req, res) => {
+router.get('/retryable', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const errors = await MessageError.find({
-      userId: req.userId,
+      businessId: req.businessId,
       'retryInfo.canRetry': true,
       $or: [
         { 'resolution.status': 'PENDING' },

@@ -14,7 +14,7 @@
 
 const express = require('express');
 const router = express.Router();
-const { auth } = require('../middleware/auth');
+const { auth, requireBusiness, requireBusinessPermission } = require('../middleware/auth');
 const whatsappService = require('../services/whatsappService');
 const Conversation = require('../models/Conversation');
 const ViewOnceMedia = require('../models/ViewOnceMedia');
@@ -29,7 +29,7 @@ const ViewOnceMedia = require('../models/ViewOnceMedia');
  * - mediaId: string (WhatsApp media ID)
  * - caption: string (optional)
  */
-router.post('/send', auth, async (req, res) => {
+router.post('/send', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { phoneNumber, mediaType, mediaId, caption } = req.body;
 
@@ -63,8 +63,9 @@ router.post('/send', auth, async (req, res) => {
       });
     }
 
-    // Send view-once media via WhatsApp
-    const result = await whatsappService.sendViewOnceMedia(
+    // Send view-once media via WhatsApp with business credentials
+    const whatsappServiceInstance = new whatsappService.constructor(req.business.whatsappCredentials);
+    const result = await whatsappServiceInstance.sendViewOnceMedia(
       phoneNumber,
       mediaType,
       mediaId,
@@ -80,13 +81,13 @@ router.post('/send', auth, async (req, res) => {
 
     // Find or create conversation
     let conversation = await Conversation.findOne({
-      userId: req.userId,
+      businessId: req.businessId,
       phoneNumber: phoneNumber
     });
 
     if (!conversation) {
       conversation = await Conversation.create({
-        userId: req.userId,
+        businessId: req.businessId,
         phoneNumber: phoneNumber,
         contactName: phoneNumber,
         lastMessage: `📸 View-once ${mediaType}`,
@@ -102,7 +103,7 @@ router.post('/send', auth, async (req, res) => {
 
     // Save to database
     const viewOnceMedia = await ViewOnceMedia.create({
-      userId: req.userId,
+      businessId: req.businessId,
       phoneNumber: phoneNumber,
       conversationId: conversation._id,
       mediaType: mediaType,
@@ -136,7 +137,7 @@ router.post('/send', auth, async (req, res) => {
  * GET /api/view-once/supported-types
  * Get list of media types that support view-once feature
  */
-router.get('/supported-types', auth, async (req, res) => {
+router.get('/supported-types', auth, requireBusiness, async (req, res) => {
   try {
     res.json({
       success: true,
@@ -159,17 +160,17 @@ router.get('/supported-types', auth, async (req, res) => {
 
 /**
  * GET /api/view-once/history
- * Get view-once media history for current user
+ * Get view-once media history for current business
  * Query params:
  * - limit: number (default 20)
  * - skip: number (default 0)
  * - phoneNumber: string (optional filter)
  */
-router.get('/history', auth, async (req, res) => {
+router.get('/history', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { limit = 20, skip = 0, phoneNumber } = req.query;
     
-    const query = { userId: req.userId };
+    const query = { businessId: req.businessId };
     if (phoneNumber) {
       query.phoneNumber = phoneNumber;
     }
@@ -219,11 +220,11 @@ router.get('/history', auth, async (req, res) => {
  * Query params:
  * - days: number (default 30)
  */
-router.get('/stats', auth, async (req, res) => {
+router.get('/stats', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
     const { days = 30 } = req.query;
     
-    const stats = await ViewOnceMedia.getUserStats(req.userId, parseInt(days));
+    const stats = await ViewOnceMedia.getUserStats(req.businessId, parseInt(days));
 
     res.json({
       success: true,
@@ -249,7 +250,7 @@ router.get('/stats', auth, async (req, res) => {
  * Body:
  * - status: 'sent' | 'delivered' | 'read' | 'failed'
  */
-router.patch('/:id/status', auth, async (req, res) => {
+router.patch('/:id/status', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
@@ -263,7 +264,7 @@ router.patch('/:id/status', auth, async (req, res) => {
 
     const viewOnceMedia = await ViewOnceMedia.findOne({
       _id: id,
-      userId: req.userId
+      businessId: req.businessId
     });
 
     if (!viewOnceMedia) {
@@ -295,13 +296,13 @@ router.patch('/:id/status', auth, async (req, res) => {
  * DELETE /api/view-once/:id
  * Delete view-once media record
  */
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { id } = req.params;
 
     const result = await ViewOnceMedia.deleteOne({
       _id: id,
-      userId: req.userId
+      businessId: req.businessId
     });
 
     if (result.deletedCount === 0) {

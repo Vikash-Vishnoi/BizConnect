@@ -29,7 +29,7 @@ const permissionSchema = new mongoose.Schema({
   },
   category: {
     type: String,
-    enum: ['campaigns', 'templates', 'conversations', 'analytics', 'settings', 'users', 'media'],
+    enum: ['campaigns', 'templates', 'conversations', 'analytics', 'settings', 'users', 'media', 'audit'],
     required: true
   },
   resource: {
@@ -39,7 +39,7 @@ const permissionSchema = new mongoose.Schema({
   },
   action: {
     type: String,
-    enum: ['create', 'read', 'update', 'delete', 'execute', 'manage'],
+    enum: ['create', 'read', 'update', 'delete', 'execute', 'manage', 'export'],
     required: true
   },
   isSystemPermission: {

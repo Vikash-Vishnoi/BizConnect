@@ -334,6 +334,13 @@ const conversationSchema = new mongoose.Schema({
     required: true,
     index: true
   },
+  // Multi-Business Support
+  businessId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Business',
+    required: true,
+    index: true
+  },
   
   // Soft Delete
   isDeleted: {
@@ -357,7 +364,8 @@ const conversationSchema = new mongoose.Schema({
 // Compound Indexes for Query Performance
 conversationSchema.index({ userId: 1, lastMessageAt: -1 });
 conversationSchema.index({ userId: 1, status: 1, lastMessageAt: -1 });
-conversationSchema.index({ 'contact.phoneNumber': 1, userId: 1 }, { unique: true });
+conversationSchema.index({ 'contact.phoneNumber': 1, businessId: 1 }, { unique: true });
+conversationSchema.index({ businessId: 1, status: 1, lastMessageAt: -1 });
 conversationSchema.index({ userId: 1, unreadCount: 1 });
 conversationSchema.index({ campaignId: 1, createdAt: -1 });
 conversationSchema.index({ 'messages.whatsappMessageId': 1 }, { sparse: true });
@@ -571,12 +579,12 @@ conversationSchema.methods.unarchive = async function() {
 /**
  * Find or create conversation by phone number
  */
-conversationSchema.statics.findOrCreateByPhone = async function(phoneNumber, userId, contactData = {}) {
+conversationSchema.statics.findOrCreateByPhone = async function(phoneNumber, businessId, userId, contactData = {}) {
   const normalized = this.normalizePhone(phoneNumber);
   
   let conversation = await this.findOne({
     'contact.phoneNumber': normalized,
-    userId: userId,
+    businessId: businessId,
     isDeleted: false
   });
   
@@ -590,6 +598,7 @@ conversationSchema.statics.findOrCreateByPhone = async function(phoneNumber, use
         waId: contactData.waId,
         profileName: contactData.profileName
       },
+      businessId: businessId,
       userId: userId,
       messages: [],
       source: contactData.source || 'webhook'
@@ -610,7 +619,7 @@ conversationSchema.statics.normalizePhone = function(phoneNumber) {
 /**
  * Get conversations with pagination
  */
-conversationSchema.statics.getPaginated = async function(userId, options = {}) {
+conversationSchema.statics.getPaginated = async function(businessId, options = {}) {
   const {
     page = 1,
     limit = 20,
@@ -621,7 +630,7 @@ conversationSchema.statics.getPaginated = async function(userId, options = {}) {
   } = options;
   
   const query = {
-    userId: userId,
+    businessId: businessId,
     isDeleted: false
   };
   

@@ -22,6 +22,7 @@ import {
   type CreateSavedReplyData,
 } from '../services/savedRepliesService';
 import theme from '../theme';
+import {EnhancedButton, EnhancedInput, EnhancedCard, SkeletonList, EmptyState} from '../components/common';
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList>;
 
@@ -260,19 +261,30 @@ const SavedRepliesScreen: React.FC = () => {
 
       {/* Results */}
       {loading ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
+        <View style={{padding: theme.spacing.md}}>
+          <SkeletonList count={5} />
         </View>
       ) : savedReplies.length === 0 ? (
-        <View style={styles.centerContainer}>
-          <Icon name="message-square" size={64} color={theme.colors.textTertiary} />
-          <Text style={styles.emptyTitle}>No Saved Replies</Text>
-          <Text style={styles.emptyText}>
-            {searchQuery
+        <EmptyState
+          icon="message-square"
+          title="No Saved Replies"
+          description={
+            searchQuery
               ? 'No replies match your search'
-              : 'Create your first saved reply to get started'}
-          </Text>
-        </View>
+              : 'Create your first saved reply to get started'
+          }
+          action={
+            !searchQuery ? (
+              <EnhancedButton
+                title="Create First Reply"
+                onPress={openCreateModal}
+                variant="primary"
+                gradient
+                leftIcon="plus"
+              />
+            ) : undefined
+          }
+        />
       ) : (
         <FlatList
           data={savedReplies}
@@ -349,18 +361,23 @@ const SavedRepliesScreen: React.FC = () => {
             </ScrollView>
 
             <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => setShowCreateModal(false)}>
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.saveButton]}
-                onPress={handleSave}>
-                <Text style={styles.saveButtonText}>
-                  {editingReply ? 'Update' : 'Create'}
-                </Text>
-              </TouchableOpacity>
+              <View style={{flex: 1, marginRight: theme.spacing.xs}}>
+                <EnhancedButton
+                  title="Cancel"
+                  onPress={() => setShowCreateModal(false)}
+                  variant="outline"
+                  size="large"
+                />
+              </View>
+              <View style={{flex: 1, marginLeft: theme.spacing.xs}}>
+                <EnhancedButton
+                  title={editingReply ? 'Update' : 'Create'}
+                  onPress={handleSave}
+                  variant="primary"
+                  size="large"
+                  gradient
+                />
+              </View>
             </View>
           </View>
         </View>

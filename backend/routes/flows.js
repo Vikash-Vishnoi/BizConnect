@@ -2,15 +2,15 @@ const express = require('express');
 const router = express.Router();
 const { Flow, FlowResponse } = require('../models');
 const flowService = require('../services/flowService');
-const { auth } = require('../middleware/auth');
+const { auth, requireBusiness, requireBusinessPermission } = require('../middleware/auth');
 const crypto = require('crypto');
 
 /**
  * @route   GET /api/flows
- * @desc    Get all flows for authenticated user
+ * @desc    Get all flows for authenticated business
  * @access  Private
  */
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { status, category, limit = 50, page = 1 } = req.query;
 
@@ -18,7 +18,7 @@ router.get('/', auth, async (req, res) => {
     if (status) filters.status = status;
     if (category) filters.categories = category;
 
-    const flows = await Flow.getUserFlows(req.user._id, filters);
+    const flows = await Flow.getUserFlows(req.businessId, filters);
 
     // Paginate
     const startIndex = (page - 1) * limit;
@@ -48,11 +48,11 @@ router.get('/', auth, async (req, res) => {
  * @desc    Get flow by ID
  * @access  Private
  */
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const flow = await Flow.findOne({
       _id: req.params.id,
-      user: req.user._id,
+      user: req.businessId,
       isActive: true
     });
 
@@ -82,7 +82,7 @@ router.get('/:id', auth, async (req, res) => {
  * @desc    Create a new flow
  * @access  Private
  */
-router.post('/', auth, async (req, res) => {
+router.post('/', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { name, description, categories, screens, settings, useTemplate } = req.body;
 
@@ -98,7 +98,7 @@ router.post('/', auth, async (req, res) => {
 
     // Create from template or custom
     if (useTemplate) {
-      flow = Flow.createDefaultFlow(req.user._id, useTemplate);
+      flow = Flow.createDefaultFlow(req.businessId, useTemplate);
       if (name !== flow.name) {
         flow.name = name;
       }
@@ -114,13 +114,13 @@ router.post('/', auth, async (req, res) => {
       }
 
       flow = new Flow({
-        user: req.user._id,
+        user: req.businessId,
         name,
         description,
         categories: categories || ['OTHER'],
         screens,
         settings: settings || {},
-        createdBy: req.user._id
+        createdBy: req.userId
       });
     }
 
@@ -156,11 +156,11 @@ router.post('/', auth, async (req, res) => {
  * @desc    Update a flow
  * @access  Private
  */
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const flow = await Flow.findOne({
       _id: req.params.id,
-      user: req.user._id,
+      user: req.businessId,
       isActive: true
     });
 
@@ -187,7 +187,7 @@ router.put('/:id', auth, async (req, res) => {
     if (screens) flow.screens = screens;
     if (settings) flow.settings = { ...flow.settings, ...settings };
     
-    flow.updatedBy = req.user._id;
+    flow.updatedBy = req.userId;
 
     // Validate updated structure
     const validationErrors = flow.validateStructure();
@@ -221,11 +221,11 @@ router.put('/:id', auth, async (req, res) => {
  * @desc    Delete a flow (soft delete)
  * @access  Private
  */
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const flow = await Flow.findOne({
       _id: req.params.id,
-      user: req.user._id,
+      user: req.businessId,
       isActive: true
     });
 
@@ -238,7 +238,7 @@ router.delete('/:id', auth, async (req, res) => {
 
     // Soft delete
     flow.isActive = false;
-    flow.updatedBy = req.user._id;
+    flow.updatedBy = req.userId;
     await flow.save();
 
     // Also delete from WhatsApp if published
@@ -270,11 +270,11 @@ router.delete('/:id', auth, async (req, res) => {
  * @desc    Publish a flow to WhatsApp
  * @access  Private
  */
-router.post('/:id/publish', auth, async (req, res) => {
+router.post('/:id/publish', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const flow = await Flow.findOne({
       _id: req.params.id,
-      user: req.user._id,
+      user: req.businessId,
       isActive: true
     });
 
@@ -327,7 +327,7 @@ router.post('/:id/publish', auth, async (req, res) => {
 
     flow.status = 'PUBLISHED';
     flow.validation_errors = [];
-    flow.updatedBy = req.user._id;
+    flow.updatedBy = req.userId;
     await flow.save();
 
     res.json({
@@ -351,11 +351,11 @@ router.post('/:id/publish', auth, async (req, res) => {
  * @desc    Deprecate a published flow
  * @access  Private
  */
-router.post('/:id/deprecate', auth, async (req, res) => {
+router.post('/:id/deprecate', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const flow = await Flow.findOne({
       _id: req.params.id,
-      user: req.user._id,
+      user: req.businessId,
       isActive: true
     });
 
@@ -377,7 +377,7 @@ router.post('/:id/deprecate', auth, async (req, res) => {
     await flowService.deprecateFlow(flow.flowId);
 
     flow.status = 'DEPRECATED';
-    flow.updatedBy = req.user._id;
+    flow.updatedBy = req.userId;
     await flow.save();
 
     res.json({
@@ -400,7 +400,7 @@ router.post('/:id/deprecate', auth, async (req, res) => {
  * @desc    Send a flow message to a contact
  * @access  Private
  */
-router.post('/:id/send', auth, async (req, res) => {
+router.post('/:id/send', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { phoneNumber, header, body, footer, flow_cta, initial_screen } = req.body;
 
@@ -420,7 +420,7 @@ router.post('/:id/send', auth, async (req, res) => {
 
     const flow = await Flow.findOne({
       _id: req.params.id,
-      user: req.user._id,
+      user: req.businessId,
       isActive: true
     });
 
@@ -445,7 +445,7 @@ router.post('/:id/send', auth, async (req, res) => {
     const flowResponse = new FlowResponse({
       flow: flow._id,
       flowId: flow.flowId,
-      user: req.user._id,
+      user: req.businessId,
       contact: {
         phoneNumber
       },
@@ -494,13 +494,13 @@ router.post('/:id/send', auth, async (req, res) => {
  * @desc    Get responses for a flow
  * @access  Private
  */
-router.get('/:id/responses', auth, async (req, res) => {
+router.get('/:id/responses', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { status, startDate, endDate, limit = 50, page = 1 } = req.query;
 
     const flow = await Flow.findOne({
       _id: req.params.id,
-      user: req.user._id,
+      user: req.businessId,
       isActive: true
     });
 
@@ -548,13 +548,13 @@ router.get('/:id/responses', auth, async (req, res) => {
  * @desc    Get flow analytics
  * @access  Private
  */
-router.get('/:id/analytics', auth, async (req, res) => {
+router.get('/:id/analytics', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
     const { days = 30 } = req.query;
 
     const flow = await Flow.findOne({
       _id: req.params.id,
-      user: req.user._id,
+      user: req.businessId,
       isActive: true
     });
 
@@ -606,12 +606,12 @@ router.get('/:id/analytics', auth, async (req, res) => {
 
 /**
  * @route   GET /api/flows/stats/summary
- * @desc    Get flow statistics summary for user
+ * @desc    Get flow statistics summary for business
  * @access  Private
  */
-router.get('/stats/summary', auth, async (req, res) => {
+router.get('/stats/summary', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
-    const stats = await Flow.getFlowStats(req.user._id);
+    const stats = await Flow.getFlowStats(req.businessId);
 
     res.json({
       success: true,

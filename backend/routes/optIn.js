@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { auth } = require('../middleware/auth');
+const { auth, requireBusiness, requireBusinessPermission } = require('../middleware/auth');
 const OptInConsent = require('../models/OptInConsent');
 
 /**
@@ -8,11 +8,11 @@ const OptInConsent = require('../models/OptInConsent');
  * @desc    Get all consent records
  * @access  Private
  */
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { optedOut, channel, verified, limit = 100, skip = 0 } = req.query;
     
-    const query = { userId: req.userId };
+    const query = { businessId: req.businessId };
     
     if (optedOut !== undefined) {
       query.optedOut = optedOut === 'true';
@@ -50,31 +50,31 @@ router.get('/', auth, async (req, res) => {
  * @desc    Get opt-in/opt-out statistics
  * @access  Private
  */
-router.get('/stats', auth, async (req, res) => {
+router.get('/stats', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
     const { days = 30 } = req.query;
     
-    const stats = await OptInConsent.getOptOutStats(req.userId, parseInt(days));
+    const stats = await OptInConsent.getOptOutStats(req.businessId, parseInt(days));
     
     // Get channel breakdown
     const channelStats = await Promise.all([
       OptInConsent.countDocuments({
-        userId: req.userId,
+        businessId: req.businessId,
         'channels.marketing.consented': true,
         optedOut: false
       }),
       OptInConsent.countDocuments({
-        userId: req.userId,
+        businessId: req.businessId,
         'channels.service.consented': true,
         optedOut: false
       }),
       OptInConsent.countDocuments({
-        userId: req.userId,
+        businessId: req.businessId,
         'channels.promotional.consented': true,
         optedOut: false
       }),
       OptInConsent.countDocuments({
-        userId: req.userId,
+        businessId: req.businessId,
         'channels.transactional.consented': true,
         optedOut: false
       })
@@ -100,10 +100,10 @@ router.get('/stats', auth, async (req, res) => {
  * @desc    Get consent record for a phone number
  * @access  Private
  */
-router.get('/:phoneNumber', auth, async (req, res) => {
+router.get('/:phoneNumber', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const consent = await OptInConsent.findOne({
-      userId: req.userId,
+      businessId: req.businessId,
       phoneNumber: req.params.phoneNumber
     });
     
@@ -128,7 +128,7 @@ router.get('/:phoneNumber', auth, async (req, res) => {
  * @desc    Grant consent for a channel
  * @access  Private
  */
-router.post('/:phoneNumber/grant', auth, async (req, res) => {
+router.post('/:phoneNumber/grant', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { channel = 'marketing', source = 'manual', metadata = {} } = req.body;
     
@@ -136,7 +136,7 @@ router.post('/:phoneNumber/grant', auth, async (req, res) => {
       return res.status(400).json({ error: 'Invalid channel' });
     }
     
-    const consent = await OptInConsent.getOrCreate(req.userId, req.params.phoneNumber);
+    const consent = await OptInConsent.getOrCreate(req.businessId, req.params.phoneNumber);
     
     await consent.grantConsent(channel, source, metadata);
     
@@ -155,7 +155,7 @@ router.post('/:phoneNumber/grant', auth, async (req, res) => {
  * @desc    Revoke consent for a channel
  * @access  Private
  */
-router.post('/:phoneNumber/revoke', auth, async (req, res) => {
+router.post('/:phoneNumber/revoke', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { channel = 'marketing', reason = 'user_request', source = 'manual' } = req.body;
     
@@ -164,7 +164,7 @@ router.post('/:phoneNumber/revoke', auth, async (req, res) => {
     }
     
     const consent = await OptInConsent.findOne({
-      userId: req.userId,
+      businessId: req.businessId,
       phoneNumber: req.params.phoneNumber
     });
     
@@ -189,11 +189,11 @@ router.post('/:phoneNumber/revoke', auth, async (req, res) => {
  * @desc    Opt out completely (all channels)
  * @access  Private
  */
-router.post('/:phoneNumber/opt-out', auth, async (req, res) => {
+router.post('/:phoneNumber/opt-out', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { reason = 'user_request', source = 'manual' } = req.body;
     
-    const consent = await OptInConsent.getOrCreate(req.userId, req.params.phoneNumber);
+    const consent = await OptInConsent.getOrCreate(req.businessId, req.params.phoneNumber);
     
     await consent.optOutCompletely(reason, source);
     
@@ -212,12 +212,12 @@ router.post('/:phoneNumber/opt-out', auth, async (req, res) => {
  * @desc    Opt back in
  * @access  Private
  */
-router.post('/:phoneNumber/opt-in', auth, async (req, res) => {
+router.post('/:phoneNumber/opt-in', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { channels = ['marketing'], source = 'manual' } = req.body;
     
     const consent = await OptInConsent.findOne({
-      userId: req.userId,
+      businessId: req.businessId,
       phoneNumber: req.params.phoneNumber
     });
     
@@ -242,12 +242,12 @@ router.post('/:phoneNumber/opt-in', auth, async (req, res) => {
  * @desc    Verify consent (double opt-in)
  * @access  Private
  */
-router.post('/:phoneNumber/verify', auth, async (req, res) => {
+router.post('/:phoneNumber/verify', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { method = 'manual' } = req.body;
     
     const consent = await OptInConsent.findOne({
-      userId: req.userId,
+      businessId: req.businessId,
       phoneNumber: req.params.phoneNumber
     });
     
@@ -272,10 +272,10 @@ router.post('/:phoneNumber/verify', auth, async (req, res) => {
  * @desc    Get consent history for a contact
  * @access  Private
  */
-router.get('/:phoneNumber/history', auth, async (req, res) => {
+router.get('/:phoneNumber/history', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const consent = await OptInConsent.findOne({
-      userId: req.userId,
+      businessId: req.businessId,
       phoneNumber: req.params.phoneNumber
     });
     
@@ -298,7 +298,7 @@ router.get('/:phoneNumber/history', auth, async (req, res) => {
  * @desc    Bulk import consent records
  * @access  Private
  */
-router.post('/bulk-import', auth, async (req, res) => {
+router.post('/bulk-import', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { contacts, channel = 'marketing', source = 'import' } = req.body;
     
@@ -307,7 +307,7 @@ router.post('/bulk-import', auth, async (req, res) => {
     }
     
     const results = await OptInConsent.bulkImport(
-      req.userId,
+      req.businessId,
       contacts,
       channel,
       source
@@ -328,7 +328,7 @@ router.post('/bulk-import', auth, async (req, res) => {
  * @desc    Get all contacts consented to a specific channel
  * @access  Private
  */
-router.get('/channel/:channel/contacts', auth, async (req, res) => {
+router.get('/channel/:channel/contacts', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { channel } = req.params;
     
@@ -336,7 +336,7 @@ router.get('/channel/:channel/contacts', auth, async (req, res) => {
       return res.status(400).json({ error: 'Invalid channel' });
     }
     
-    const contacts = await OptInConsent.getConsentedContacts(req.userId, channel);
+    const contacts = await OptInConsent.getConsentedContacts(req.businessId, channel);
     
     res.json({
       contacts: contacts.map(c => c.getSummary()),
@@ -354,12 +354,12 @@ router.get('/channel/:channel/contacts', auth, async (req, res) => {
  * @desc    Update contact preferences
  * @access  Private
  */
-router.put('/:phoneNumber/preferences', auth, async (req, res) => {
+router.put('/:phoneNumber/preferences', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { frequency, quietHours, preferredLanguage, topics } = req.body;
     
     const consent = await OptInConsent.findOne({
-      userId: req.userId,
+      businessId: req.businessId,
       phoneNumber: req.params.phoneNumber
     });
     
@@ -389,7 +389,7 @@ router.put('/:phoneNumber/preferences', auth, async (req, res) => {
  * @desc    Set flags (spam, blocked, invalid, doNotContact)
  * @access  Private
  */
-router.post('/:phoneNumber/flag', auth, async (req, res) => {
+router.post('/:phoneNumber/flag', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { flag, value = true } = req.body;
     
@@ -397,7 +397,7 @@ router.post('/:phoneNumber/flag', auth, async (req, res) => {
       return res.status(400).json({ error: 'Invalid flag' });
     }
     
-    const consent = await OptInConsent.getOrCreate(req.userId, req.params.phoneNumber);
+    const consent = await OptInConsent.getOrCreate(req.businessId, req.params.phoneNumber);
     
     consent.flags[flag] = value;
     await consent.save();
@@ -417,10 +417,10 @@ router.post('/:phoneNumber/flag', auth, async (req, res) => {
  * @desc    Delete consent record (GDPR right to be forgotten)
  * @access  Private
  */
-router.delete('/:phoneNumber', auth, async (req, res) => {
+router.delete('/:phoneNumber', auth, requireBusiness, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const result = await OptInConsent.deleteOne({
-      userId: req.userId,
+      businessId: req.businessId,
       phoneNumber: req.params.phoneNumber
     });
     

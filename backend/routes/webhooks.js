@@ -7,30 +7,45 @@ const Campaign = require('../models/Campaign');
 const TemplateAnalytics = require('../models/TemplateAnalytics');
 const Flow = require('../models/Flow');
 const FlowResponse = require('../models/FlowResponse');
-const Channel = require('../models/Channel');
-const ChannelMessage = require('../models/ChannelMessage');
 const AlertLog = require('../models/AlertLog');
+const Business = require('../models/Business');
 const automationService = require('../services/automationService');
 
 // @route   GET /api/webhooks/whatsapp
 // @desc    Webhook verification (WhatsApp requires this)
 // @access  Public
-router.get('/whatsapp', (req, res) => {
+router.get('/whatsapp', async (req, res) => {
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
 
   // Check if a token and mode were sent
   if (mode && token) {
-    // Check the mode and token sent are correct
+    // Multi-business support: Check against any business's verify token
+    // First try env variable for backward compatibility
     if (mode === 'subscribe' && token === process.env.WHATSAPP_VERIFY_TOKEN) {
-      // Respond with 200 OK and challenge token from the request
-      console.log('✅ Webhook verified');
-      res.status(200).send(challenge);
-    } else {
-      // Responds with '403 Forbidden' if verify tokens do not match
-      res.sendStatus(403);
+      console.log('✅ Webhook verified (env token)');
+      return res.status(200).send(challenge);
     }
+    
+    // Try to find a business with matching verify token
+    try {
+      const business = await Business.findOne({ 
+        'whatsappConfig.verifyToken': token,
+        status: 'active'
+      });
+      
+      if (business) {
+        console.log(`✅ Webhook verified for business: ${business.name}`);
+        return res.status(200).send(challenge);
+      }
+    } catch (error) {
+      console.error('Error verifying webhook token:', error);
+    }
+    
+    // No matching token found
+    console.log('❌ Webhook verification failed: invalid token');
+    res.sendStatus(403);
   } else {
     res.sendStatus(400);
   }
@@ -41,23 +56,7 @@ router.get('/whatsapp', (req, res) => {
 // @access  Public
 router.post('/whatsapp', async (req, res) => {
   try {
-    // ✅ ADDED: Webhook signature verification for security
-    const signature = req.headers['x-hub-signature-256'];
-    
-    if (signature && process.env.WHATSAPP_APP_SECRET) {
-      const crypto = require('crypto');
-      const expectedSignature = 'sha256=' + crypto
-        .createHmac('sha256', process.env.WHATSAPP_APP_SECRET)
-        .update(JSON.stringify(req.body))
-        .digest('hex');
-      
-      if (signature !== expectedSignature) {
-        console.error('❌ Webhook signature verification failed');
-        return res.sendStatus(403);
-      }
-    }
-
-    // Always respond with 200 OK quickly (after verification)
+    // Always respond with 200 OK quickly (verification happens per business below)
     res.sendStatus(200);
 
     const body = req.body;
@@ -73,66 +72,96 @@ router.post('/whatsapp', async (req, res) => {
     for (const entry of body.entry) {
       for (const change of entry.changes) {
         const value = change.value;
+        
+        // ✅ MULTI-BUSINESS: Extract phone number ID to route to correct business
+        const phoneNumberId = value.metadata?.phone_number_id;
+        
+        if (!phoneNumberId) {
+          console.error('❌ No phone_number_id in webhook - cannot route to business');
+          continue;
+        }
+        
+        // Find business by phone number ID
+        const business = await Business.findByPhoneNumberId(phoneNumberId);
+        
+        if (!business) {
+          console.error(`❌ No business found for phone number: ${phoneNumberId}`);
+          continue;
+        }
+        
+        // Verify webhook signature for this business (if appSecret configured)
+        const signature = req.headers['x-hub-signature-256'];
+        if (signature && business.whatsappConfig.appSecret) {
+          const WhatsAppService = require('../services/whatsappService');
+          const whatsappService = new WhatsAppService();
+          const isValid = whatsappService.verifyWebhookSignature(
+            JSON.stringify(req.body),
+            signature,
+            business.whatsappConfig.appSecret
+          );
+          
+          if (!isValid) {
+            console.error(`❌ Webhook signature verification failed for business: ${business.name}`);
+            continue;
+          }
+        }
+        
+        console.log(`✅ Routing webhook to business: ${business.name} (${business._id})`);
 
         // Handle incoming messages
         if (value.messages) {
           for (const message of value.messages) {
-            await handleIncomingMessage(message, value.metadata, io);
+            await handleIncomingMessage(message, value.metadata, io, business);
           }
         }
 
         // Handle message status updates
         if (value.statuses) {
           for (const status of value.statuses) {
-            await handleMessageStatus(status, io);
+            await handleMessageStatus(status, io, business);
           }
         }
 
         // Handle template status updates
         if (value.message_template_status_update) {
-          await handleTemplateStatusUpdate(value.message_template_status_update, io);
+          await handleTemplateStatusUpdate(value.message_template_status_update, io, business);
         }
 
         // ✅ FEATURE: Account Alerts - Handle account quality/status updates
         if (change.field === 'phone_number_quality_update' || 
             change.field === 'account_update' ||
             change.field === 'account_alerts') {
-          await handleAccountAlert(change, value, io);
+          await handleAccountAlert(change, value, io, business);
         }
 
         // ✅ FEATURE: Contact Updates - Handle contact profile changes
         if (change.field === 'contacts') {
-          await handleContactUpdate(change, value, io);
+          await handleContactUpdate(change, value, io, business);
         }
 
         // ✅ FEATURE 32: Flow Responses - Handle WhatsApp Flow responses
         if (value.messages) {
           for (const message of value.messages) {
             if (message.type === 'interactive' && message.interactive?.type === 'nfm_reply') {
-              await handleFlowResponse(message, value.metadata, io);
+              await handleFlowResponse(message, value.metadata, io, business);
             }
           }
-        }
-
-        // ✅ FEATURE 33: Channel Events - Handle channel-related events
-        if (change.field === 'channel_messages') {
-          await handleChannelEvent(value, io);
         }
 
         // ✅ FEATURE 35: Enhanced Webhook Events
         // Phone number name update
         if (change.field === 'phone_number_name_update') {
-          await handlePhoneNameUpdate(value, io);
+          await handlePhoneNameUpdate(value, io, business);
         }
 
         // Template limit update
         if (change.field === 'template_category_limit_update') {
-          await handleTemplateLimitUpdate(value, io);
+          await handleTemplateLimitUpdate(value, io, business);
         }
 
         // Security notifications
         if (change.field === 'security' || value.event === 'DISABLED' || value.event === 'VERIFIED') {
-          await handleSecurityEvent(value, io);
+          await handleSecurityEvent(value, io, business);
         }
       }
     }
@@ -143,7 +172,7 @@ router.post('/whatsapp', async (req, res) => {
 });
 
 // Handle incoming messages
-async function handleIncomingMessage(message, metadata, io) {
+async function handleIncomingMessage(message, metadata, io, business) {
   try {
     const from = message.from;
     const messageId = message.id;
@@ -152,30 +181,42 @@ async function handleIncomingMessage(message, metadata, io) {
     // Normalize phone number
     const phoneNormalized = Conversation.normalizePhone(from);
 
-    // Get or create conversation
+    // Get or create conversation (now scoped to business)
     let conversation = await Conversation.findOne({
-      'contact.phoneNumber': phoneNormalized
+      'contact.phoneNumber': phoneNormalized,
+      businessId: business._id
     });
 
     if (!conversation) {
-      // Create new conversation (assign to first admin user)
+      // Create new conversation (assign to business owner or first team member)
       const User = require('../models/User');
-      let firstUser = await User.findOne({ role: 'admin' });
       
-      // Fallback to any user if no admin found
-      if (!firstUser) {
-        firstUser = await User.findOne();
+      // Try to assign to business owner first
+      let assignedUser = await User.findById(business.owner);
+      
+      // Fallback to first team member with agent/admin role
+      if (!assignedUser && business.team && business.team.length > 0) {
+        const teamMember = business.team.find(t => ['admin', 'agent'].includes(t.role));
+        if (teamMember) {
+          assignedUser = await User.findById(teamMember.user);
+        }
       }
       
-      if (!firstUser) {
+      // Last fallback to any admin user
+      if (!assignedUser) {
+        assignedUser = await User.findOne({ role: 'admin' });
+      }
+      
+      if (!assignedUser) {
         console.error('❌ No user found to assign conversation');
         return;
       }
 
-      console.log(`✅ Creating new conversation for ${from}, assigning to user: ${firstUser._id}`);
+      console.log(`✅ Creating new conversation for ${from} in business ${business.name}, assigning to user: ${assignedUser._id}`);
 
       conversation = await Conversation.create({
-        userId: firstUser._id,
+        businessId: business._id,
+        userId: assignedUser._id,
         contact: {
           phoneNumber: phoneNormalized,
           name: message.profile?.name || from
@@ -190,21 +231,26 @@ async function handleIncomingMessage(message, metadata, io) {
         }
       });
 
-      console.log(`📡 Emitting conversation:new to user:${firstUser._id}`);
+      console.log(`📡 Emitting conversation:new to user:${assignedUser._id}`);
       
       // Emit new conversation event
-      io.to(`user:${firstUser._id}`).emit('conversation:new', {
+      io.to(`user:${assignedUser._id}`).emit('conversation:new', {
         conversation
       });
 
-      // 🎉 NEW: Send automatic welcome message for first-time contacts
+      // 🎉 NEW: Send automatic welcome message for first-time contacts (business-specific)
       try {
-        console.log(`🤖 Sending welcome message to new contact: ${from}`);
-        await sendWelcomeMessage(conversation, firstUser._id, io);
+        if (business.settings?.welcomeMessage?.enabled) {
+          console.log(`🤖 Sending welcome message to new contact: ${from} (business: ${business.name})`);
+          await sendWelcomeMessage(conversation, business, io);
+        }
       } catch (welcomeError) {
         console.error('❌ Failed to send welcome message:', welcomeError);
         // Don't block the webhook if welcome message fails
       }
+      
+      // Increment business usage
+      await business.incrementUsage('conversations', 1);
     }
 
     // Determine message type and content
@@ -435,7 +481,7 @@ async function handleIncomingMessage(message, metadata, io) {
 }
 
 // Handle message status updates
-async function handleMessageStatus(status, io) {
+async function handleMessageStatus(status, io, business) {
   try {
     const messageId = status.id;
     const statusType = status.status; // sent, delivered, read, failed
@@ -443,12 +489,14 @@ async function handleMessageStatus(status, io) {
 
     // ✅ FEATURE: Message Errors - Handle failed message status with errors
     if (statusType === 'failed' && status.errors && status.errors.length > 0) {
-      await handleMessageError(status, io);
+      await handleMessageError(status, io, business);
       return;
     }
 
     // ✅ OPTIMIZATION: Check if this is a campaign message first (stored in Campaign, not Conversation)
+    // Filter by businessId for data isolation
     const campaign = await Campaign.findOne({
+      businessId: business._id,
       'recipients.whatsappMessageId': messageId
     });
 
@@ -492,7 +540,9 @@ async function handleMessageStatus(status, io) {
     }
 
     // If not a campaign message, check conversation (regular 1-on-1 messages)
+    // Filter by businessId for data isolation
     const conversation = await Conversation.findOne({
+      businessId: business._id,
       'messages.whatsappMessageId': messageId
     });
 
@@ -529,13 +579,14 @@ async function handleMessageStatus(status, io) {
 }
 
 // Handle template status updates
-async function handleTemplateStatusUpdate(statusUpdate, io) {
+async function handleTemplateStatusUpdate(statusUpdate, io, business) {
   try {
     const templateId = statusUpdate.message_template_id;
     const status = statusUpdate.event; // APPROVED, REJECTED, PENDING
 
-    // Find template by WhatsApp template ID
+    // Find template by WhatsApp template ID and businessId
     const template = await Template.findOne({
+      businessId: business._id,
       whatsappTemplateId: templateId
     });
 
@@ -573,26 +624,21 @@ async function handleTemplateStatusUpdate(statusUpdate, io) {
 }
 
 // Send automatic welcome message to first-time contacts
-async function sendWelcomeMessage(conversation, userId, io) {
+async function sendWelcomeMessage(conversation, business, io) {
   try {
-    const whatsappService = require('../services/whatsappService');
-    const User = require('../models/User');
+    const WhatsAppService = require('../services/whatsappService');
     
-    // Get user-specific welcome message configuration
-    const user = await User.findById(userId).populate('welcomeMessageConfig.templateId');
+    // Get business-specific welcome message configuration
+    const config = business.settings?.welcomeMessage;
     
-    if (!user || !user.welcomeMessageConfig) {
-      console.log('⏭️ User has no welcome message configuration');
+    if (!config || !config.enabled) {
+      console.log('⏭️ Welcome messages disabled for this business');
       return;
     }
     
-    const config = user.welcomeMessageConfig;
-    
-    // Check if welcome messages are enabled
-    if (!config.enabled) {
-      console.log('⏭️ Welcome messages disabled for this user');
-      return;
-    }
+    // Get business credentials for WhatsApp API
+    const credentials = await business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
 
     // Add delay if configured
     if (config.delay > 0) {
@@ -622,7 +668,7 @@ async function sendWelcomeMessage(conversation, userId, io) {
       } else {
         console.log(`📤 Sending template welcome message: ${welcomeTemplate.name}`);
         
-        // Send template message via WhatsApp
+        // Send template message via WhatsApp using business credentials
         const result = await whatsappService.sendTemplateMessage(
           conversation.contact.phoneNumber,
           welcomeTemplate.name,
@@ -633,7 +679,7 @@ async function sendWelcomeMessage(conversation, userId, io) {
           // Add the welcome message to conversation
           await conversation.addMessage({
             whatsappMessageId: result.messageId,
-            from: process.env.WHATSAPP_PHONE_NUMBER_ID || 'system',
+            from: business.whatsappConfig.phoneNumberId,
             to: conversation.contact.phoneNumber,
             direction: 'outgoing',
             type: 'template',
@@ -727,16 +773,16 @@ function checkBusinessHours(config) {
 }
 
 // ✅ FEATURE: Account Alerts - Handle account quality and status updates
-async function handleAccountAlert(change, value, io) {
+async function handleAccountAlert(change, value, io, business) {
   try {
-    console.log('🚨 Account alert received:');
+    console.log(`🚨 Account alert received for business: ${business.name}`);
     console.log('   Field:', change.field);
     console.log('   Value:', JSON.stringify(value, null, 2));
 
     const AlertLog = require('../models/AlertLog');
     
-    // Get user ID (in production, you would identify user by phone number ID)
-    const ADMIN_USER_ID = process.env.ADMIN_USER_ID || '68f9490fef1e28c3cb8a9f8b';
+    // Use business owner for alert notifications
+    const ownerId = business.owner;
     
     // Parse alert data
     const alertData = parseAccountAlert(change.field, value);
@@ -748,7 +794,8 @@ async function handleAccountAlert(change, value, io) {
 
     // Create alert log
     const alert = await AlertLog.create({
-      userId: ADMIN_USER_ID,
+      businessId: business._id,
+      userId: ownerId,
       alertType: alertData.alertType,
       severity: alertData.severity,
       title: alertData.title,
@@ -769,9 +816,16 @@ async function handleAccountAlert(change, value, io) {
 
     console.log('✅ Alert log created:', alert._id);
 
+    // Update business health status with alert data
+    await business.updateHealth({
+      lastChecked: new Date(),
+      qualityRating: alertData.whatsappData?.currentRating,
+      lastError: alertData.message
+    });
+    
     // Emit socket event for real-time notification
     if (io) {
-      io.to(`user:${ADMIN_USER_ID}`).emit('alert:new', {
+      io.to(`user:${ownerId}`).emit('alert:new', {
         alert: {
           _id: alert._id,
           alertType: alert.alertType,
@@ -873,25 +927,19 @@ function parseAccountAlert(field, value) {
 }
 
 // ✅ FEATURE: Contact Updates - Handle contact profile changes
-async function handleContactUpdate(change, value, io) {
+async function handleContactUpdate(change, value, io, business) {
   try {
-    console.log('👤 Contact update received:');
+    console.log(`👤 Contact update received for business: ${business.name}`);
     console.log('   Change:', JSON.stringify(change, null, 2));
     console.log('   Value:', JSON.stringify(value, null, 2));
 
     const ContactHistory = require('../models/ContactHistory');
     const User = require('../models/User');
 
-    // Find user by phone number ID
-    const phoneNumberId = value.phone_number_id || value.metadata?.phone_number_id;
-    if (!phoneNumberId) {
-      console.log('⚠️  No phone number ID in contact update');
-      return;
-    }
-
-    const user = await User.findOne({ 'whatsapp.phoneNumberId': phoneNumberId });
+    // Use business owner for contact history
+    const user = await User.findById(business.owner);
     if (!user) {
-      console.log('⚠️  User not found for phone number ID:', phoneNumberId);
+      console.log('⚠️  Business owner not found');
       return;
     }
 
@@ -1041,9 +1089,9 @@ async function updateConversationContact(userId, phoneNumber, contactData) {
 }
 
 // ✅ FEATURE: Message Errors - Handle message failures
-async function handleMessageError(status, io) {
+async function handleMessageError(status, io, business) {
   try {
-    console.log('❌ Message error received:');
+    console.log(`❌ Message error received for business: ${business.name}`);
     console.log('   Status:', JSON.stringify(status, null, 2));
 
     const MessageError = require('../models/MessageError');
@@ -1065,11 +1113,12 @@ async function handleMessageError(status, io) {
     // Find conversation and message context
     let conversation = null;
     let messageContext = null;
-    let userId = null;
+    let userId = business.owner;
 
-    // Check if it's a campaign message
+    // Check if it's a campaign message (filter by businessId)
     const Campaign = require('../models/Campaign');
     const campaign = await Campaign.findOne({
+      businessId: business._id,
       'recipients.whatsappMessageId': messageId
     });
 
@@ -1211,9 +1260,9 @@ async function trackTemplateAnalytics(userId, templateId, templateName, statusTy
 }
 
 // ✅ FEATURE 32: Handle Flow Response (NFM Reply)
-async function handleFlowResponse(message, metadata, io) {
+async function handleFlowResponse(message, metadata, io, business) {
   try {
-    console.log('📝 Processing flow response:', message.id);
+    console.log(`📝 Processing flow response for business ${business.name}:`, message.id);
 
     const from = message.from;
     const interactive = message.interactive;
@@ -1360,109 +1409,12 @@ async function handleFlowResponse(message, metadata, io) {
 }
 
 /**
- * ✅ FEATURE 33: Handle WhatsApp Channel Events
- * Processes channel-related webhook events (message views, reactions, etc.)
- */
-async function handleChannelEvent(value, io) {
-  try {
-    console.log('📢 Processing channel event...');
-
-    // Extract channel event data
-    const metadata = value.metadata;
-    const statuses = value.statuses || [];
-
-    // Handle message status updates for channel messages
-    for (const status of statuses) {
-      const messageId = status.id;
-      const statusType = status.status; // sent, delivered, read
-      const timestamp = new Date(parseInt(status.timestamp) * 1000);
-
-      // Find the channel message
-      const channelMessage = await ChannelMessage.findOne({ messageId });
-
-      if (!channelMessage) {
-        console.log(`⚠️ Channel message not found: ${messageId}`);
-        continue;
-      }
-
-      // Update delivery status
-      if (statusType === 'delivered') {
-        await channelMessage.updateDeliveryStatus('delivered');
-        console.log(`✅ Channel message ${messageId} marked as delivered`);
-      }
-
-      // Handle views (read receipts)
-      if (statusType === 'read') {
-        await channelMessage.recordView();
-        console.log(`👁️ Channel message ${messageId} view recorded`);
-      }
-
-      // Handle reactions if present
-      if (status.reaction) {
-        const emoji = status.reaction.emoji;
-        await channelMessage.recordReaction(emoji);
-        console.log(`❤️ Channel message ${messageId} received reaction: ${emoji}`);
-
-        // Update channel analytics
-        const channel = await Channel.findById(channelMessage.channelId);
-        if (channel) {
-          await channel.incrementReactions(1);
-        }
-      }
-
-      // Emit real-time update
-      if (io) {
-        const channel = await Channel.findById(channelMessage.channelId);
-        if (channel) {
-          io.to(`user:${channel.createdBy}`).emit('channelMessageUpdate', {
-            channelId: channel._id,
-            messageId: channelMessage._id,
-            status: channelMessage.status,
-            views: channelMessage.views,
-            reactions: channelMessage.reactions,
-            engagementRate: channelMessage.calculateEngagementRate()
-          });
-        }
-      }
-    }
-
-    // Handle follower updates if present
-    if (value.follower_updates) {
-      for (const followerUpdate of value.follower_updates) {
-        const channelId = followerUpdate.channel_id;
-        const followerCount = followerUpdate.follower_count;
-
-        // Find channel by WhatsApp channel ID
-        const channel = await Channel.findOne({ channelId });
-
-        if (channel) {
-          await channel.updateFollowerCount(followerCount);
-          console.log(`✅ Channel ${channelId} follower count updated: ${followerCount}`);
-
-          // Emit real-time update
-          if (io) {
-            io.to(`user:${channel.createdBy}`).emit('channelFollowerUpdate', {
-              channelId: channel._id,
-              followerCount
-            });
-          }
-        }
-      }
-    }
-
-    console.log('✅ Channel event processed successfully');
-  } catch (error) {
-    console.error('Error handling channel event:', error);
-  }
-}
-
-/**
  * ✅ FEATURE 35: Handle Phone Number Name Update
  * Processes when business display name changes
  */
-async function handlePhoneNameUpdate(value, io) {
+async function handlePhoneNameUpdate(value, io, business) {
   try {
-    console.log('📱 Processing phone name update...');
+    console.log(`📱 Processing phone name update for business ${business.name}...`);
 
     const phoneNumberId = value.phone_number_id;
     const displayPhoneNumber = value.display_phone_number;
@@ -1471,7 +1423,7 @@ async function handlePhoneNameUpdate(value, io) {
     const decision = value.decision; // APPROVED, REJECTED
     const requestedName = value.requested_name;
 
-    // Find user by phone number ID
+    // Use business owner
     const User = require('../models/User');
     const user = await User.findOne({ whatsappPhoneNumberId: phoneNumberId });
 
@@ -1533,9 +1485,9 @@ async function handlePhoneNameUpdate(value, io) {
  * ✅ FEATURE 35: Handle Template Category Limit Update
  * Processes when template approval limits change
  */
-async function handleTemplateLimitUpdate(value, io) {
+async function handleTemplateLimitUpdate(value, io, business) {
   try {
-    console.log('📋 Processing template limit update...');
+    console.log(`📋 Processing template limit update for business ${business.name}...`);
 
     const phoneNumberId = value.phone_number_id;
     const displayPhoneNumber = value.display_phone_number;
@@ -1544,7 +1496,7 @@ async function handleTemplateLimitUpdate(value, io) {
     const newLimit = value.new_limit || 0;
     const reason = value.reason || 'No reason provided';
 
-    // Find user by phone number ID
+    // Use business owner
     const User = require('../models/User');
     const user = await User.findOne({ whatsappPhoneNumberId: phoneNumberId });
 
@@ -1612,9 +1564,9 @@ async function handleTemplateLimitUpdate(value, io) {
  * ✅ FEATURE 35: Handle Security Event
  * Processes security notifications (account verification, suspension, etc.)
  */
-async function handleSecurityEvent(value, io) {
+async function handleSecurityEvent(value, io, business) {
   try {
-    console.log('🔒 Processing security event...');
+    console.log(`🔒 Processing security event for business ${business.name}...`);
 
     const phoneNumberId = value.phone_number_id;
     const displayPhoneNumber = value.display_phone_number;
@@ -1622,9 +1574,9 @@ async function handleSecurityEvent(value, io) {
     const reason = value.reason || 'No reason provided';
     const decision = value.decision; // Can be DISABLE, REINSTATE
 
-    // Find user by phone number ID
+    // Use business owner
     const User = require('../models/User');
-    const user = await User.findOne({ whatsappPhoneNumberId: phoneNumberId });
+    const user = await User.findById(business.owner);
 
     if (!user) {
       console.log(`⚠️ User not found for phone number ID: ${phoneNumberId}`);

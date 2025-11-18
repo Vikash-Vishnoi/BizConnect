@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const DataExport = require('../models/DataExport');
 const gdprService = require('../services/gdprService');
-const { auth, requirePermission } = require('../middleware/auth');
+const { auth, requirePermission, requireBusiness } = require('../middleware/auth');
 
 /**
  * GDPR Routes
@@ -20,7 +20,7 @@ const { auth, requirePermission } = require('../middleware/auth');
  */
 
 // Request data export
-router.post('/export', auth, async (req, res) => {
+router.post('/export', auth, requireBusiness, async (req, res) => {
   try {
     const { dataTypes, format } = req.body;
 
@@ -57,7 +57,8 @@ router.post('/export', auth, async (req, res) => {
 
     // Check for existing pending requests
     const existingRequest = await DataExport.findOne({
-      userId: req.user._id,
+      userId: req.userId,
+      businessId: req.businessId,
       requestType: 'EXPORT',
       status: { $in: ['PENDING', 'PROCESSING'] }
     });
@@ -72,11 +73,13 @@ router.post('/export', auth, async (req, res) => {
 
     // Create export request
     const request = await DataExport.createExportRequest(
-      req.user._id,
+      req.userId,
+      req.businessId,
       dataTypes,
       exportFormat,
       {
-        userId: req.user._id,
+        userId: req.userId,
+        businessId: req.businessId,
         userEmail: req.user.email,
         ipAddress: req.ip,
         userAgent: req.get('user-agent')
@@ -109,7 +112,7 @@ router.post('/export', auth, async (req, res) => {
 });
 
 // Request data deletion
-router.post('/delete', auth, async (req, res) => {
+router.post('/delete', auth, requireBusiness, async (req, res) => {
   try {
     const { deleteDataTypes, deletionReason, confirmPassword } = req.body;
 
@@ -136,7 +139,7 @@ router.post('/delete', auth, async (req, res) => {
 
     // Verify password for deletion
     const User = require('../models/User');
-    const user = await User.findById(req.user._id);
+    const user = await User.findById(req.userId);
     const isPasswordValid = await user.comparePassword(confirmPassword);
 
     if (!isPasswordValid) {
@@ -148,7 +151,8 @@ router.post('/delete', auth, async (req, res) => {
 
     // Check for existing pending requests
     const existingRequest = await DataExport.findOne({
-      userId: req.user._id,
+      userId: req.userId,
+      businessId: req.businessId,
       requestType: 'DELETE',
       status: { $in: ['PENDING', 'PROCESSING'] }
     });
@@ -163,11 +167,13 @@ router.post('/delete', auth, async (req, res) => {
 
     // Create deletion request
     const request = await DataExport.createDeletionRequest(
-      req.user._id,
+      req.userId,
+      req.businessId,
       deleteDataTypes,
       deletionReason,
       {
-        userId: req.user._id,
+        userId: req.userId,
+        businessId: req.businessId,
         userEmail: req.user.email,
         ipAddress: req.ip,
         userAgent: req.get('user-agent')
@@ -199,11 +205,11 @@ router.post('/delete', auth, async (req, res) => {
 });
 
 // Get user's GDPR requests
-router.get('/requests', auth, async (req, res) => {
+router.get('/requests', auth, requireBusiness, async (req, res) => {
   try {
     const { requestType, status, page = 1, limit = 20 } = req.query;
 
-    const query = { userId: req.user._id };
+    const query = { userId: req.userId, businessId: req.businessId };
     if (requestType) query.requestType = requestType;
     if (status) query.status = status;
 
@@ -239,11 +245,12 @@ router.get('/requests', auth, async (req, res) => {
 });
 
 // Get specific request
-router.get('/requests/:id', auth, async (req, res) => {
+router.get('/requests/:id', auth, requireBusiness, async (req, res) => {
   try {
     const request = await DataExport.findOne({
       _id: req.params.id,
-      userId: req.user._id
+      userId: req.userId,
+      businessId: req.businessId
     }).select('-verificationToken');
 
     if (!request) {
@@ -315,11 +322,12 @@ router.post('/requests/:id/verify', async (req, res) => {
 });
 
 // Cancel pending request
-router.post('/requests/:id/cancel', auth, async (req, res) => {
+router.post('/requests/:id/cancel', auth, requireBusiness, async (req, res) => {
   try {
     const request = await DataExport.findOne({
       _id: req.params.id,
-      userId: req.user._id
+      userId: req.userId,
+      businessId: req.businessId
     });
 
     if (!request) {
@@ -354,11 +362,12 @@ router.post('/requests/:id/cancel', auth, async (req, res) => {
 });
 
 // Download export file
-router.get('/download/:id', auth, async (req, res) => {
+router.get('/download/:id', auth, requireBusiness, async (req, res) => {
   try {
     const request = await DataExport.findOne({
       _id: req.params.id,
-      userId: req.user._id,
+      userId: req.userId,
+      businessId: req.businessId,
       requestType: 'EXPORT'
     });
 
@@ -413,11 +422,11 @@ router.get('/download/:id', auth, async (req, res) => {
 });
 
 // Get GDPR statistics (admin only)
-router.get('/stats', auth, requirePermission('VIEW_ANALYTICS'), async (req, res) => {
+router.get('/stats', auth, requireBusiness, requirePermission('VIEW_ANALYTICS'), async (req, res) => {
   try {
     const { userId } = req.query;
 
-    const stats = await DataExport.getRequestStats(userId);
+    const stats = await DataExport.getRequestStats(req.businessId, userId);
 
     // Transform stats into readable format
     const formattedStats = {

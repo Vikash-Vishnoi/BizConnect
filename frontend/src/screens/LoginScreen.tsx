@@ -2,21 +2,19 @@ import React, {useState, useEffect} from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   Alert,
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Animated,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {RootStackParamList} from '../types/navigation';
 import {authAPI} from '../services/api';
 import {storageService} from '../services/storage';
+import {EnhancedInput, EnhancedButton} from '../components/common';
 import theme from '../theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
@@ -144,59 +142,35 @@ const LoginScreen = ({navigation}: Props) => {
           {}
           <View style={styles.formCard}>
             {}
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Email Address</Text>
-              <View style={[styles.inputWrapper, emailError && styles.inputWrapperError]}>
-                <Text style={styles.inputIcon}>📧</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="your.email@example.com"
-                  placeholderTextColor={theme.colors.textTertiary}
-                  value={email}
-                  onChangeText={text => {
-                    setEmail(text);
-                    setEmailError('');
-                  }}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  editable={!isLoading}
-                />
-              </View>
-              {emailError ? (
-                <View style={styles.errorContainer}>
-                  <Text style={styles.errorIcon}>⚠️</Text>
-                  <Text style={styles.errorText}>{emailError}</Text>
-                </View>
-              ) : null}
-            </View>
+            <EnhancedInput
+              label="Email Address"
+              value={email}
+              onChangeText={text => {
+                setEmail(text);
+                setEmailError('');
+              }}
+              error={emailError}
+              leftIcon="email"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              editable={!isLoading}
+            />
 
             {}
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Password</Text>
-              <View style={[styles.inputWrapper, passwordError && styles.inputWrapperError]}>
-                <Text style={styles.inputIcon}>🔒</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter your password"
-                  placeholderTextColor={theme.colors.textTertiary}
-                  value={password}
-                  onChangeText={text => {
-                    setPassword(text);
-                    setPasswordError('');
-                  }}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  editable={!isLoading}
-                />
-              </View>
-              {passwordError ? (
-                <View style={styles.errorContainer}>
-                  <Text style={styles.errorIcon}>⚠️</Text>
-                  <Text style={styles.errorText}>{passwordError}</Text>
-                </View>
-              ) : null}
-            </View>
+            <EnhancedInput
+              label="Password"
+              value={password}
+              onChangeText={text => {
+                setPassword(text);
+                setPasswordError('');
+              }}
+              error={passwordError}
+              leftIcon="lock"
+              secureTextEntry
+              autoCapitalize="none"
+              editable={!isLoading}
+            />
 
             {}
             <View style={styles.optionsRow}>
@@ -219,46 +193,16 @@ const LoginScreen = ({navigation}: Props) => {
               </TouchableOpacity>
             </View>
 
-            {}
-            <TouchableOpacity
-              style={styles.loginButtonWrapper}
+            {/* Login Button */}
+            <EnhancedButton
+              title="Sign In"
               onPress={handleLogin}
+              loading={isLoading}
               disabled={isLoading}
-              activeOpacity={0.8}>
-              <LinearGradient
-                colors={isLoading
-                  ? [theme.colors.textSecondary, theme.colors.textSecondary]
-                  : [theme.colors.gradientStart, theme.colors.gradientEnd]}
-                style={styles.loginButton}
-                start={{x: 0, y: 0}}
-                end={{x: 1, y: 0}}>
-                {isLoading ? (
-                  <ActivityIndicator color="#FFFFFF" size="small" />
-                ) : (
-                  <Text style={styles.loginButtonText}>Sign In</Text>
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
-
-            {}
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>or</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            {}
-            <View style={styles.socialContainer}>
-              <TouchableOpacity style={styles.socialButton} activeOpacity={0.7}>
-                <Text style={styles.socialIcon}>G</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.socialButton} activeOpacity={0.7}>
-                <Text style={styles.socialIcon}>f</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.socialButton} activeOpacity={0.7}>
-                <Text style={styles.socialIcon}>in</Text>
-              </TouchableOpacity>
-            </View>
+              gradient
+              size="large"
+              fullWidth
+            />
           </View>
 
           {}
@@ -423,40 +367,6 @@ const styles = StyleSheet.create({
   loginButtonText: {
     ...theme.typography.button,
     color: theme.colors.textInverse,
-  },
-  divider: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginVertical: theme.spacing.lg,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: theme.colors.divider,
-  },
-  dividerText: {
-    ...theme.typography.caption,
-    color: theme.colors.textTertiary,
-    marginHorizontal: theme.spacing.md,
-  },
-  socialContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: theme.spacing.md,
-  },
-  socialButton: {
-    width: 50,
-    height: 50,
-    borderRadius: theme.borderRadius.full,
-    backgroundColor: theme.colors.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-    ...theme.shadows.sm,
-  },
-  socialIcon: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: theme.colors.textSecondary,
   },
   signupContainer: {
     flexDirection: 'row',

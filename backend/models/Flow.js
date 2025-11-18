@@ -93,6 +93,12 @@ const flowSchema = new mongoose.Schema({
     required: true,
     index: true
   },
+  businessId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Business',
+    required: true,
+    index: true
+  },
 
   // Flow identification
   name: {

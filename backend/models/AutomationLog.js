@@ -13,6 +13,12 @@ const automationLogSchema = new mongoose.Schema({
     required: true,
     index: true
   },
+  businessId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Business',
+    required: true,
+    index: true
+  },
   automationRuleId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'AutomationRule',

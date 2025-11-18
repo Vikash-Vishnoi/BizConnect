@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const PhoneNumberHealth = require('../models/PhoneNumberHealth');
-const { auth } = require('../middleware/auth');
+const { auth, requireBusiness, requireBusinessPermission } = require('../middleware/auth');
 const whatsappService = require('../services/whatsappService');
 
 /**
@@ -14,9 +14,9 @@ const whatsappService = require('../services/whatsappService');
 // @route   GET /api/phone-health
 // @desc    Get current phone number health status
 // @access  Private
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, requireBusiness, requireBusinessPermission('manage_settings'), async (req, res) => {
   try {
-    const health = await PhoneNumberHealth.getCurrentHealth(req.userId);
+    const health = await PhoneNumberHealth.getCurrentHealth(req.businessId);
 
     if (!health) {
       return res.status(404).json({ 
@@ -56,12 +56,15 @@ router.get('/', auth, async (req, res) => {
 // @route   POST /api/phone-health/check
 // @desc    Run a health check (fetch from WhatsApp API)
 // @access  Private
-router.post('/check', auth, async (req, res) => {
+router.post('/check', auth, requireBusiness, requireBusinessPermission('manage_settings'), async (req, res) => {
   try {
     console.log('🔍 Running phone number health check...');
 
+    // Get business credentials and create WhatsApp service
+    const whatsappServiceInstance = new whatsappService.constructor(req.business.whatsappCredentials);
+
     // Fetch health data from WhatsApp API
-    const result = await whatsappService.getPhoneNumberHealth();
+    const result = await whatsappServiceInstance.getPhoneNumberHealth();
 
     if (!result.success) {
       return res.status(400).json({ 
@@ -72,14 +75,14 @@ router.post('/check', auth, async (req, res) => {
 
     // Find or create health record
     let health = await PhoneNumberHealth.findOne({ 
-      userId: req.userId,
+      businessId: req.businessId,
       phoneNumberId: result.data.phoneNumberId
     });
 
     if (!health) {
       // Create new health record
       health = new PhoneNumberHealth({
-        userId: req.userId,
+        businessId: req.businessId,
         phoneNumberId: result.data.phoneNumberId,
         phoneNumber: result.data.display_phone_number
       });
@@ -130,12 +133,12 @@ router.post('/check', auth, async (req, res) => {
 // @route   GET /api/phone-health/history
 // @desc    Get health history for the last N days
 // @access  Private
-router.get('/history', auth, async (req, res) => {
+router.get('/history', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
     const { days = 30 } = req.query;
 
     const history = await PhoneNumberHealth.getHealthHistory(
-      req.userId,
+      req.businessId,
       parseInt(days)
     );
 
@@ -176,9 +179,9 @@ router.get('/history', auth, async (req, res) => {
 // @route   GET /api/phone-health/recommendations
 // @desc    Get current recommendations
 // @access  Private
-router.get('/recommendations', auth, async (req, res) => {
+router.get('/recommendations', auth, requireBusiness, requireBusinessPermission('manage_settings'), async (req, res) => {
   try {
-    const health = await PhoneNumberHealth.getCurrentHealth(req.userId);
+    const health = await PhoneNumberHealth.getCurrentHealth(req.businessId);
 
     if (!health) {
       return res.status(404).json({ error: 'No health data found' });
@@ -203,11 +206,11 @@ router.get('/recommendations', auth, async (req, res) => {
 // @route   GET /api/phone-health/alerts
 // @desc    Get current alerts
 // @access  Private
-router.get('/alerts', auth, async (req, res) => {
+router.get('/alerts', auth, requireBusiness, requireBusinessPermission('manage_settings'), async (req, res) => {
   try {
     const { includeAcknowledged = false } = req.query;
 
-    const health = await PhoneNumberHealth.getCurrentHealth(req.userId);
+    const health = await PhoneNumberHealth.getCurrentHealth(req.businessId);
 
     if (!health) {
       return res.status(404).json({ error: 'No health data found' });
@@ -239,11 +242,11 @@ router.get('/alerts', auth, async (req, res) => {
 // @route   PATCH /api/phone-health/alerts/:alertId/acknowledge
 // @desc    Acknowledge an alert
 // @access  Private
-router.patch('/alerts/:alertId/acknowledge', auth, async (req, res) => {
+router.patch('/alerts/:alertId/acknowledge', auth, requireBusiness, requireBusinessPermission('manage_settings'), async (req, res) => {
   try {
     const { alertId } = req.params;
 
-    const health = await PhoneNumberHealth.getCurrentHealth(req.userId);
+    const health = await PhoneNumberHealth.getCurrentHealth(req.businessId);
 
     if (!health) {
       return res.status(404).json({ error: 'No health data found' });
@@ -270,9 +273,9 @@ router.patch('/alerts/:alertId/acknowledge', auth, async (req, res) => {
 // @route   GET /api/phone-health/metrics
 // @desc    Get messaging metrics
 // @access  Private
-router.get('/metrics', auth, async (req, res) => {
+router.get('/metrics', auth, requireBusiness, requireBusinessPermission('view_analytics'), async (req, res) => {
   try {
-    const health = await PhoneNumberHealth.getCurrentHealth(req.userId);
+    const health = await PhoneNumberHealth.getCurrentHealth(req.businessId);
 
     if (!health) {
       return res.status(404).json({ error: 'No health data found' });
@@ -293,9 +296,9 @@ router.get('/metrics', auth, async (req, res) => {
 // @route   POST /api/phone-health/metrics/update
 // @desc    Update metrics from conversation data
 // @access  Private
-router.post('/metrics/update', auth, async (req, res) => {
+router.post('/metrics/update', auth, requireBusiness, requireBusinessPermission('manage_settings'), async (req, res) => {
   try {
-    const health = await PhoneNumberHealth.getCurrentHealth(req.userId);
+    const health = await PhoneNumberHealth.getCurrentHealth(req.businessId);
 
     if (!health) {
       return res.status(404).json({ error: 'No health data found' });
@@ -318,9 +321,10 @@ router.post('/metrics/update', auth, async (req, res) => {
 // @route   GET /api/phone-health/limits
 // @desc    Get messaging limit information
 // @access  Private
-router.get('/limits', auth, async (req, res) => {
+router.get('/limits', auth, requireBusiness, requireBusinessPermission('manage_settings'), async (req, res) => {
   try {
-    const result = await whatsappService.getMessagingLimits();
+    const whatsappServiceInstance = new whatsappService.constructor(req.business.whatsappCredentials);
+    const result = await whatsappServiceInstance.getMessagingLimits();
 
     if (!result.success) {
       return res.status(400).json({ 
