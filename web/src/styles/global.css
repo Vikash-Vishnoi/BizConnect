@@ -1,0 +1,40 @@
+/**
+ * Global CSS - Lightweight wrapper that imports design system
+ * All design tokens and base styles are managed in design-system.css
+ * This file only contains app-specific overrides
+ */
+@import './design-system.css';
+
+/* App-specific overrides */
+#root {
+  min-height: 100vh;
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+/* Prevent horizontal scroll */
+.no-scroll-x {
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
+/* Responsive container */
+.responsive-container {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  padding: 0 var(--spacing-base);
+}
+
+@media (min-width: 768px) {
+  .responsive-container {
+    padding: 0 var(--spacing-lg);
+  }
+}
+
+@media (min-width: 1024px) {
+  .responsive-container {
+    max-width: 1280px;
+    margin: 0 auto;
+  }
+}

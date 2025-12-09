@@ -1,0 +1,252 @@
+.privacy-container {
+  padding: 20px;
+  max-width: 1400px;
+  margin: 80px auto 0;
+}
+
+.loading {
+  text-align: center;
+  padding: 100px 20px;
+  font-size: var(--font-size-lg);
+  color: var(--text-secondary);
+}
+
+.privacy-header {
+  margin-bottom: 30px;
+}
+
+.privacy-header h1 {
+  font-size: var(--font-size-3xl);
+  margin-bottom: 10px;
+  color: var(--text-primary);
+}
+
+.privacy-header p {
+  color: var(--text-secondary);
+  font-size: var(--font-size-base);
+}
+
+.settings-card {
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  padding: 30px;
+  box-shadow: var(--shadow-md);
+  margin-bottom: 30px;
+}
+
+.settings-card h2 {
+  font-size: var(--font-size-2xl);
+  margin-bottom: 24px;
+  color: var(--text-primary);
+}
+
+.settings-grid {
+  display: grid;
+  gap: 24px;
+  margin-bottom: 30px;
+}
+
+.setting-item {
+  padding: 16px;
+  background: var(--background);
+  border-radius: var(--radius-base);
+}
+
+.setting-item label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
+.setting-item input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+
+.setting-item input[type="number"] {
+  width: 100px;
+  padding: 8px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+}
+
+.number-input {
+  margin-left: auto;
+}
+
+.setting-description {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  margin: 0;
+  padding-left: 32px;
+}
+
+.save-button {
+  padding: 12px 32px;
+  background: var(--gradient-purple);
+  color: var(--text-inverse);
+  border: none;
+  border-radius: var(--radius-base);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: var(--transition-slow);
+}
+
+.save-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.save-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.requests-section {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+  gap: 20px;
+}
+
+.requests-card {
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  padding: 24px;
+  box-shadow: var(--shadow-md);
+}
+
+.requests-card h2 {
+  font-size: var(--font-size-xl);
+  margin-bottom: 20px;
+  color: var(--text-primary);
+}
+
+/* Empty state uses shared EmptyState.css component */
+
+.requests-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.request-item {
+  padding: 16px;
+  background: var(--background);
+  border-radius: var(--radius-base);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.request-info {
+  flex: 1;
+}
+
+.request-user {
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.request-date {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.request-status {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+}
+
+.request-status.pending {
+  background: var(--warning);
+  color: var(--text-primary);
+}
+
+.request-status.approved {
+  background: var(--success);
+  color: var(--text-inverse);
+}
+
+.request-status.rejected {
+  background: var(--error);
+  color: var(--text-inverse);
+}
+
+.request-status.completed {
+  background: var(--info);
+  color: var(--text-inverse);
+}
+
+.request-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.approve-btn,
+.reject-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: var(--transition-base);
+}
+
+.approve-btn {
+  background: var(--success);
+  color: var(--text-inverse);
+}
+
+.approve-btn:hover {
+  background: var(--success-dark);
+}
+
+.reject-btn {
+  background: var(--error);
+  color: var(--text-inverse);
+}
+
+.reject-btn:hover {
+  background: var(--error-dark);
+}
+
+@media (max-width: 1024px) {
+  .requests-section {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .privacy-container {
+    padding: 15px;
+  }
+  
+  .request-item {
+    flex-direction: column;
+    align-items: start;
+  }
+  
+  .request-actions {
+    width: 100%;
+  }
+  
+  .approve-btn,
+  .reject-btn {
+    flex: 1;
+  }
+}

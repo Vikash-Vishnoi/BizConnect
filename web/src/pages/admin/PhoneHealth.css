@@ -1,0 +1,202 @@
+.phone-health-container {
+  padding: var(--spacing-lg);
+  max-width: 1400px;
+  margin: 80px auto 0;
+}
+
+.loading {
+  text-align: center;
+  padding: var(--spacing-6xl) var(--spacing-lg);
+  font-size: var(--font-size-lg);
+  color: var(--text-secondary);
+}
+
+.phone-health-header {
+  margin-bottom: var(--spacing-xl);
+  text-align: center;
+}
+
+.phone-health-header h1 {
+  font-size: var(--font-size-3xl);
+  margin-bottom: var(--spacing-sm);
+  color: var(--text-primary);
+}
+
+.phone-health-header p {
+  color: var(--text-secondary);
+  font-size: var(--font-size-base);
+  margin-bottom: var(--spacing-lg);
+}
+
+.check-button {
+  padding: var(--spacing-md) var(--spacing-3xl);
+  background: var(--gradient-purple);
+  color: var(--text-inverse);
+  border: none;
+  border-radius: var(--radius-base);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: var(--transition-slow);
+}
+
+.check-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.check-button:disabled {
+  opacity: var(--opacity-disabled);
+  cursor: not-allowed;
+}
+
+.health-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: var(--spacing-lg);
+  margin-bottom: var(--spacing-xl);
+}
+
+.health-card {
+  background: var(--surface);
+  padding: var(--spacing-lg);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-base);
+}
+
+.health-card.main {
+  background: var(--gradient-purple);
+  color: var(--text-inverse);
+  flex-direction: column;
+  justify-content: center;
+}
+
+.health-score {
+  font-size: var(--font-size-5xl);
+  font-weight: var(--font-weight-bold);
+}
+
+.health-icon {
+  font-size: var(--font-size-5xl);
+}
+
+.health-info {
+  flex: 1;
+}
+
+.health-value {
+  font-size: var(--font-size-2xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.health-card.main .health-value {
+  color: var(--text-inverse);
+}
+
+.health-label {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+
+.health-card.main .health-label {
+  color: var(--text-inverse);
+  opacity: var(--opacity-hover);
+}
+
+.health-details {
+  display: grid;
+  gap: var(--spacing-lg);
+  margin-bottom: var(--spacing-xl);
+}
+
+.details-section {
+  background: var(--surface);
+  padding: var(--spacing-lg);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
+.details-section h3 {
+  font-size: var(--font-size-xl);
+  margin-bottom: var(--spacing-base);
+  color: var(--text-primary);
+}
+
+.details-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: var(--spacing-base);
+}
+
+.detail-item {
+  display: flex;
+  justify-content: space-between;
+  padding: var(--spacing-md);
+  background: var(--background);
+  border-radius: var(--radius-base);
+}
+
+.detail-label {
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-secondary);
+}
+
+.detail-value {
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+}
+
+.recommendations {
+  background: var(--surface);
+  padding: var(--spacing-lg);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
+.recommendations h3 {
+  font-size: var(--font-size-xl);
+  margin-bottom: var(--spacing-base);
+  color: var(--text-primary);
+}
+
+.recommendation-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.recommendation-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  background: var(--success-light);
+  border-radius: var(--radius-base);
+  color: var(--success-dark);
+}
+
+.rec-icon {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-bold);
+}
+
+/* Empty state uses shared EmptyState.css component */
+
+@media (max-width: 768px) {
+  .phone-health-container {
+    padding: var(--spacing-md);
+  }
+  
+  .health-summary {
+    grid-template-columns: 1fr;
+  }
+  
+  .details-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,278 @@
+require('dotenv').config();
+
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const morgan = require('morgan');
+const mongoose = require('mongoose');
+const http = require('http');
+const socketIo = require('socket.io');
+const rateLimit = require('express-rate-limit');
+
+// Utilities
+const { validateEnv, validateProductionEnv } = require('./common/helpers/envValidator');
+const logger = require('./common/helpers/logger');
+
+// Validate environment
+try {
+  validateEnv();
+  validateProductionEnv();
+  console.log('✅ Environment variables validated successfully\n');
+} catch (error) {
+  console.error('❌ Environment validation failed:', error.message);
+  process.exit(1);
+}
+
+// Initialize Express app
+const app = express();
+const server = http.createServer(app);
+
+// Socket.io configuration
+const io = socketIo(server, {
+  cors: {
+    origin: process.env.SOCKET_CORS_ORIGIN || '*',
+    methods: ['GET', 'POST']
+  }
+});
+
+app.set('io', io);
+
+// ==================================================
+// MIDDLEWARE CONFIGURATION
+// ==================================================
+
+// Security & Parsing
+app.use(helmet());
+app.use(cors());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Response formatter - Standardize API responses
+const responseFormatter = require('./core/middlewares/responseFormatter');
+app.use(responseFormatter);
+
+// Request logging & monitoring
+const { requestLogger, errorLogger, performanceMonitor, requestCounter } = require('./core/middlewares/requestLogger');
+app.use(requestLogger);
+app.use(performanceMonitor);
+app.use(requestCounter);
+
+// Development logging
+if (process.env.NODE_ENV === 'development') {
+  app.use(morgan('dev'));
+}
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
+  message: 'Too many requests from this IP, please try again later.'
+});
+app.use('/api/', limiter);
+
+// Audit logging
+const { auditLogger } = require('./core/middlewares/auditLogger');
+app.use(auditLogger);
+
+// ==================================================
+// START BACKGROUND JOBS
+// ==================================================
+
+const { startScheduledMessageProcessor } = require('./jobs/scheduledMessageProcessor');
+const { startScheduledCampaignProcessor } = require('./jobs/scheduledCampaignProcessor');
+
+startScheduledMessageProcessor();
+startScheduledCampaignProcessor();
+
+// ==================================================
+// DATABASE CONNECTION
+// ==================================================
+
+const connectDB = async () => {
+  try {
+    const conn = await mongoose.connect(process.env.MONGODB_URI, {
+      maxPoolSize: 10,
+      minPoolSize: 2,
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+      connectTimeoutMS: 10000,
+      maxIdleTimeMS: 30000,
+      retryWrites: true,
+      retryReads: true,
+    });
+    
+    logger.info('MongoDB connected', { host: conn.connection.host });
+    
+    mongoose.connection.on('error', (err) => {
+      logger.error('MongoDB connection error', { error: err.message });
+    });
+    
+    mongoose.connection.on('disconnected', () => {
+      logger.warn('MongoDB disconnected. Attempting to reconnect...');
+    });
+    
+    mongoose.connection.on('reconnected', () => {
+      logger.info('MongoDB reconnected');
+    });
+    
+  } catch (error) {
+    logger.error('Error connecting to MongoDB', { error: error.message });
+    process.exit(1);
+  }
+};
+
+connectDB();
+
+// ==================================================
+// API ROUTES
+// ==================================================
+
+// Health check (no versioning)
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development',
+    version: 'v1'
+  });
+});
+
+// API v1 Routes - Domain-based organization
+const authRoutes = require('./modules/auth/routes');
+const businessRoutes = require('./modules/business/routes');
+const campaignRoutes = require('./modules/campaigns/routes');
+const contactRoutes = require('./modules/contacts/routes');
+const messageRoutes = require('./modules/messages/routes');
+const conversationRoutes = require('./modules/messages/routes/conversationRoutes');
+const templateRoutes = require('./modules/templates/routes');
+const analyticsRoutes = require('./modules/analytics/routes');
+const webhookRoutes = require('./modules/webhooks/routes');
+const mediaRoutes = require('./modules/media/routes');
+const configRoutes = require('./modules/config/routes');
+const automationRoutes = require('./modules/automations/routes');
+const searchRoutes = require('./modules/search/routes');
+
+// Mount routes on both /api/v1/* and /api/* for backward compatibility
+app.use('/api/v1/auth', authRoutes);
+app.use('/api/auth', authRoutes); // Backward compatibility
+
+app.use('/api/v1/business', businessRoutes);
+app.use('/api/business', businessRoutes);
+
+app.use('/api/v1/campaigns', campaignRoutes);
+app.use('/api/campaigns', campaignRoutes);
+
+app.use('/api/v1/scheduled-messages', campaignRoutes);
+app.use('/api/scheduled-messages', campaignRoutes);
+
+app.use('/api/v1/contacts', contactRoutes);
+app.use('/api/contacts', contactRoutes);
+
+app.use('/api/v1/messages', messageRoutes);
+app.use('/api/messages', messageRoutes);
+
+app.use('/api/v1/conversations', conversationRoutes);
+app.use('/api/conversations', conversationRoutes);
+app.use('/api/inbox', conversationRoutes); // Legacy route
+
+app.use('/api/v1/templates', templateRoutes);
+app.use('/api/templates', templateRoutes);
+
+app.use('/api/v1/analytics', analyticsRoutes);
+app.use('/api/analytics', analyticsRoutes);
+
+app.use('/api/v1/webhooks', webhookRoutes);
+app.use('/api/webhooks', webhookRoutes);
+
+app.use('/api/v1/media', mediaRoutes);
+app.use('/api/media', mediaRoutes);
+
+app.use('/api/v1/config', configRoutes);
+app.use('/api/config', configRoutes);
+
+app.use('/api/v1/automations', automationRoutes);
+app.use('/api/automations', automationRoutes);
+
+app.use('/api/v1/search', searchRoutes);
+app.use('/api/search', searchRoutes);
+
+// 404 handler
+app.use('*', (req, res) => {
+  res.status(404).json({
+    success: false,
+    message: 'Route not found',
+    path: req.originalUrl
+  });
+});
+
+// Global error handler
+app.use(errorLogger);
+app.use((err, req, res, next) => {
+  logger.error('Unhandled error', {
+    error: err.message,
+    stack: err.stack,
+    path: req.path
+  });
+  
+  res.status(err.status || 500).json({
+    success: false,
+    message: err.message || 'Internal server error',
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  });
+});
+
+// ==================================================
+// START SERVER
+// ==================================================
+
+const PORT = process.env.PORT || 3000;
+
+server.listen(PORT, () => {
+  console.log('\n==================================================');
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📡 Socket.io server ready`);
+  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log('\n📋 Configuration:');
+  console.log(`   MongoDB: ${process.env.MONGODB_URI ? '[CONFIGURED]' : '[MISSING]'}`);
+  console.log(`   JWT: ${process.env.JWT_SECRET ? '[CONFIGURED]' : '[MISSING]'}`);
+  console.log(`   WhatsApp API: ${process.env.WHATSAPP_ACCESS_TOKEN ? '✅ Configured' : '⚠️  Not configured'}`);
+  console.log(`   Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:8081'}`);
+  console.log('==================================================\n');
+});
+
+// Start recurring jobs
+const { startQualityRatingTracker } = require('./jobs/qualityRatingTracker');
+const { startTemplateSync } = require('./jobs/templateStatusSync');
+const { scheduleAnalyticsArchival } = require('./jobs/analyticsArchival');
+const { scheduleLogCleanup } = require('./jobs/logCleanup');
+
+startQualityRatingTracker();
+startTemplateSync();
+scheduleAnalyticsArchival();
+scheduleLogCleanup();
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  logger.info('SIGTERM received. Shutting down gracefully...');
+  server.close(() => {
+    logger.info('Server closed');
+    mongoose.connection.close().then(() => {
+      logger.info('MongoDB connection closed');
+      process.exit(0);
+    });
+  });
+});
+
+process.on('SIGINT', () => {
+  logger.info('SIGINT received. Shutting down gracefully...');
+  server.close(() => {
+    logger.info('Server closed');
+    mongoose.connection.close().then(() => {
+      logger.info('MongoDB connection closed');
+      process.exit(0);
+    });
+  });
+});
+
+module.exports = app;

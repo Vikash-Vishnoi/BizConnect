@@ -1,0 +1,84 @@
+.business-setup-required {
+  margin: 0;
+  width: 100%;
+  min-height: calc(100vh - 80px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.business-setup-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--spacing-4xl) var(--spacing-lg);
+  gap: var(--spacing-lg);
+  width: 100%;
+  max-width: 600px;
+}
+
+.business-setup-icon {
+  font-size: 64px;
+  line-height: 1;
+  animation: bounce 2s ease-in-out infinite;
+}
+
+.business-setup-title {
+  font-size: var(--font-size-3xl);
+  font-weight: var(--font-weight-bold);
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.business-setup-message {
+  font-size: var(--font-size-lg);
+  color: var(--text-secondary);
+  margin: 0;
+  max-width: 500px;
+  line-height: var(--line-height-relaxed);
+}
+
+.business-setup-content .btn.btn-primary {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  color: var(--text-inverse);
+}
+
+.business-setup-content .btn.btn-primary svg,
+.business-setup-content .btn.btn-primary .btn-icon,
+.business-setup-content .btn.btn-primary .btn-icon svg {
+  color: var(--text-inverse);
+  fill: var(--text-inverse);
+}
+
+.business-setup-content .btn.btn-primary:hover {
+  background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
+}
+
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@media (max-width: 768px) {
+  .business-setup-content {
+    padding: var(--spacing-xl) var(--spacing-base);
+  }
+
+  .business-setup-icon {
+    font-size: 48px;
+  }
+
+  .business-setup-title {
+    font-size: var(--font-size-2xl);
+  }
+
+  .business-setup-message {
+    font-size: var(--font-size-base);
+  }
+}

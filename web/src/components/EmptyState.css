@@ -1,0 +1,89 @@
+/**
+ * Shared Empty State Component
+ * Single source of truth for all empty states across the app
+ * Prevents conflicts from duplicate .empty-state definitions
+ */
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-5xl) var(--spacing-lg);
+  text-align: center;
+  gap: var(--spacing-md);
+  min-height: 300px;
+}
+
+.empty-state__icon {
+  font-size: var(--font-size-4xl);
+  color: var(--text-tertiary);
+  margin-bottom: var(--spacing-sm);
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--background);
+  border-radius: var(--radius-full);
+}
+
+.empty-state__title {
+  font-size: var(--font-size-xl);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin: 0 0 var(--spacing-xs) 0;
+}
+
+.empty-state__text {
+  font-size: var(--font-size-base);
+  color: var(--text-secondary);
+  margin: 0 0 var(--spacing-lg) 0;
+  max-width: 400px;
+  line-height: 1.5;
+}
+
+.empty-state__action {
+  margin-top: var(--spacing-md);
+}
+
+/* Variants */
+.empty-state--compact {
+  padding: var(--spacing-xl) var(--spacing-base);
+  min-height: 200px;
+}
+
+.empty-state--compact .empty-state__icon {
+  width: 60px;
+  height: 60px;
+  font-size: var(--font-size-2xl);
+}
+
+.empty-state--large {
+  padding: var(--spacing-6xl) var(--spacing-lg);
+  min-height: 500px;
+}
+
+.empty-state--large .empty-state__icon {
+  width: 100px;
+  height: 100px;
+  font-size: var(--font-size-5xl);
+}
+
+/* Content variations */
+.empty-state__content {
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+@media (max-width: 768px) {
+  .empty-state {
+    padding: var(--spacing-xl) var(--spacing-base);
+  }
+
+  .empty-state__icon {
+    width: 60px;
+    height: 60px;
+    font-size: var(--font-size-2xl);
+  }
+}

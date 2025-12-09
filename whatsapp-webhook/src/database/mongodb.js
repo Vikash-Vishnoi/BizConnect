@@ -1,4 +1,5 @@
 const { MongoClient, ObjectId } = require('mongodb');
+const mongoose = require('mongoose');
 
 let db = null;
 let client = null;
@@ -16,11 +17,24 @@ exports.connectToDatabase = async () => {
     console.log('📍 URI:', MONGODB_URI.replace(/\/\/([^:]+):([^@]+)@/, '//$1:****@'));
     
     client = new MongoClient(MONGODB_URI, {
+      // TLS/SSL Configuration
       tls: true,
       tlsAllowInvalidCertificates: false,
-      serverSelectionTimeoutMS: 5000,
-      connectTimeoutMS: 10000,
-      monitorCommands: false,
+      
+      // Connection Pool Configuration
+      maxPoolSize: 10,              // Maximum number of connections in pool
+      minPoolSize: 2,                // Minimum number of connections to maintain
+      maxIdleTimeMS: 30000,          // Close idle connections after 30 seconds
+      
+      // Timeout Configuration
+      serverSelectionTimeoutMS: 5000,   // Server selection timeout (5 seconds)
+      connectTimeoutMS: 10000,          // Initial connection timeout (10 seconds)
+      socketTimeoutMS: 45000,           // Socket timeout (45 seconds)
+      
+      // Additional Options
+      retryWrites: true,             // Retry write operations
+      retryReads: true,              // Retry read operations
+      monitorCommands: false,        // Disable command monitoring in production
     });
     
     await client.connect();
@@ -29,6 +43,29 @@ exports.connectToDatabase = async () => {
     db = client.db('whatsapp-marketing');
     console.log('✅ Connected to MongoDB successfully');
     console.log('📦 Database:', db.databaseName);
+    console.log('📊 Connection Pool: Min 2, Max 10 connections');
+    
+    // Connect Mongoose for Business model
+    if (mongoose.connection.readyState === 0) {
+      await mongoose.connect(MONGODB_URI, {
+        serverSelectionTimeoutMS: 5000,
+        socketTimeoutMS: 45000,
+        maxPoolSize: 10,
+        minPoolSize: 2
+      });
+      console.log('✅ Mongoose connected successfully');
+    }
+    
+    // Monitor connection events
+    client.on('error', (error) => {
+      console.error('❌ MongoDB client error:', error.message);
+    });
+    
+    client.on('close', () => {
+      console.warn('⚠️  MongoDB connection closed');
+      db = null;
+      client = null;
+    });
     
     await createIndexes();
     
@@ -121,7 +158,7 @@ exports.saveMessageToConversation = async (conversationId, messageData) => {
   }
 };
 
-exports.findOrCreateConversation = async ({ phoneNumber, name, userId, lastMessageText, lastMessageTimestamp }) => {
+exports.findOrCreateConversation = async ({ phoneNumber, name, userId, businessId, lastMessageText, lastMessageTimestamp }) => {
   try {
     const database = await exports.connectToDatabase();
     const { normalizePhone } = require('../utils/phoneNormalizer');
@@ -131,6 +168,7 @@ exports.findOrCreateConversation = async ({ phoneNumber, name, userId, lastMessa
     let conversation = await database.collection('conversations').findOne({
       'contact.phoneNumber': phoneNormalized,
       userId: new ObjectId(userId),
+      businessId: new ObjectId(businessId),
       isDeleted: false
     });
 
@@ -146,6 +184,7 @@ exports.findOrCreateConversation = async ({ phoneNumber, name, userId, lastMessa
         name: name || phoneNumber
       },
       userId: new ObjectId(userId),
+      businessId: new ObjectId(businessId),
       status: 'active',
       messages: [],
       lastMessage: {

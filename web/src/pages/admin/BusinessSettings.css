@@ -1,0 +1,232 @@
+.business-settings {
+  padding: var(--spacing-base);
+  max-width: 1200px;
+  margin: 80px auto 0;
+}
+
+.business-settings-loading {
+  text-align: center;
+  padding: 100px var(--spacing-base);
+  font-size: var(--font-size-xl);
+  color: var(--text-secondary);
+}
+
+.business-settings-header {
+  margin-bottom: var(--spacing-xl);
+}
+
+.business-settings-header h1 {
+  font-size: var(--font-size-5xl);
+  margin-bottom: 10px;
+  color: var(--text);
+}
+
+.business-settings-header p {
+  color: var(--text-secondary);
+  font-size: var(--font-size-lg);
+}
+
+.business-settings-tabs {
+  display: flex;
+  gap: 10px;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: var(--spacing-xl);
+  overflow-x: auto;
+}
+
+.tab-button {
+  padding: var(--spacing-md) var(--spacing-lg);
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: var(--font-size-lg);
+  color: var(--text-secondary);
+  border-bottom: 3px solid transparent;
+  transition: all var(--transition-slow);
+  white-space: nowrap;
+}
+
+.tab-button:hover {
+  color: var(--primary);
+  background: var(--accent);
+}
+
+.tab-button.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+  font-weight: var(--font-weight-semibold);
+}
+
+.business-settings-content {
+  background: white;
+  border-radius: var(--radius-md);
+  padding: var(--spacing-xl);
+  box-shadow: var(--shadow-base);
+}
+
+.settings-section h2 {
+  font-size: var(--font-size-4xl);
+  margin-bottom: var(--spacing-base);
+  color: var(--text);
+}
+
+.business-settings__form-group {
+  margin-bottom: var(--spacing-base);
+}
+
+.business-settings__form-group label {
+  display: block;
+  margin-bottom: var(--spacing-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text);
+}
+
+.business-settings__form-group input,
+.business-settings__form-group textarea,
+.business-settings__form-group select {
+  width: 100%;
+  padding: var(--spacing-md);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-base);
+  font-size: var(--font-size-base);
+  transition: border-color var(--transition-slow);
+}
+
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.save-button,
+.configure-button {
+  padding: var(--spacing-md) var(--spacing-xl);
+  background: var(--gradient-purple);
+  color: white;
+  border: none;
+  border-radius: var(--radius-base);
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  transition: transform var(--transition-base), box-shadow var(--transition-base);
+}
+
+.save-button:hover,
+.configure-button:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+}
+
+.save-button:disabled {
+  opacity: var(--opacity-disabled);
+  cursor: not-allowed;
+  transform: none;
+}
+
+.team-invite-form {
+  display: flex;
+  gap: 10px;
+  margin-bottom: var(--spacing-base);
+}
+
+.team-invite-form input {
+  flex: 1;
+  padding: 10px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-base);
+}
+
+.team-invite-form select {
+  padding: 10px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-base);
+  min-width: 120px;
+}
+
+.team-invite-form button {
+  padding: 10px var(--spacing-base);
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-base);
+  cursor: pointer;
+  font-weight: var(--font-weight-semibold);
+}
+
+.team-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.team-member-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-base);
+  background: var(--background-alt);
+  border-radius: var(--radius-base);
+  border: 1px solid var(--border);
+}
+
+.member-info {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.member-avatar {
+  font-size: var(--font-size-5xl);
+}
+
+.member-name {
+  font-weight: var(--font-weight-semibold);
+  color: var(--text);
+  margin-bottom: var(--spacing-xs);
+}
+
+.member-email {
+  font-size: var(--font-size-base);
+  color: var(--text-secondary);
+}
+
+.role-badge {
+  padding: var(--spacing-xs) var(--spacing-md);
+  background: var(--primary);
+  color: white;
+  border-radius: var(--radius-full);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+}
+
+.credentials-warning {
+  padding: var(--spacing-md) var(--spacing-base);
+  background: var(--warning-light);
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-base);
+  color: var(--warning-dark);
+  margin-bottom: var(--spacing-base);
+}
+
+.info-text {
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-base);
+}
+
+/* Empty state uses shared EmptyState.css component */
+
+@media (max-width: 768px) {
+  .business-settings {
+    padding: var(--spacing-md);
+  }
+  
+  .team-invite-form {
+    flex-direction: column;
+  }
+  
+  .team-invite-form select {
+    min-width: auto;
+  }
+}

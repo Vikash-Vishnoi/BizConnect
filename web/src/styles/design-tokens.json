@@ -1,0 +1,201 @@
+{
+  "meta": {
+    "name": "WhatsApp Marketing App Design System",
+    "version": "1.0.0",
+    "description": "Centralized design tokens for consistent UI/UX"
+  },
+  "colors": {
+    "primary": {
+      "base": "#5e69ee",
+      "light": "#7d86f2",
+      "dark": "#4a52d9",
+      "hover": "#4a52d9"
+    },
+    "secondary": {
+      "base": "#39AFEA",
+      "light": "#68c5f0",
+      "dark": "#2a9ad4",
+      "hover": "#2a9ad4"
+    },
+    "accent": {
+      "base": "#F4F4FB",
+      "light": "#FFFFFF",
+      "dark": "#E8E8F5"
+    },
+    "neutral": {
+      "background": "#FAFBFC",
+      "backgroundAlt": "#f8f9fa",
+      "surface": "#FFFFFF",
+      "overlay": "rgba(15, 23, 42, 0.6)"
+    },
+    "text": {
+      "primary": "#0F172A",
+      "secondary": "#64748B",
+      "tertiary": "#94A3B8",
+      "inverse": "#FFFFFF",
+      "muted": "#94A3B8"
+    },
+    "border": {
+      "base": "#E2E8F0",
+      "light": "#F1F5F9",
+      "dark": "#CBD5E1",
+      "divider": "#F1F5F9"
+    },
+    "semantic": {
+      "success": {
+        "base": "#10B981",
+        "light": "#D1FAE5",
+        "dark": "#059669"
+      },
+      "warning": {
+        "base": "#F59E0B",
+        "light": "#FEF3C7",
+        "dark": "#d97706"
+      },
+      "error": {
+        "base": "#EF4444",
+        "light": "#FEE2E2",
+        "dark": "#dc2626"
+      },
+      "info": {
+        "base": "#39AFEA",
+        "light": "#E0F2FE",
+        "dark": "#2563eb"
+      }
+    }
+  },
+  "typography": {
+    "fontFamily": {
+      "primary": "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+      "mono": "'SF Mono', 'Monaco', 'Inconsolata', 'Courier New', monospace"
+    },
+    "fontSize": {
+      "xs": "11px",
+      "sm": "12px",
+      "base": "14px",
+      "md": "15px",
+      "lg": "16px",
+      "xl": "18px",
+      "2xl": "20px",
+      "3xl": "22px",
+      "4xl": "24px",
+      "5xl": "28px"
+    },
+    "fontWeight": {
+      "normal": 400,
+      "medium": 500,
+      "semibold": 600,
+      "bold": 700,
+      "extrabold": 800
+    },
+    "lineHeight": {
+      "tight": 1.2,
+      "normal": 1.5,
+      "relaxed": 1.75
+    },
+    "letterSpacing": {
+      "tight": "-0.5px",
+      "normal": "0",
+      "wide": "0.5px"
+    }
+  },
+  "spacing": {
+    "xs": "4px",
+    "sm": "8px",
+    "md": "12px",
+    "base": "16px",
+    "lg": "24px",
+    "xl": "32px",
+    "2xl": "40px",
+    "3xl": "48px",
+    "4xl": "64px",
+    "5xl": "80px",
+    "6xl": "96px"
+  },
+  "borderRadius": {
+    "none": "0",
+    "sm": "4px",
+    "base": "8px",
+    "md": "12px",
+    "lg": "16px",
+    "xl": "24px",
+    "2xl": "32px",
+    "full": "9999px"
+  },
+  "shadows": {
+    "xs": "0 1px 2px 0 rgba(0, 0, 0, 0.03)",
+    "sm": "0 1px 2px 0 rgba(0, 0, 0, 0.05)",
+    "base": "0 2px 4px 0 rgba(0, 0, 0, 0.1)",
+    "md": "0 3px 6px 0 rgba(0, 0, 0, 0.12)",
+    "lg": "0 4px 8px 0 rgba(0, 0, 0, 0.15)",
+    "xl": "0 6px 12px 0 rgba(0, 0, 0, 0.2)",
+    "2xl": "0 8px 16px 0 rgba(0, 0, 0, 0.25)",
+    "3xl": "0 12px 24px 0 rgba(0, 0, 0, 0.3)"
+  },
+  "zIndex": {
+    "base": 0,
+    "dropdown": 1000,
+    "sticky": 1020,
+    "fixed": 1030,
+    "modalBackdrop": 1040,
+    "modal": 1050,
+    "popover": 1060,
+    "tooltip": 1070,
+    "notification": 9999
+  },
+  "transitions": {
+    "fast": "150ms ease-in-out",
+    "base": "200ms ease-in-out",
+    "slow": "300ms ease-in-out",
+    "slower": "500ms ease-in-out"
+  },
+  "componentSizes": {
+    "button": {
+      "sm": "40px",
+      "md": "48px",
+      "lg": "56px"
+    },
+    "input": {
+      "sm": "40px",
+      "md": "48px",
+      "lg": "56px"
+    },
+    "icon": {
+      "xs": "16px",
+      "sm": "20px",
+      "md": "24px",
+      "lg": "32px",
+      "xl": "40px"
+    },
+    "avatar": {
+      "xs": "24px",
+      "sm": "32px",
+      "md": "40px",
+      "lg": "56px",
+      "xl": "80px"
+    }
+  },
+  "breakpoints": {
+    "xs": "480px",
+    "sm": "640px",
+    "md": "768px",
+    "lg": "1024px",
+    "xl": "1280px",
+    "2xl": "1536px"
+  },
+  "gradients": {
+    "primary": "linear-gradient(135deg, #5e69ee 0%, #4a52d9 100%)",
+    "secondary": "linear-gradient(135deg, #39AFEA 0%, #2a9ad4 100%)",
+    "success": "linear-gradient(135deg, #10B981 0%, #059669 100%)",
+    "warning": "linear-gradient(135deg, #F59E0B 0%, #d97706 100%)",
+    "error": "linear-gradient(135deg, #EF4444 0%, #dc2626 100%)",
+    "purple": "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+    "blue": "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)"
+  },
+  "opacity": {
+    "disabled": 0.5,
+    "hover": 0.8,
+    "muted": 0.6,
+    "subtle": 0.1
+  }
+}

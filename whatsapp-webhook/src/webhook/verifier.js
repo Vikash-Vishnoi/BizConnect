@@ -1,6 +1,10 @@
-const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'hospital_whatsapp_2024';
+const businessCache = require('../utils/businessCache');
 
-exports.verifyWebhook = (req, res) => {
+/**
+ * Multi-Business Webhook Verification
+ * Verifies webhook by checking token against any active business
+ */
+exports.verifyWebhook = async (req, res) => {
   console.log('🔍 Webhook verification request received');
   
   const mode = req.query['hub.mode'];
@@ -9,26 +13,34 @@ exports.verifyWebhook = (req, res) => {
 
   console.log('Verification details:', {
     mode,
-    tokenReceived: token,
-    tokenExpected: VERIFY_TOKEN,
-    tokenMatch: token === VERIFY_TOKEN,
+    tokenReceived: token ? token.substring(0, 10) + '...' : 'Missing',
     challenge: challenge ? 'Present' : 'Missing'
   });
 
-  if (mode && token) {
-    if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-      console.log('✅ Webhook verified successfully!');
-      console.log('📤 Sending challenge response:', challenge);
-      
-      res.status(200).send(challenge);
-    } else {
-      console.error('❌ Verification failed: Token mismatch');
-      console.error('Expected:', VERIFY_TOKEN);
-      console.error('Received:', token);
-      res.sendStatus(403);
-    }
-  } else {
+  if (!mode || !token) {
     console.error('❌ Verification failed: Missing mode or token');
-    res.sendStatus(400);
+    return res.sendStatus(400);
+  }
+
+  if (mode !== 'subscribe') {
+    console.error('❌ Verification failed: Invalid mode:', mode);
+    return res.sendStatus(403);
+  }
+
+  try {
+    // ✅ MULTI-BUSINESS: Find any active business with this verify token (using cache)
+    const business = await businessCache.getByVerifyToken(token);
+
+    if (business) {
+      console.log('✅ Webhook verified successfully for business:', business.name);
+      console.log('📤 Sending challenge response');
+      return res.status(200).send(challenge);
+    } else {
+      console.error('❌ Verification failed: No business found with this token');
+      return res.sendStatus(403);
+    }
+  } catch (error) {
+    console.error('❌ Verification error:', error);
+    return res.sendStatus(500);
   }
 };

@@ -1,0 +1,103 @@
+/* Register-specific styles */
+
+.password-requirements {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+  padding: var(--spacing-base);
+  background-color: var(--background);
+  border-radius: var(--radius-base);
+  border: 1px solid var(--border);
+}
+
+.password-req {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  transition: all var(--transition-base);
+}
+
+.password-req svg {
+  flex-shrink: 0;
+  opacity: 0;
+  stroke: var(--success);
+  transition: opacity var(--transition-base);
+}
+
+.password-req-met {
+  color: var(--success);
+  font-weight: var(--font-weight-medium);
+}
+
+.password-req-met svg {
+  opacity: 1;
+  animation: checkmark 0.4s ease;
+}
+
+@keyframes checkmark {
+  0% {
+    opacity: 0;
+    transform: scale(0.5) rotate(-45deg);
+  }
+  50% {
+    transform: scale(1.2) rotate(0deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+.terms-text {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  text-align: center;
+  line-height: var(--line-height-relaxed);
+  margin-top: calc(-1 * var(--spacing-sm));
+}
+
+.terms-text a {
+  color: var(--secondary);
+  text-decoration: none;
+  font-weight: var(--font-weight-medium);
+}
+
+.terms-text a:hover {
+  color: var(--secondary-hover);
+  text-decoration: underline;
+}
+
+.password-toggle-container {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: calc(-1 * var(--spacing-sm));
+  margin-bottom: var(--spacing-sm);
+}
+
+.password-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-base);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: all var(--transition-base);
+}
+
+.password-toggle-btn:hover {
+  color: var(--secondary);
+  border-color: var(--secondary);
+  background: var(--secondary-light);
+}
+
+.password-toggle-btn svg {
+  flex-shrink: 0;
+}

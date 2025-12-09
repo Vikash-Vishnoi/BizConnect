@@ -1,0 +1,157 @@
+.schedule-modal-content {
+  max-width: 700px;
+  width: 95%;
+}
+
+.modal-body {
+  padding: var(--spacing-lg);
+}
+
+.schedule-modal__form-group {
+  margin-bottom: var(--spacing-lg);
+}
+
+.schedule-modal__form-group label {
+  display: block;
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-sm);
+}
+
+.schedule-modal__form-group input[type="text"],
+.schedule-modal__form-group input[type="date"],
+.schedule-modal__form-group input[type="time"],
+.schedule-modal__form-group input[type="number"],
+.schedule-modal__form-group select,
+.schedule-modal__form-group textarea {
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-base);
+  font-size: var(--font-size-base);
+  transition: border-color var(--transition-base);
+}
+
+.schedule-modal__form-group input:focus,
+.schedule-modal__form-group select:focus,
+.schedule-modal__form-group textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: var(--shadow-outline);
+}
+
+.form-group textarea {
+  resize: vertical;
+  font-family: inherit;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spacing-base);
+}
+
+.required {
+  color: #ef4444;
+}
+
+.char-count {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  text-align: right;
+  margin-top: var(--spacing-xs);
+}
+
+.help-text {
+  display: block;
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  margin-top: var(--spacing-xs);
+}
+
+/* Radio and Checkbox Styles */
+.radio-group {
+  display: flex;
+  gap: var(--spacing-base);
+}
+
+.radio-label,
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  cursor: pointer;
+  font-size: var(--font-size-base);
+  color: var(--text-primary);
+}
+
+.radio-label input[type="radio"],
+.checkbox-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+
+.radio-label:hover,
+.checkbox-label:hover {
+  color: var(--text);
+}
+
+/* Recurrence Section */
+.recurrence-section {
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-base);
+  padding: var(--spacing-base);
+  margin-top: var(--spacing-md);
+}
+
+/* Alert Styles */
+.alert {
+  padding: var(--spacing-md) var(--spacing-base);
+  border-radius: var(--radius-base);
+  font-size: var(--font-size-base);
+  margin-bottom: var(--spacing-lg);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.alert-error {
+  background: var(--error-light);
+  color: var(--error-dark);
+  border: 1px solid var(--error);
+}
+
+.alert-error::before {
+  content: "⚠️";
+}
+
+/* Modal Footer */
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-md);
+  margin-top: var(--spacing-lg);
+  padding-top: var(--spacing-lg);
+  border-top: 1px solid var(--border);
+}
+
+/* Responsive Design */
+@media (max-width: 640px) {
+  .schedule-modal-content {
+    width: 100%;
+    max-height: 100vh;
+    border-radius: 0;
+  }
+  
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+  
+  .radio-group {
+    flex-direction: column;
+  }
+}
