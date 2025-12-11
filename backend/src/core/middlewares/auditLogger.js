@@ -63,7 +63,7 @@ const auditLogger = async (req, res, next) => {
     '/api/webhooks',
     '/api/health',
     '/api/analytics',
-    '/api/inbox',
+    '/api/conversations',
     '/api/search'
   ];
 

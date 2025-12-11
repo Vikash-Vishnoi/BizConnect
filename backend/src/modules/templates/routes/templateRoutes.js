@@ -5,7 +5,47 @@ const Template = require('../../../core/database/models/Template');
 const logger = require('../../../common/helpers/logger');
 
 /**
- * Get template statistics (must be before /:id route)
+ * Handle common database errors
+ */
+const handleError = (error, res, context = 'Operation') => {
+  logger.error(`${context} failed:`, {
+    message: error.message,
+    code: error.code,
+    name: error.name,
+    stack: error.stack
+  });
+  
+  // Handle duplicate name error
+  if (error.code === 11000) {
+    return res.status(409).json({ 
+      error: 'A template with this name already exists',
+      field: 'name'
+    });
+  }
+  
+  // Handle validation errors
+  if (error.name === 'ValidationError') {
+    return res.status(400).json({ 
+      error: 'Validation error',
+      details: Object.keys(error.errors).map(key => ({
+        field: key,
+        message: error.errors[key].message
+      }))
+    });
+  }
+  
+  res.status(500).json({ 
+    error: `Failed to ${context.toLowerCase()}`,
+    details: error.message 
+  });
+};
+
+// ===================================================================
+// SPECIFIC ROUTES FIRST (before dynamic :id routes)
+// ===================================================================
+
+/**
+ * Get template statistics
  * GET /api/templates/stats
  */
 router.get('/stats', auth, requireBusiness, async (req, res) => {
@@ -44,7 +84,7 @@ router.get('/stats', auth, requireBusiness, async (req, res) => {
 });
 
 /**
- * Get template analytics (must be before /:id route)
+ * Get template analytics
  * GET /api/templates/analytics
  */
 router.get('/analytics', auth, requireBusiness, async (req, res) => {
@@ -79,6 +119,105 @@ router.get('/analytics', auth, requireBusiness, async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch template analytics' });
   }
 });
+
+/**
+ * Save template as draft
+ * POST /api/templates/draft
+ */
+router.post('/draft', auth, requireBusiness, requireBusinessPermission('manage', 'templates'), async (req, res) => {
+  try {
+    const businessId = req.business._id;
+    const { name, category, language, components } = req.body;
+
+    if (!name) {
+      return res.status(400).json({ error: 'Template name is required' });
+    }
+
+    const template = new Template({
+      businessId,
+      name,
+      category: category || 'MARKETING',
+      language: language || 'en',
+      components: components || [],
+      status: 'draft',
+      userId: req.userId
+    });
+
+    await template.save();
+
+    logger.info('Draft template saved', {
+      templateId: template._id,
+      businessId,
+      userId: req.userId,
+      name: template.name
+    });
+
+    res.status(201).json(template);
+  } catch (error) {
+    handleError(error, res, 'Save draft');
+  }
+});
+
+/**
+ * Get template status from WhatsApp
+ * GET /api/templates/:id/status (BEFORE /:id)
+ */
+router.get('/:id/status', auth, requireBusiness, requireBusinessPermission('view', 'templates'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const businessId = req.business._id;
+
+    const template = await Template.findOne({ _id: id, businessId });
+
+    if (!template) {
+      return res.status(404).json({ error: 'Template not found' });
+    }
+
+    res.json({
+      status: template.status,
+      whatsappStatus: template.whatsappStatus,
+      whatsappTemplateId: template.whatsappTemplateId,
+      qualityScore: template.qualityScore
+    });
+  } catch (error) {
+    logger.error('Error fetching template status:', error);
+    res.status(500).json({ error: 'Failed to fetch template status', details: error.message });
+  }
+});
+
+/**
+ * Submit template for approval
+ * POST /api/templates/:id/submit (BEFORE /:id)
+ */
+router.post('/:id/submit', auth, requireBusiness, requireBusinessPermission('manage', 'templates'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const businessId = req.business._id;
+
+    const template = await Template.findOne({ _id: id, businessId });
+
+    if (!template) {
+      return res.status(404).json({ error: 'Template not found' });
+    }
+
+    template.status = 'pending';
+    await template.save();
+
+    logger.info('Template submitted for approval', {
+      templateId: template._id,
+      businessId,
+      userId: req.userId
+    });
+
+    res.json(template);
+  } catch (error) {
+    handleError(error, res, 'Submit template');
+  }
+});
+
+// ===================================================================
+// ROOT LEVEL ROUTES (/ and /:id)
+// ===================================================================
 
 /**
  * Get all templates
@@ -147,6 +286,47 @@ router.get('/', auth, requireBusiness, requireBusinessPermission('view', 'templa
 });
 
 /**
+ * Create new template
+ * POST /api/templates
+ */
+router.post('/', auth, requireBusiness, requireBusinessPermission('manage', 'templates'), async (req, res) => {
+  try {
+    const businessId = req.business._id;
+    const { name, category, language, components, status } = req.body;
+
+    if (!name || !category || !language || !components) {
+      return res.status(400).json({ 
+        error: 'Missing required fields',
+        required: ['name', 'category', 'language', 'components']
+      });
+    }
+
+    const template = new Template({
+      businessId,
+      name,
+      category,
+      language,
+      components,
+      status: status || 'draft',
+      userId: req.userId
+    });
+
+    await template.save();
+
+    logger.info('Template created', {
+      templateId: template._id,
+      businessId,
+      userId: req.userId,
+      name: template.name
+    });
+
+    res.status(201).json(template);
+  } catch (error) {
+    handleError(error, res, 'Create template');
+  }
+});
+
+/**
  * Get template by ID
  * GET /api/templates/:id
  */
@@ -165,6 +345,71 @@ router.get('/:id', auth, requireBusiness, requireBusinessPermission('view', 'tem
   } catch (error) {
     logger.error('Error fetching template:', error);
     res.status(500).json({ error: 'Failed to fetch template' });
+  }
+});
+
+/**
+ * Update template
+ * PUT /api/templates/:id
+ */
+router.put('/:id', auth, requireBusiness, requireBusinessPermission('manage', 'templates'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const businessId = req.business._id;
+    const { name, category, language, components, status } = req.body;
+
+    const template = await Template.findOne({ _id: id, businessId });
+
+    if (!template) {
+      return res.status(404).json({ error: 'Template not found' });
+    }
+
+    if (name) template.name = name;
+    if (category) template.category = category;
+    if (language) template.language = language;
+    if (components) template.components = components;
+    if (status) template.status = status;
+
+    await template.save();
+
+    logger.info('Template updated', {
+      templateId: template._id,
+      businessId,
+      userId: req.userId
+    });
+
+    res.json(template);
+  } catch (error) {
+    handleError(error, res, 'Update template');
+  }
+});
+
+/**
+ * Delete template
+ * DELETE /api/templates/:id
+ */
+router.delete('/:id', auth, requireBusiness, requireBusinessPermission('manage', 'templates'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const businessId = req.business._id;
+
+    const template = await Template.findOne({ _id: id, businessId });
+
+    if (!template) {
+      return res.status(404).json({ error: 'Template not found' });
+    }
+
+    await template.deleteOne();
+
+    logger.info('Template deleted', {
+      templateId: id,
+      businessId,
+      userId: req.userId
+    });
+
+    res.json({ message: 'Template deleted successfully' });
+  } catch (error) {
+    handleError(error, res, 'Delete template');
   }
 });
 

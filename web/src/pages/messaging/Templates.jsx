@@ -4,6 +4,7 @@ import { useToast } from '../../components/Toast';
 import { useAuth } from '../../contexts/AuthContext';
 import LoadingSkeleton from '../../components/LoadingSkeleton';
 import * as templateService from '../../services/templates/templateService';
+import { useDebounce } from '../../hooks/useDebounce';
 import Navbar from '../../components/Navbar';
 import Card from '../../components/Card';
 import Input from '../../components/Input';
@@ -29,9 +30,16 @@ const Templates = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [error, setError] = useState('');
+  
+  // Debounce search query to avoid too many API calls
+  const debouncedSearch = useDebounce(searchQuery, 500);
 
+  // Reload templates when filters change
   useEffect(() => {
     loadTemplates();
+  }, [debouncedSearch, statusFilter, categoryFilter]);
+
+  useEffect(() => {
     loadStats();
   }, []);
 
@@ -40,7 +48,24 @@ const Templates = () => {
     setError('');
 
     try {
-      const data = await templateService.getTemplates();
+      const params = {};
+      
+      // Add search parameter
+      if (debouncedSearch) {
+        params.search = debouncedSearch;
+      }
+      
+      // Add status filter
+      if (statusFilter !== 'all') {
+        params.status = statusFilter;
+      }
+      
+      // Add category filter
+      if (categoryFilter !== 'all') {
+        params.category = categoryFilter;
+      }
+      
+      const data = await templateService.getTemplates(params);
       setTemplates(data.templates || []);
     } catch (err) {
       console.error('Error loading templates:', err);
@@ -59,7 +84,7 @@ const Templates = () => {
   const loadStats = async () => {
     try {
       const data = await templateService.getTemplateStats();
-      setStats(data.stats || stats);
+      setStats(data || stats);
     } catch (err) {
       console.error('Error loading stats:', err);
     }
@@ -73,23 +98,13 @@ const Templates = () => {
     setSearchQuery('');
   };
 
-  // Filter templates based on search and filters
-  const filteredTemplates = templates.filter(template => {
-    const matchesSearch = !searchQuery || 
-      template.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      template.components?.some(c => c.text?.toLowerCase().includes(searchQuery.toLowerCase()));
-    
-    const matchesStatus = statusFilter === 'all' || template.status?.toLowerCase() === statusFilter;
-    const matchesCategory = categoryFilter === 'all' || template.category === categoryFilter;
-    
-    return matchesSearch && matchesStatus && matchesCategory;
-  });
-
   const handleTemplateClick = (templateId) => {
     navigate(`/templates/${templateId}`);
   };
 
   const handleCreateTemplate = () => {
+    // Clear any auto-saved template data for fresh start
+    localStorage.removeItem('createTemplate');
     navigate('/templates/create');
   };
 
@@ -154,8 +169,54 @@ const Templates = () => {
       
       <div className="page-content templates-page-content">
         {/* Header */}
-        <div className="templates-header-simple">
-          <h1 className="templates-title">Templates</h1>
+        <div className="templates-header">
+          <div className="templates-header-text" style={{ textAlign: 'center', width: '100%' }}>
+            <h1 className="templates-title">Templates</h1>
+            <p className="templates-subtitle">Create and manage WhatsApp message templates • {templates.length} total</p>
+          </div>
+        </div>
+
+        {/* Stats Grid */}
+        <div className="stats-grid">
+          <Card className="stat-card" hoverable>
+            <div className="stat-icon stat-icon-primary"><MdDescription /></div>
+            <div className="stat-content">
+              <p className="stat-label">Total Templates</p>
+              <h2 className="stat-value">{stats.total}</h2>
+            </div>
+          </Card>
+
+          <Card className="stat-card" hoverable>
+            <div className="stat-icon stat-icon-success"><MdCheckCircle /></div>
+            <div className="stat-content">
+              <p className="stat-label">Approved</p>
+              <h2 className="stat-value">{stats.approved}</h2>
+            </div>
+          </Card>
+
+          <Card className="stat-card" hoverable>
+            <div className="stat-icon stat-icon-warning"><MdAccessTime /></div>
+            <div className="stat-content">
+              <p className="stat-label">Pending</p>
+              <h2 className="stat-value">{stats.pending}</h2>
+            </div>
+          </Card>
+
+          <Card className="stat-card" hoverable>
+            <div className="stat-icon stat-icon-info"><MdBuild /></div>
+            <div className="stat-content">
+              <p className="stat-label">Draft</p>
+              <h2 className="stat-value">{stats.draft}</h2>
+            </div>
+          </Card>
+
+          <Card className="stat-card" hoverable>
+            <div className="stat-icon stat-icon-danger"><MdError /></div>
+            <div className="stat-content">
+              <p className="stat-label">Rejected</p>
+              <h2 className="stat-value">{stats.rejected}</h2>
+            </div>
+          </Card>
         </div>
 
         {/* Search Bar */}
@@ -177,20 +238,11 @@ const Templates = () => {
           </div>
         </div>
 
-        {/* Stats Bar */}
-        <div className="templates-stats-bar">
-          <div className="stats-bar-icon">
-            <MdDescription />
-          </div>
-          <span className="stats-bar-text">
-            {filteredTemplates.length} {filteredTemplates.length === 1 ? 'template' : 'templates'} found
-          </span>
-        </div>
-
-        {/* Status Filter Chips */}
-        <div className="filter-section">
-          <label className="filter-label">Status</label>
-          <div className="filter-chips">
+        {/* Filters */}
+        <Card className="filters-card">
+          <div className="filter-section">
+            <span className="filter-label">Status:</span>
+            <div className="filter-chips">
             <button 
               className={`filter-chip ${statusFilter === 'all' ? 'filter-chip-active' : ''}`}
               onClick={() => setStatusFilter('all')}
@@ -227,12 +279,10 @@ const Templates = () => {
               <span>Rejected</span>
             </button>
           </div>
-        </div>
-
-        {/* Category Filter Chips */}
-        <div className="filter-section">
-          <label className="filter-label">Category</label>
-          <div className="filter-chips">
+          </div>
+          <div className="filter-section">
+            <span className="filter-label">Category:</span>
+            <div className="filter-chips">
             <button 
               className={`filter-chip ${categoryFilter === 'all' ? 'filter-chip-active' : ''}`}
               onClick={() => setCategoryFilter('all')}
@@ -262,7 +312,8 @@ const Templates = () => {
               <span>Authentication</span>
             </button>
           </div>
-        </div>
+          </div>
+        </Card>
 
         {/* Error Message */}
         {error && (error.includes('business') || error.includes('X-Business-ID')) ? (
@@ -281,22 +332,22 @@ const Templates = () => {
           <>
             {loading ? (
               <LoadingSkeleton type="card" />
-            ) : filteredTemplates.length === 0 ? (
-              <div className="empty-state">
+            ) : templates.length === 0 ? (
+              <Card className="templates-empty-state">
                 <div className="empty-state-icon"><MdDescription /></div>
                 <h3 className="empty-state-title">No Templates Found</h3>
                 <p className="empty-state-text">
                   {searchQuery || statusFilter !== 'all' || categoryFilter !== 'all'
-                    ? 'Try adjusting your filters'
-                    : 'Create your first template to get started'}
+                    ? 'No templates match your current filters. Try adjusting them to see more results.'
+                    : 'Get started by creating your first WhatsApp message template'}
                 </p>
-                {templates.length === 0 && (
+                {!searchQuery && statusFilter === 'all' && categoryFilter === 'all' && (
                   <Button onClick={handleCreateTemplate}><MdAdd /> Create Your First Template</Button>
                 )}
-              </div>
+              </Card>
             ) : (
               <div className="templates-list">
-                {filteredTemplates.map(template => (
+                {templates.map(template => (
                   <Card 
                     key={template._id} 
                     className="template-list-item"
@@ -349,7 +400,7 @@ const Templates = () => {
         )}
 
         {/* Floating Action Button */}
-        {filteredTemplates.length > 0 && (
+        {templates.length > 0 && (
           <button className="templates-fab" onClick={handleCreateTemplate} title="Create Template">
             <MdAdd />
           </button>

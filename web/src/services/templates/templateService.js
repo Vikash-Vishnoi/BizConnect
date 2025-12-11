@@ -3,7 +3,7 @@
  * Handles all template-related API calls
  */
 
-import { get, post, put } from '../api';
+import { get, post, put, del } from '../api';
 
 /**
  * Get templates list
@@ -62,132 +62,15 @@ export const getTemplateStatus = async (id) => {
 };
 
 /**
- * Validate template compliance
+ * Delete template
  */
-export const validateTemplate = async (data) => {
-  return await post('/templates/validate', data);
+export const deleteTemplate = async (id) => {
+  return await del(`/templates/${id}`);
 };
 
 /**
- * Get compliance rules
- */
-export const getComplianceRules = async () => {
-  return await get('/templates/compliance-rules');
-};
-
-/**
- * Get template rejections
- */
-export const getTemplateRejections = async (id) => {
-  return await get(`/templates/${id}/rejections`);
-};
-
-/**
- * Analyze template
- */
-export const analyzeTemplate = async (id) => {
-  return await post(`/templates/${id}/analyze`);
-};
-
-/**
- * Get rejection patterns
- */
-export const getRejectionPatterns = async () => {
-  return await get('/templates/rejection-patterns');
-};
-
-/**
- * Get template analytics overview
+ * Get template analytics
  */
 export const getTemplateAnalytics = async (params) => {
   return await get('/templates/analytics', params);
 };
-
-/**
- * Get top performing templates
- */
-export const getTopTemplates = async (params) => {
-  return await get('/templates/analytics/top', params);
-};
-
-/**
- * Get specific template analytics
- */
-export const getTemplateAnalyticsById = async (templateId) => {
-  return await get(`/templates/analytics/${templateId}`);
-};
-
-/**
- * Export template analytics
- */
-export const exportTemplateAnalytics = async (data) => {
-  return await post('/templates/analytics/export', data);
-};
-
-/**
- * Track template usage
- */
-export const trackTemplateUsage = async (templateId, data) => {
-  return await post(`/templates/analytics/${templateId}/track`, data);
-};
-
-/**
- * Reset template analytics
- */
-export const resetTemplateAnalytics = async (templateId) => {
-  return await post(`/templates/analytics/${templateId}/reset`);
-};
-
-// ============================================
-// P3 FEATURE: Template Namespace Support
-// ============================================
-
-/**
- * Get all namespaces for a business
- */
-export const getNamespaces = async (businessId) => {
-  return await get(`/templates/namespaces/business/${businessId}`);
-};
-
-/**
- * Get templates by namespace
- */
-export const getTemplatesByNamespace = async (namespace, businessId, params = {}) => {
-  return await get(`/templates/namespaces/${namespace}/business/${businessId}`, params);
-};
-
-/**
- * Set template namespace
- */
-export const setNamespace = async (templateId, namespace) => {
-  return await put(`/templates/${templateId}/namespace`, { namespace });
-};
-
-/**
- * Remove template namespace
- */
-export const removeNamespace = async (templateId) => {
-  return await del(`/templates/${templateId}/namespace`);
-};
-
-/**
- * Bulk update template namespaces
- */
-export const bulkUpdateNamespaces = async (templateIds, namespace) => {
-  return await post('/templates/namespaces/bulk-update', { templateIds, namespace });
-};
-
-/**
- * Sync namespaces from WhatsApp
- */
-export const syncNamespaces = async (businessId) => {
-  return await post(`/templates/namespaces/sync/${businessId}`);
-};
-
-/**
- * Get namespace statistics
- */
-export const getNamespaceStats = async (businessId) => {
-  return await get(`/templates/namespaces/stats/${businessId}`);
-};
-

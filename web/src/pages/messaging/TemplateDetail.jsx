@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { MdEdit, MdDelete, MdCampaign, MdBuild, MdSecurity, MdDescription, MdImage, MdVideocam, MdInsertDriveFile, MdPhone, MdLink, MdReply, MdSend } from 'react-icons/md';
 import { useToast } from '../../components/Toast';
+import * as templateService from '../../services/templates/templateService';
 import Navbar from '../../components/Navbar';
 import Card from '../../components/Card';
 import Button from '../../components/Button';
-import { API_BASE_URL } from '../../config/api';
 import './TemplateDetail.css';
 
 const TemplateDetail = () => {
@@ -26,7 +26,6 @@ const TemplateDetail = () => {
 
   const loadTemplate = async () => {
     const token = localStorage.getItem('token');
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
     
     if (!token) {
       navigate('/login');
@@ -34,27 +33,20 @@ const TemplateDetail = () => {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/templates/${id}`, {
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'X-Business-ID': user.businessId
-        }
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          localStorage.removeItem('token');
-          navigate('/login');
-          return;
-        }
-        throw new Error('Failed to fetch template');
-      }
-
-      const data = await response.json();
-      setTemplate(data.template);
+      const data = await templateService.getTemplateById(id);
+      setTemplate(data);
     } catch (err) {
       console.error('Error loading template:', err);
-      setError('Failed to load template');
+      
+      if (err.response?.status === 401) {
+        localStorage.removeItem('token');
+        navigate('/login');
+        return;
+      }
+      
+      const errorMsg = err.response?.data?.error || 'Failed to load template';
+      setError(errorMsg);
+      toast.error(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -81,25 +73,21 @@ const TemplateDetail = () => {
   const handleDelete = async () => {
     setDeleting(true);
     const token = localStorage.getItem('token');
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
+
+    if (!token) {
+      navigate('/login');
+      return;
+    }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/templates/${id}`, {
-        method: 'DELETE',
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'X-Business-ID': user.businessId
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to delete template');
-      }
-
+      await templateService.deleteTemplate(id);
+      toast.success('Template deleted successfully');
       navigate('/templates');
     } catch (err) {
       console.error('Error deleting template:', err);
-      setError('Failed to delete template');
+      const errorMsg = err.response?.data?.error || 'Failed to delete template';
+      setError(errorMsg);
+      toast.error(errorMsg);
       setDeleting(false);
     }
   };
@@ -111,27 +99,20 @@ const TemplateDetail = () => {
   const handleSubmitForApproval = async () => {
     setSubmitting(true);
     const token = localStorage.getItem('token');
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
+
+    if (!token) {
+      navigate('/login');
+      return;
+    }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/templates/${id}/submit`, {
-        method: 'POST',
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'X-Business-ID': user.businessId
-        }
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to submit template');
-      }
-
+      await templateService.submitTemplate(id);
       toast.success('Template submitted for WhatsApp approval!');
       loadTemplate(); // Reload to get updated status
     } catch (err) {
       console.error('Error submitting template:', err);
-      toast.error(err.message || 'Failed to submit template');
+      const errorMsg = err.response?.data?.error || 'Failed to submit template';
+      toast.error(errorMsg);
     } finally {
       setSubmitting(false);
     }
@@ -415,12 +396,17 @@ const TemplateDetail = () => {
             <Card className="preview-card">
               <h3>Template Preview</h3>
               <div className="whatsapp-preview">
-                <div className="preview-message" data-time={new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}>
+                <div className="preview-message">
                   {template.components?.map((component, index) => (
                     <div key={index}>
                       {renderComponent(component)}
                     </div>
                   ))}
+                  
+                  {/* Timestamp */}
+                  <div className="preview-timestamp">
+                    {new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                  </div>
                 </div>
               </div>
             </Card>

@@ -153,48 +153,21 @@ const configRoutes = require('./modules/config/routes');
 const automationRoutes = require('./modules/automations/routes');
 const searchRoutes = require('./modules/search/routes');
 
-// Mount routes on both /api/v1/* and /api/* for backward compatibility
-app.use('/api/v1/auth', authRoutes);
-app.use('/api/auth', authRoutes); // Backward compatibility
-
-app.use('/api/v1/business', businessRoutes);
+// Mount routes - NO VERSIONING
+app.use('/api/auth', authRoutes);
 app.use('/api/business', businessRoutes);
-
-app.use('/api/v1/campaigns', campaignRoutes);
 app.use('/api/campaigns', campaignRoutes);
-
-app.use('/api/v1/scheduled-messages', campaignRoutes);
 app.use('/api/scheduled-messages', campaignRoutes);
-
-app.use('/api/v1/contacts', contactRoutes);
 app.use('/api/contacts', contactRoutes);
-
-app.use('/api/v1/messages', messageRoutes);
 app.use('/api/messages', messageRoutes);
-
-app.use('/api/v1/conversations', conversationRoutes);
 app.use('/api/conversations', conversationRoutes);
 app.use('/api/inbox', conversationRoutes); // Legacy route
-
-app.use('/api/v1/templates', templateRoutes);
 app.use('/api/templates', templateRoutes);
-
-app.use('/api/v1/analytics', analyticsRoutes);
 app.use('/api/analytics', analyticsRoutes);
-
-app.use('/api/v1/webhooks', webhookRoutes);
 app.use('/api/webhooks', webhookRoutes);
-
-app.use('/api/v1/media', mediaRoutes);
 app.use('/api/media', mediaRoutes);
-
-app.use('/api/v1/config', configRoutes);
 app.use('/api/config', configRoutes);
-
-app.use('/api/v1/automations', automationRoutes);
 app.use('/api/automations', automationRoutes);
-
-app.use('/api/v1/search', searchRoutes);
 app.use('/api/search', searchRoutes);
 
 // 404 handler

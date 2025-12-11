@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '../../components/Toast';
 import * as templateService from '../../services/templates/templateService';
 import useAutoSave, { loadAutoSaved } from '../../hooks/useAutoSave';
+import useTemplateForm from '../../hooks/useTemplateForm';
 import Navbar from '../../components/Navbar';
 import Card from '../../components/Card';
 import Input from '../../components/Input';
@@ -14,119 +15,38 @@ const CreateTemplate = () => {
   const navigate = useNavigate();
   const toast = useToast();
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [formData, setFormData] = useState(() => 
-    loadAutoSaved('createTemplate', {
-      name: '',
-      category: 'UTILITY',
-      language: 'en',
-      headerType: 'NONE',
-      headerText: '',
-      bodyText: '',
-      footerText: '',
-      buttons: []
-    })
-  );
+  
+  // Load auto-saved data
+  const initialData = loadAutoSaved('createTemplate', {
+    name: '',
+    category: 'UTILITY',
+    language: 'en',
+    headerType: 'NONE',
+    headerText: '',
+    bodyText: '',
+    footerText: '',
+    buttons: []
+  });
+  
+  // Use shared template form hook
+  const {
+    formData,
+    variables,
+    error,
+    setError,
+    handleChange,
+    addButton: addButtonToForm,
+    updateButton,
+    removeButton,
+    validateForm,
+    buildComponents
+  } = useTemplateForm(initialData);
   
   // Auto-save form data
   const { clearSaved } = useAutoSave('createTemplate', formData);
-  const [variables, setVariables] = useState([]);
-
-  useEffect(() => {
-    // Extract variables from body text
-    const regex = /\{\{(\d+)\}\}/g;
-    const matches = [...formData.bodyText.matchAll(regex)];
-    const uniqueVars = [...new Set(matches.map(m => parseInt(m[1])))].sort();
-    setVariables(uniqueVars.map(num => ({ 
-      index: num, 
-      name: `Variable ${num}`,
-      example: '' 
-    })));
-  }, [formData.bodyText]);
-
-  const handleChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
-
+  
   const addButton = (type) => {
-    if (formData.buttons.length >= 3) {
-      const errorMsg = 'Maximum 3 buttons allowed';
-      setError(errorMsg);
-      toast.error(errorMsg);
-      return;
-    }
-
-    const newButton = {
-      type,
-      text: '',
-      ...(type === 'PHONE_NUMBER' && { phoneNumber: '' }),
-      ...(type === 'URL' && { url: '' })
-    };
-
-    setFormData(prev => ({
-      ...prev,
-      buttons: [...prev.buttons, newButton]
-    }));
-  };
-
-  const updateButton = (index, field, value) => {
-    setFormData(prev => ({
-      ...prev,
-      buttons: prev.buttons.map((btn, i) => 
-        i === index ? { ...btn, [field]: value } : btn
-      )
-    }));
-  };
-
-  const removeButton = (index) => {
-    setFormData(prev => ({
-      ...prev,
-      buttons: prev.buttons.filter((_, i) => i !== index)
-    }));
-  };
-
-  const buildComponents = () => {
-    const components = [];
-
-    // Header
-    if (formData.headerType !== 'NONE') {
-      if (formData.headerType === 'TEXT' && formData.headerText) {
-        components.push({
-          type: 'HEADER',
-          format: 'TEXT',
-          text: formData.headerText
-        });
-      } else if (['IMAGE', 'VIDEO', 'DOCUMENT'].includes(formData.headerType)) {
-        components.push({
-          type: 'HEADER',
-          format: formData.headerType
-        });
-      }
-    }
-
-    // Body (required)
-    components.push({
-      type: 'BODY',
-      text: formData.bodyText
-    });
-
-    // Footer
-    if (formData.footerText.trim()) {
-      components.push({
-        type: 'FOOTER',
-        text: formData.footerText
-      });
-    }
-
-    // Buttons
-    if (formData.buttons.length > 0) {
-      components.push({
-        type: 'BUTTONS',
-        buttons: formData.buttons
-      });
-    }
-
-    return components;
+    addButtonToForm(type, toast);
   };
 
   const handleSubmit = async (e) => {
@@ -135,25 +55,16 @@ const CreateTemplate = () => {
     setLoading(true);
 
     const token = localStorage.getItem('token');
-
     if (!token) {
       navigate('/login');
       return;
     }
 
-    // Validate
-    if (!formData.name.trim()) {
-      const errorMsg = 'Template name is required';
-      setError(errorMsg);
-      toast.error(errorMsg);
-      setLoading(false);
-      return;
-    }
-
-    if (!formData.bodyText.trim()) {
-      const errorMsg = 'Template body is required';
-      setError(errorMsg);
-      toast.error(errorMsg);
+    // Validate using shared function
+    const validationError = validateForm();
+    if (validationError) {
+      setError(validationError);
+      toast.error(validationError);
       setLoading(false);
       return;
     }
@@ -164,16 +75,18 @@ const CreateTemplate = () => {
         category: formData.category,
         language: formData.language,
         components: buildComponents(),
-        variables: variables.map(v => ({ name: v.name, example: v.example }))
+        variables: variables.map(v => ({ name: v.name, example: v.example })),
+        status: 'pending'
       };
 
       const data = await templateService.createTemplate(templateData);
       
+      clearSaved();
       toast.success('🎉 Template created successfully! Awaiting WhatsApp approval.');
-      navigate(`/templates/${data.template._id}`);
+      navigate(`/templates/${data._id}`);
     } catch (err) {
       console.error('Error creating template:', err);
-      const errorMsg = err.response?.data?.message || 'Failed to create template';
+      const errorMsg = err.response?.data?.error || err.response?.data?.message || 'Failed to create template';
       setError(errorMsg);
       toast.error(errorMsg);
     } finally {
@@ -186,25 +99,16 @@ const CreateTemplate = () => {
     setLoading(true);
 
     const token = localStorage.getItem('token');
-
     if (!token) {
       navigate('/login');
       return;
     }
 
-    // Validate
-    if (!formData.name.trim()) {
-      const errorMsg = 'Template name is required';
-      setError(errorMsg);
-      toast.error(errorMsg);
-      setLoading(false);
-      return;
-    }
-
-    if (!formData.bodyText.trim()) {
-      const errorMsg = 'Template body is required';
-      setError(errorMsg);
-      toast.error(errorMsg);
+    // Validate using shared function
+    const validationError = validateForm();
+    if (validationError) {
+      setError(validationError);
+      toast.error(validationError);
       setLoading(false);
       return;
     }
@@ -220,11 +124,12 @@ const CreateTemplate = () => {
 
       const data = await templateService.saveDraft(templateData);
       
+      clearSaved();
       toast.success('💾 Template saved as draft successfully!');
-      navigate(`/templates/${data.template._id}`);
+      navigate(`/templates/${data._id}`);
     } catch (err) {
       console.error('Error saving draft:', err);
-      const errorMsg = err.response?.data?.message || 'Failed to save template as draft';
+      const errorMsg = err.response?.data?.error || err.response?.data?.message || 'Failed to save template as draft';
       setError(errorMsg);
       toast.error(errorMsg);
     } finally {
@@ -279,6 +184,11 @@ const CreateTemplate = () => {
               ))}
             </div>
           )}
+          
+          {/* Timestamp */}
+          <div className="preview-timestamp">
+            {new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+          </div>
         </div>
       </div>
     );

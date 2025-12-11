@@ -2,12 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useToast } from '../../components/Toast';
 import * as templateService from '../../services/templates/templateService';
+import useTemplateForm from '../../hooks/useTemplateForm';
 import Navbar from '../../components/Navbar';
 import Card from '../../components/Card';
 import Input from '../../components/Input';
 import Button from '../../components/Button';
 import { MdInfo, MdWarning } from 'react-icons/md';
-import { API_BASE_URL } from '../../config/api';
 import './CreateTemplate.css';
 
 const EditTemplate = () => {
@@ -16,34 +16,31 @@ const EditTemplate = () => {
   const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [formData, setFormData] = useState({
-    name: '',
-    category: 'UTILITY',
-    language: 'en',
-    headerType: 'NONE',
-    headerText: '',
-    bodyText: '',
-    footerText: '',
-    buttons: []
-  });
-  const [variables, setVariables] = useState([]);
+  const [templateStatus, setTemplateStatus] = useState('');
+  
+  // Use shared template form hook
+  const {
+    formData,
+    setFormData,
+    variables,
+    error,
+    setError,
+    handleChange,
+    addButton: addButtonToForm,
+    updateButton,
+    removeButton,
+    validateForm,
+    buildComponents
+  } = useTemplateForm();
+  
+  const addButton = (type) => {
+    addButtonToForm(type, toast);
+  };
 
   useEffect(() => {
     loadTemplate();
   }, [id]);
 
-  useEffect(() => {
-    // Extract variables from body text
-    const regex = /\{\{(\d+)\}\}/g;
-    const matches = [...formData.bodyText.matchAll(regex)];
-    const uniqueVars = [...new Set(matches.map(m => parseInt(m[1])))].sort();
-    setVariables(uniqueVars.map(num => ({ 
-      index: num, 
-      name: `Variable ${num}`,
-      example: '' 
-    })));
-  }, [formData.bodyText]);
 
   const loadTemplate = async () => {
     const token = localStorage.getItem('token');
@@ -54,16 +51,10 @@ const EditTemplate = () => {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/templates/${id}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to load template');
-      }
-
-      const data = await response.json();
-      const template = data.template;
+      const template = await templateService.getTemplateById(id);
+      
+      // Store template status
+      setTemplateStatus(template.status);
 
       // Parse template data into form structure
       const headerComponent = template.components?.find(c => c.type === 'HEADER');
@@ -85,95 +76,20 @@ const EditTemplate = () => {
       setLoading(false);
     } catch (err) {
       console.error('Error loading template:', err);
-      toast.error('Failed to load template');
+      
+      if (err.response?.status === 401) {
+        localStorage.removeItem('token');
+        navigate('/login');
+        return;
+      }
+      
+      const errorMsg = err.response?.data?.error || 'Failed to load template';
+      toast.error(errorMsg);
       navigate('/templates');
     }
   };
 
-  const handleChange = (field, value) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
 
-  const addButton = (type) => {
-    if (formData.buttons.length >= 3) {
-      const errorMsg = 'Maximum 3 buttons allowed';
-      setError(errorMsg);
-      toast.error(errorMsg);
-      return;
-    }
-
-    const newButton = {
-      type,
-      text: '',
-      ...(type === 'PHONE_NUMBER' && { phoneNumber: '' }),
-      ...(type === 'URL' && { url: '' })
-    };
-
-    setFormData(prev => ({
-      ...prev,
-      buttons: [...prev.buttons, newButton]
-    }));
-  };
-
-  const updateButton = (index, field, value) => {
-    setFormData(prev => ({
-      ...prev,
-      buttons: prev.buttons.map((btn, i) => 
-        i === index ? { ...btn, [field]: value } : btn
-      )
-    }));
-  };
-
-  const removeButton = (index) => {
-    setFormData(prev => ({
-      ...prev,
-      buttons: prev.buttons.filter((_, i) => i !== index)
-    }));
-  };
-
-  const buildComponents = () => {
-    const components = [];
-
-    // Header
-    if (formData.headerType !== 'NONE') {
-      if (formData.headerType === 'TEXT' && formData.headerText) {
-        components.push({
-          type: 'HEADER',
-          format: 'TEXT',
-          text: formData.headerText
-        });
-      } else if (['IMAGE', 'VIDEO', 'DOCUMENT'].includes(formData.headerType)) {
-        components.push({
-          type: 'HEADER',
-          format: formData.headerType
-        });
-      }
-    }
-
-    // Body (required)
-    components.push({
-      type: 'BODY',
-      text: formData.bodyText
-    });
-
-    // Footer
-    if (formData.footerText.trim()) {
-      components.push({
-        type: 'FOOTER',
-        text: formData.footerText
-      });
-    }
-
-    // Buttons
-    if (formData.buttons.length > 0) {
-      components.push({
-        type: 'BUTTONS',
-        buttons: formData.buttons
-      });
-    }
-
-    return components;
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -181,25 +97,16 @@ const EditTemplate = () => {
     setSaving(true);
 
     const token = localStorage.getItem('token');
-
     if (!token) {
       navigate('/login');
       return;
     }
 
-    // Validate
-    if (!formData.name.trim()) {
-      const errorMsg = 'Template name is required';
-      setError(errorMsg);
-      toast.error(errorMsg);
-      setSaving(false);
-      return;
-    }
-
-    if (!formData.bodyText.trim()) {
-      const errorMsg = 'Template body is required';
-      setError(errorMsg);
-      toast.error(errorMsg);
+    // Validate using shared function
+    const validationError = validateForm();
+    if (validationError) {
+      setError(validationError);
+      toast.error(validationError);
       setSaving(false);
       return;
     }
@@ -219,7 +126,50 @@ const EditTemplate = () => {
       navigate(`/templates/${id}`);
     } catch (err) {
       console.error('Error updating template:', err);
-      const errorMsg = err.response?.data?.message || 'Failed to update template';
+      const errorMsg = err.response?.data?.error || err.response?.data?.message || 'Failed to update template';
+      setError(errorMsg);
+      toast.error(errorMsg);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSubmitForApproval = async () => {
+    setError('');
+    setSaving(true);
+
+    const token = localStorage.getItem('token');
+    if (!token) {
+      navigate('/login');
+      return;
+    }
+
+    // Validate using shared function
+    const validationError = validateForm();
+    if (validationError) {
+      setError(validationError);
+      toast.error(validationError);
+      setSaving(false);
+      return;
+    }
+
+    try {
+      const templateData = {
+        name: formData.name,
+        category: formData.category,
+        language: formData.language,
+        components: buildComponents(),
+        variables: variables.map(v => ({ name: v.name, example: v.example })),
+        status: 'pending'
+      };
+
+      await templateService.updateTemplate(id, templateData);
+      
+      toast.success('🚀 Template submitted for approval!');
+      navigate(`/templates/${id}`);
+    } catch (err) {
+      console.error('Error submitting template:', err);
+      const errorMsg = err.response?.data?.error || err.response?.data?.message || 'Failed to submit template';
       setError(errorMsg);
       toast.error(errorMsg);
     } finally {
@@ -274,6 +224,11 @@ const EditTemplate = () => {
               ))}
             </div>
           )}
+          
+          {/* Timestamp */}
+          <div className="preview-timestamp">
+            {new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+          </div>
         </div>
       </div>
     );
@@ -340,7 +295,7 @@ const EditTemplate = () => {
                       value={formData.category}
                       onChange={(e) => handleChange('category', e.target.value)}
                       className="form-select"
-                      disabled
+                      disabled={templateStatus !== 'draft' && templateStatus !== 'rejected'}
                     >
                       <option value="MARKETING">Marketing</option>
                       <option value="UTILITY">Utility</option>
@@ -355,7 +310,7 @@ const EditTemplate = () => {
                       value={formData.language}
                       onChange={(e) => handleChange('language', e.target.value)}
                       className="form-select"
-                      disabled
+                      disabled={templateStatus !== 'draft' && templateStatus !== 'rejected'}
                     >
                       <option value="en">English</option>
                       <option value="en_US">English (US)</option>
@@ -548,6 +503,16 @@ const EditTemplate = () => {
                   <Button type="submit" disabled={saving}>
                     {saving ? 'Saving...' : 'Save Changes'}
                   </Button>
+                  {(templateStatus === 'draft' || templateStatus === 'rejected') && (
+                    <Button 
+                      type="button"
+                      onClick={handleSubmitForApproval} 
+                      disabled={saving}
+                      style={{ background: 'linear-gradient(135deg, #4caf50 0%, #45a049 100%)' }}
+                    >
+                      {saving ? 'Submitting...' : '🚀 Submit for Approval'}
+                    </Button>
+                  )}
                 </div>
               </form>
             </Card>

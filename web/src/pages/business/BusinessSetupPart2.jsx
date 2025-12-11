@@ -156,9 +156,9 @@ const BusinessSetupPart2 = () => {
       console.log('✅ Business data:', business);
       console.log('✅ Webhook configured:', business?.whatsappConfig?.webhookConfigured);
       
-      // If business is fully configured (all parts complete), redirect to dashboard
+      // If business is fully configured (setupStep === 4), redirect to dashboard
       if (isExisting && setupStatus.isFullyConfigured) {
-        console.log('✅ Business fully configured. Redirecting to dashboard...');
+        console.log('✅ Business fully configured (setupStep=4). Redirecting to dashboard...');
         updateUser({ businessId: business._id });
         await refreshUserProfile();
         localStorage.removeItem('businessSetupPart1');
@@ -171,9 +171,9 @@ const BusinessSetupPart2 = () => {
         return;
       }
       
-      // If Part 2 is complete but Part 3 is not, go to Part 3
-      if (isExisting && setupStatus.part2Complete && !setupStatus.part3Complete) {
-        console.log('✅ Part 2 complete, proceeding to Part 3 (webhook setup)...');
+      // If setupStep >= 3, continue to webhook setup (Part 3)
+      if (isExisting && setupStatus.setupStep >= 3) {
+        console.log(`✅ Setup step ${setupStatus.setupStep}, proceeding to Part 3 (webhook setup)...`);
         // Continue to webhook setup below
       }
       

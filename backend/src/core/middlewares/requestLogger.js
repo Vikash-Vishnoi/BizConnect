@@ -187,19 +187,16 @@ const sanitizeBody = (body) => {
  */
 const shouldAudit = (req) => {
   const auditPaths = [
-    '/api/v1/auth/login',
-    '/api/v1/auth/register',
-    '/api/v1/business/credentials',
-    '/api/v1/business/phone',
-    '/api/v1/campaigns',
-    '/api/v1/templates',
-    '/api/v1/automations',
-    '/api/v1/bulk',
-    '/api/v1/contacts/import',
-    '/api/v1/contacts/bulk',
-    // Legacy paths
     '/api/auth/login',
-    '/api/auth/register'
+    '/api/auth/register',
+    '/api/business/credentials',
+    '/api/business/phone',
+    '/api/campaigns',
+    '/api/templates',
+    '/api/automations',
+    '/api/bulk',
+    '/api/contacts/import',
+    '/api/contacts/bulk'
   ];
 
   // Check if path matches audit patterns
