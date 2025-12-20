@@ -1,4 +1,18 @@
 const axios = require('axios');
+const logger = require('../../common/helpers/logger');
+const { ERROR_CODES, HTTP_STATUS, TIME_CONSTANTS } = require('../../common/constants');
+const config = require('../../config/app.config');
+
+/**
+ * WhatsApp Group Service Constants
+ */
+const GRAPH_API_TIMEOUT = parseInt(config.whatsapp?.timeout || process.env.WHATSAPP_API_TIMEOUT || '30000');
+const MESSAGING_PRODUCT = 'whatsapp';
+const RECIPIENT_TYPE_GROUP = 'group';
+const RECIPIENT_TYPE_INDIVIDUAL = 'individual';
+const GROUP_ID_SUFFIX = '@g.us';
+
+const GROUP_INFO_FIELDS = 'id,subject,creation_time,owner,participants';
 
 /**
  * WhatsApp Group Service
@@ -6,29 +20,47 @@ const axios = require('axios');
  */
 class WhatsAppGroupService {
   constructor(config) {
+    if (!config || !config.phoneNumberId || !config.accessToken) {
+      throw new Error('WhatsApp configuration (phoneNumberId, accessToken) is required');
+    }
     this.phoneNumberId = config.phoneNumberId;
     this.accessToken = config.accessToken;
-    this.apiVersion = config.apiVersion;
+    this.apiVersion = config.apiVersion || 'v22.0';
     this.apiUrl = `https://graph.facebook.com/${this.apiVersion}`;
+    this.timeout = GRAPH_API_TIMEOUT;
   }
 
   /**
    * Send message to WhatsApp group
    */
   async sendGroupMessage(groupId, message) {
+    const startTime = Date.now();
+    
     try {
-      console.log(`📤 Sending group message to: ${groupId}`);
-
-      if (!groupId || !groupId.includes('@g.us')) {
+      if (!groupId || !message) {
         return {
           success: false,
-          error: 'Invalid group ID format. Must include @g.us'
+          error: 'Group ID and message are required',
+          code: ERROR_CODES.VALIDATION_ERROR
         };
       }
 
+      if (!groupId.includes(GROUP_ID_SUFFIX)) {
+        return {
+          success: false,
+          error: `Invalid group ID format. Must include ${GROUP_ID_SUFFIX}`,
+          code: ERROR_CODES.VALIDATION_ERROR
+        };
+      }
+
+      logger.info('Sending group message', {
+        phoneNumberId: this.phoneNumberId,
+        groupId
+      });
+
       const payload = {
-        messaging_product: 'whatsapp',
-        recipient_type: 'group',
+        messaging_product: MESSAGING_PRODUCT,
+        recipient_type: RECIPIENT_TYPE_GROUP,
         to: groupId,
         ...message
       };
@@ -40,20 +72,33 @@ class WhatsAppGroupService {
           headers: {
             'Authorization': `Bearer ${this.accessToken}`,
             'Content-Type': 'application/json'
-          }
+          },
+          timeout: this.timeout
         }
       );
 
-      console.log('✅ Group message sent successfully');
+      logger.info('Group message sent successfully', {
+        phoneNumberId: this.phoneNumberId,
+        groupId,
+        messageId: response.data.messages?.[0]?.id,
+        processingTime: `${Date.now() - startTime}ms`
+      });
       return {
         success: true,
+        messageId: response.data.messages?.[0]?.id,
         data: response.data
       };
     } catch (error) {
-      console.error('❌ Send Group Message Error:', error.response?.data || error);
+      logger.error('Send Group Message Error', {
+        error: error.response?.data || error.message,
+        groupId,
+        code: ERROR_CODES.EXTERNAL_SERVICE_ERROR,
+        processingTime: `${Date.now() - startTime}ms`
+      });
       return {
         success: false,
         error: error.response?.data?.error?.message || error.message,
+        code: ERROR_CODES.EXTERNAL_SERVICE_ERROR,
         details: error.response?.data
       };
     }
@@ -63,8 +108,21 @@ class WhatsAppGroupService {
    * Get group information
    */
   async getGroupInfo(groupId) {
+    const startTime = Date.now();
+    
     try {
-      console.log(`📋 Fetching group info for: ${groupId}`);
+      if (!groupId) {
+        return {
+          success: false,
+          error: 'Group ID is required',
+          code: ERROR_CODES.VALIDATION_ERROR
+        };
+      }
+
+      logger.info('Fetching group info', {
+        phoneNumberId: this.phoneNumberId,
+        groupId
+      });
 
       const response = await axios.get(
         `${this.apiUrl}/${groupId}`,
@@ -73,30 +131,43 @@ class WhatsAppGroupService {
             'Authorization': `Bearer ${this.accessToken}`
           },
           params: {
-            fields: 'id,subject,creation_time,owner,participants'
-          }
+            fields: GROUP_INFO_FIELDS
+          },
+          timeout: this.timeout
         }
       );
 
-      console.log('✅ Group info retrieved');
+      logger.info('Group info retrieved', {
+        phoneNumberId: this.phoneNumberId,
+        groupId,
+        processingTime: `${Date.now() - startTime}ms`
+      });
       return {
         success: true,
         data: response.data
       };
     } catch (error) {
-      console.error('❌ Get Group Info Error:', error.response?.data || error);
+      logger.error('Get Group Info Error', {
+        error: error.response?.data || error.message,
+        groupId,
+        status: error.response?.status,
+        code: ERROR_CODES.EXTERNAL_SERVICE_ERROR,
+        processingTime: `${Date.now() - startTime}ms`
+      });
       
-      if (error.response?.status === 404 || error.response?.status === 400) {
+      if (error.response?.status === HTTP_STATUS.NOT_FOUND || error.response?.status === HTTP_STATUS.BAD_REQUEST) {
         return {
           success: false,
           error: 'Group info not available through API. Use webhook data instead.',
+          code: ERROR_CODES.NOT_FOUND,
           suggestion: 'Group metadata is received through webhooks when messages are sent/received'
         };
       }
 
       return {
         success: false,
-        error: error.response?.data?.error?.message || error.message
+        error: error.response?.data?.error?.message || error.message,
+        code: ERROR_CODES.EXTERNAL_SERVICE_ERROR
       };
     }
   }
@@ -106,7 +177,10 @@ class WhatsAppGroupService {
    */
   async getGroupMetadata(groupId) {
     try {
-      console.log(`📊 Fetching group metadata for: ${groupId}`);
+      logger.info('Fetching group metadata', {
+        phoneNumberId: this.phoneNumberId,
+        groupId
+      });
 
       return {
         success: false,
@@ -115,7 +189,10 @@ class WhatsAppGroupService {
         note: 'Store group info from incoming messages and webhook notifications'
       };
     } catch (error) {
-      console.error('❌ Get Group Metadata Error:', error);
+      logger.error('Get Group Metadata Error', {
+        error: error.message,
+        groupId
+      });
       return {
         success: false,
         error: error.message
@@ -128,7 +205,10 @@ class WhatsAppGroupService {
    */
   async leaveGroup(groupId) {
     try {
-      console.log(`🚪 Leaving group: ${groupId}`);
+      logger.info('Leaving group', {
+        phoneNumberId: this.phoneNumberId,
+        groupId
+      });
 
       const response = await axios.post(
         `${this.apiUrl}/${groupId}/leave`,
@@ -141,13 +221,19 @@ class WhatsAppGroupService {
         }
       );
 
-      console.log('✅ Successfully left group');
+      logger.info('Successfully left group', {
+        phoneNumberId: this.phoneNumberId,
+        groupId
+      });
       return {
         success: true,
         data: response.data
       };
     } catch (error) {
-      console.error('❌ Leave Group Error:', error.response?.data || error);
+      logger.error('Leave Group Error', {
+        error: error.response?.data || error.message,
+        groupId
+      });
       return {
         success: false,
         error: error.response?.data?.error?.message || error.message,

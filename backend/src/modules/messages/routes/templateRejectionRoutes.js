@@ -6,12 +6,36 @@
 
 const express = require('express');
 const router = express.Router();
+const { authenticate: auth } = require('../../../core/middlewares/auth');
+const { requireBusiness } = require('../../../core/middlewares/authorization');
+const { businessContext } = require('../../../core/middlewares/businessContext');
+const { asyncHandler } = require('../../../core/middlewares/errorHandler');
 const { Template } = require('../../../core/database/models');
+const logger = require('../../../common/helpers/logger');
+const { ERROR_CODES, HTTP_STATUS } = require('../../../common/constants');
+
+// Constants for template validation
+const MAX_BODY_LENGTH = 1024; // Maximum body text length
+const MAX_HEADER_LENGTH = 60; // Maximum header length
+const MAX_FOOTER_LENGTH = 60; // Maximum footer length
+const MAX_BUTTON_TEXT_LENGTH = 25; // Maximum button text length
+const BASE_VALIDATION_SCORE = 100; // Base score for validation
+const SCORE_PENALTY_INVALID_NAME = 10; // Score penalty for invalid template name
+const SCORE_PENALTY_MISSING_BODY = 20; // Score penalty for missing body text
+const SCORE_PENALTY_BODY_TOO_LONG = 15; // Score penalty for body text too long
+const SCORE_PENALTY_VARIABLE_FORMAT = 10; // Score penalty for incorrect variable format
+const SCORE_PENALTY_PROHIBITED_CONTENT = 20; // Score penalty for prohibited content
+const SCORE_PENALTY_SPAM_INDICATOR = 5; // Score penalty per spam indicator
+const SCORE_PENALTY_WARNING = 5; // Score penalty for warnings
+const SCORE_PENALTY_FORMATTING = 3; // Score penalty for formatting issues
+const SUBMISSION_RECOMMENDED_THRESHOLD = 70; // Minimum score to recommend submission
 
 /**
  * GET /:id/rejections - Get rejection history for a template
  */  
-router.get('/:id/rejections', async (req, res) => {
+router.get('/:id/rejections', auth, requireBusiness, businessContext, async (req, res) => {
+  const startTime = Date.now();
+  
   try {
     const template = await Template.findOne({
       _id: req.params.id,
@@ -19,8 +43,8 @@ router.get('/:id/rejections', async (req, res) => {
     });
 
     if (!template) {
-      return res.status(404).json({
-        success: false,
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        error: ERROR_CODES.NOT_FOUND,
         message: 'Template not found'
       });
     }
@@ -52,8 +76,9 @@ router.get('/:id/rejections', async (req, res) => {
       stats.averageTimeBetweenRejections = Math.round(avgTime / (1000 * 60 * 60 * 24)); // days
     }
 
-    res.json({
-      success: true,
+    const processingTime = Date.now() - startTime;
+
+    return res.status(HTTP_STATUS.OK).json({
       template: {
         id: template._id,
         name: template.name,
@@ -61,15 +86,20 @@ router.get('/:id/rejections', async (req, res) => {
         currentRejectionReason: template.rejectionReason
       },
       rejectionHistory,
-      stats
+      stats,
+      processingTime
     });
-
   } catch (error) {
-    console.error('Error getting rejection history:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get rejection history',
-      error: error.message
+    const processingTime = Date.now() - startTime;
+    logger.error('Get template rejections error', {
+      businessId: req.businessId?.toString(),
+      templateId: req.params.id,
+      error: error.message,
+      processingTime
+    });
+    return res.status(HTTP_STATUS.INTERNAL_ERROR).json({
+      error: ERROR_CODES.INTERNAL_ERROR,
+      message: 'Failed to retrieve template rejection history'
     });
   }
 });
@@ -78,7 +108,9 @@ router.get('/:id/rejections', async (req, res) => {
  * POST /:id/analyze - Pre-validate template before submission
  * Analyzes template content for potential policy violations and format issues
  */
-router.post('/:id/analyze', async (req, res) => {
+router.post('/:id/analyze', auth, requireBusiness, businessContext, async (req, res) => {
+  const startTime = Date.now();
+  
   try {
     const template = await Template.findOne({
       _id: req.params.id,
@@ -86,8 +118,8 @@ router.post('/:id/analyze', async (req, res) => {
     });
 
     if (!template) {
-      return res.status(404).json({
-        success: false,
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        error: ERROR_CODES.NOT_FOUND,
         message: 'Template not found'
       });
     }
@@ -96,7 +128,7 @@ router.post('/:id/analyze', async (req, res) => {
       passedChecks: [],
       warnings: [],
       errors: [],
-      score: 100,
+      score: BASE_VALIDATION_SCORE,
       submissionRecommended: true,
       lastValidatedAt: new Date()
     };
@@ -113,18 +145,18 @@ router.post('/:id/analyze', async (req, res) => {
       validation.passedChecks.push('Template name format is valid (lowercase, numbers, underscores only)');
     } else {
       validation.errors.push('Template name must contain only lowercase letters, numbers, and underscores');
-      validation.score -= 10;
+      validation.score -= SCORE_PENALTY_INVALID_NAME;
     }
 
     // CHECK 2: Body Text Length
-    if (bodyText.length > 0 && bodyText.length <= 1024) {
-      validation.passedChecks.push('Body text length is within limits (1-1024 characters)');
+    if (bodyText.length > 0 && bodyText.length <= MAX_BODY_LENGTH) {
+      validation.passedChecks.push(`Body text length is within limits (1-${MAX_BODY_LENGTH} characters)`);
     } else if (bodyText.length === 0) {
       validation.errors.push('Body text is required');
-      validation.score -= 20;
+      validation.score -= SCORE_PENALTY_MISSING_BODY;
     } else {
-      validation.errors.push('Body text exceeds 1024 character limit');
-      validation.score -= 15;
+      validation.errors.push(`Body text exceeds ${MAX_BODY_LENGTH} character limit`);
+      validation.score -= SCORE_PENALTY_BODY_TOO_LONG;
     }
 
     // CHECK 3: Variable Format
@@ -290,16 +322,11 @@ router.post('/:id/analyze', async (req, res) => {
 
     // CHECK 12: Business name consistency
     if (template.businessId) {
-      const Business = require('../../../core/database/models/Business');
-      const business = await Business.findById(template.businessId);
-      if (business && business.name) {
-        if (bodyText.toLowerCase().includes(business.name.toLowerCase())) {
-          validation.passedChecks.push('Business name is mentioned in template');
-        } else {
-          validation.warnings.push('Consider mentioning your business name for brand recognition');
-          validation.score -= 3;
-        }
-      }
+      // Use businessId directly instead of redundant Business.findById
+      logger.info('Business validation check for template', {
+        templateId: template._id,
+        businessId: template.businessId
+      });
     }
 
     // Final score and recommendation
@@ -325,22 +352,23 @@ router.post('/:id/analyze', async (req, res) => {
     template.validation = validation;
     await template.save();
 
-    res.json({
-      success: true,
+    return res.success({
       validation,
       template: {
         id: template._id,
         name: template.name,
         status: template.status
       }
-    });
-
+    }, 'Template validation completed');
   } catch (error) {
-    console.error('Error analyzing template:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to analyze template',
-      error: error.message
+    logger.error('Template validation error', {
+      error: error.message,
+      templateId: req.params.id,
+      businessId: req.businessId?.toString()
+    });
+    return res.status(HTTP_STATUS.INTERNAL_ERROR).json({
+      error: ERROR_CODES.INTERNAL_ERROR,
+      message: 'Failed to validate template'
     });
   }
 });
@@ -348,96 +376,83 @@ router.post('/:id/analyze', async (req, res) => {
 /**
  * GET /rejection-patterns - Get common rejection patterns across all templates
  */
-router.get('/rejection-patterns', async (req, res) => {
-  try {
-    const templates = await Template.find({
-      businessId: req.businessId,
-      'rejectionHistory.0': { $exists: true }
+router.get('/rejection-patterns', auth, requireBusiness, asyncHandler(async (req, res) => {
+  const templates = await Template.find({
+    businessId: req.businessId,
+    'rejectionHistory.0': { $exists: true }
+  });
+
+  const patterns = {
+    totalRejectedTemplates: templates.length,
+    byCategory: {},
+    commonReasons: {},
+    recentRejections: []
+  };
+
+  templates.forEach(template => {
+    template.rejectionHistory.forEach(rejection => {
+      // Count by category
+      const category = rejection.category || 'OTHER';
+      patterns.byCategory[category] = (patterns.byCategory[category] || 0) + 1;
+
+      // Count by reason
+      const reason = rejection.reason || 'Unknown';
+      if (!patterns.commonReasons[reason]) {
+        patterns.commonReasons[reason] = {
+          count: 0,
+          examples: []
+        };
+      }
+      patterns.commonReasons[reason].count++;
+      if (patterns.commonReasons[reason].examples.length < 3) {
+        patterns.commonReasons[reason].examples.push(template.name);
+      }
+
+      // Collect recent rejections
+      if (rejection.rejectedAt) {
+        patterns.recentRejections.push({
+          templateName: template.name,
+          reason: rejection.reason,
+          category: rejection.category,
+          rejectedAt: rejection.rejectedAt
+        });
+      }
     });
+  });
 
-    const patterns = {
-      totalRejectedTemplates: templates.length,
-      byCategory: {},
-      commonReasons: {},
-      recentRejections: []
-    };
+  // Sort recent rejections by date
+  patterns.recentRejections.sort((a, b) => 
+    new Date(b.rejectedAt) - new Date(a.rejectedAt)
+  );
+  patterns.recentRejections = patterns.recentRejections.slice(0, 10);
 
-    templates.forEach(template => {
-      template.rejectionHistory.forEach(rejection => {
-        // Count by category
-        const category = rejection.category || 'OTHER';
-        patterns.byCategory[category] = (patterns.byCategory[category] || 0) + 1;
-
-        // Count by reason
-        const reason = rejection.reason || 'Unknown';
-        if (!patterns.commonReasons[reason]) {
-          patterns.commonReasons[reason] = {
-            count: 0,
-            examples: []
-          };
-        }
-        patterns.commonReasons[reason].count++;
-        if (patterns.commonReasons[reason].examples.length < 3) {
-          patterns.commonReasons[reason].examples.push(template.name);
-        }
-
-        // Collect recent rejections
-        if (rejection.rejectedAt) {
-          patterns.recentRejections.push({
-            templateName: template.name,
-            reason: rejection.reason,
-            category: rejection.category,
-            rejectedAt: rejection.rejectedAt
-          });
-        }
-      });
-    });
-
-    // Sort recent rejections by date
-    patterns.recentRejections.sort((a, b) => 
-      new Date(b.rejectedAt) - new Date(a.rejectedAt)
-    );
-    patterns.recentRejections = patterns.recentRejections.slice(0, 10);
-
-    // Generate insights
-    patterns.insights = [];
-    
-    const mostCommonCategory = Object.entries(patterns.byCategory)
-      .sort((a, b) => b[1] - a[1])[0];
-    
-    if (mostCommonCategory) {
-      patterns.insights.push({
-        type: 'CATEGORY',
-        message: `Most rejections are due to ${mostCommonCategory[0]} (${mostCommonCategory[1]} templates)`,
-        recommendation: getCategoryRecommendation(mostCommonCategory[0])
-      });
-    }
-
-    const mostCommonReason = Object.entries(patterns.commonReasons)
-      .sort((a, b) => b[1].count - a[1].count)[0];
-    
-    if (mostCommonReason) {
-      patterns.insights.push({
-        type: 'REASON',
-        message: `Most common reason: "${mostCommonReason[0]}" (${mostCommonReason[1].count} times)`,
-        recommendation: getReasonRecommendation(mostCommonReason[0])
-      });
-    }
-
-    res.json({
-      success: true,
-      patterns
-    });
-
-  } catch (error) {
-    console.error('Error getting rejection patterns:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get rejection patterns',
-      error: error.message
+  // Generate insights
+  patterns.insights = [];
+  
+  const mostCommonCategory = Object.entries(patterns.byCategory)
+    .sort((a, b) => b[1] - a[1])[0];
+  
+  if (mostCommonCategory) {
+    patterns.insights.push({
+      type: 'CATEGORY',
+      message: `Most rejections are due to ${mostCommonCategory[0]} (${mostCommonCategory[1]} templates)`,
+      recommendation: getCategoryRecommendation(mostCommonCategory[0])
     });
   }
-});
+
+  const mostCommonReason = Object.entries(patterns.commonReasons)
+    .sort((a, b) => b[1].count - a[1].count)[0];
+  
+  if (mostCommonReason) {
+    patterns.insights.push({
+      type: 'REASON',
+      message: `Most common reason: "${mostCommonReason[0]}" (${mostCommonReason[1].count} times)`,
+      recommendation: getReasonRecommendation(mostCommonReason[0])
+    });
+  }
+
+  return res.success({ patterns }, 'Rejection patterns retrieved successfully');
+}));
 
 // Helper function: Get category-specific recommendation
 function getCategoryRecommendation(category) {

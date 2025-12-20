@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { phoneNumberValidator } = require('../../../common/helpers/phoneValidator');
+const { sanitizePhoneNumber, isValidPhoneNumber: validatePhoneNumber } = require('../../../common/helpers/phoneValidator');
  
 /**
  * Business Model - Multi-Business Support
@@ -18,6 +18,11 @@ const businessSchema = new mongoose.Schema({
     required: [true, 'Business name is required'],
     trim: true,
     maxlength: [200, 'Business name cannot exceed 200 characters']
+  },
+  displayName: {
+    type: String,
+    trim: true,
+    maxlength: [200, 'Display name cannot exceed 200 characters']
   },
   description: {
     type: String,
@@ -52,9 +57,13 @@ const businessSchema = new mongoose.Schema({
       validate: {
         validator: function(v) {
           if (!v || v === '') return true;
-          return phoneNumberValidator.validator(v);
+          return validatePhoneNumber(v);
         },
-        message: props => phoneNumberValidator.message(props)
+        message: 'Invalid phone number format. Use E.164 format (e.g., +919876543210)'
+      },
+      set: function(v) {
+        if (!v || v === '') return v;
+        return sanitizePhoneNumber(v);
       }
     },
     // WhatsApp Business Account ID (WABA ID)
@@ -136,6 +145,31 @@ const businessSchema = new mongoose.Schema({
       type: String,
       lowercase: true,
       trim: true
+    },
+    phoneNumber: {
+      type: String,
+      trim: true,
+      maxlength: [20, 'Phone number cannot exceed 20 characters']
+    },
+    website: {
+      type: String,
+      trim: true,
+      maxlength: [500, 'Website URL cannot exceed 500 characters']
+    },
+    city: {
+      type: String,
+      trim: true,
+      maxlength: [100, 'City cannot exceed 100 characters']
+    },
+    state: {
+      type: String,
+      trim: true,
+      maxlength: [100, 'State cannot exceed 100 characters']
+    },
+    country: {
+      type: String,
+      trim: true,
+      maxlength: [100, 'Country cannot exceed 100 characters']
     },
     vertical: {
       type: String,
@@ -254,6 +288,11 @@ const businessSchema = new mongoose.Schema({
     type: String,
     enum: ['active', 'suspended', 'deleted'],
     default: 'active',
+    index: true
+  },
+  isDeleted: {
+    type: Boolean,
+    default: false,
     index: true
   },
   health: {
@@ -482,7 +521,10 @@ businessSchema.post('save', async function(doc, next) {
         'settings.workingHours.templateId': outOfHoursTemplate?._id
       });
     } catch (error) {
-      console.error('Error creating default templates:', error);
+      logger.error('Error creating default templates', {
+        businessId: this._id,
+        error: error.message
+      });
     }
   }
   next();

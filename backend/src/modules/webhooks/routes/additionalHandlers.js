@@ -11,6 +11,31 @@ const Template = require('../../../core/database/models/Template');
 const AlertLog = require('../../../core/database/models/AlertLog');
 const Contact = require('../../../core/database/models/Contact');
 const logger = require('../../../common/helpers/logger');
+const { ERROR_CODES, TIME_CONSTANTS } = require('../../../common/constants');
+
+/**
+ * Flow Handler Constants
+ */
+const FLOW_STATUS = {
+  IN_PROGRESS: 'in_progress',
+  COMPLETED: 'completed',
+  FAILED: 'failed'
+};
+
+const FLOW_EVENT_NAMES = {
+  COMPLETE: 'complete',
+  COMPLETE_UPPER: 'COMPLETE'
+};
+
+const MESSAGE_DIRECTION = {
+  INCOMING: 'in',
+  OUTGOING: 'out'
+};
+
+const MESSAGE_STATUS = {
+  RECEIVED: 'received',
+  SENT: 'sent'
+};
 
 /**
  * Handle WhatsApp Flow responses
@@ -20,9 +45,21 @@ const logger = require('../../../common/helpers/logger');
  * @param {Object} business - Business model instance
  */
 async function handleFlowResponse(message, metadata, io, business) {
-  const requestId = `flow_${message.id}_${Date.now()}`;
+  const requestId = `flow_${message?.id}_${Date.now()}`;
+  const startTime = Date.now();
   
   try {
+    // Validate inputs
+    if (!message || !business) {
+      logger.error('handleFlowResponse called with invalid parameters', {
+        requestId,
+        hasMessage: !!message,
+        hasBusiness: !!business,
+        code: ERROR_CODES.VALIDATION_ERROR
+      });
+      return;
+    }
+
     const from = message.from;
     const interactive = message.interactive;
     const nfmReply = interactive?.nfm_reply;
@@ -37,7 +74,8 @@ async function handleFlowResponse(message, metadata, io, business) {
     if (!nfmReply) {
       logger.warn('Flow response missing nfm_reply', {
         requestId,
-        messageId: message.id
+        messageId: message.id,
+        code: ERROR_CODES.VALIDATION_ERROR
       });
       return;
     }
@@ -51,7 +89,8 @@ async function handleFlowResponse(message, metadata, io, business) {
     } catch (e) {
       logger.warn('Failed to parse flow response JSON', {
         requestId,
-        error: e.message
+        error: e.message,
+        code: ERROR_CODES.VALIDATION_ERROR
       });
       responseData = { raw_body: body };
     }
@@ -64,7 +103,8 @@ async function handleFlowResponse(message, metadata, io, business) {
     if (!flowToken) {
       logger.error('Flow token not found in response', {
         requestId,
-        messageId: message.id
+        messageId: message.id,
+        code: ERROR_CODES.VALIDATION_ERROR
       });
       return;
     }
@@ -75,7 +115,8 @@ async function handleFlowResponse(message, metadata, io, business) {
     if (!flowResponse) {
       logger.error('FlowResponse not found for token', {
         requestId,
-        flowToken
+        flowToken,
+        code: ERROR_CODES.NOT_FOUND
       });
       return;
     }
@@ -108,16 +149,17 @@ async function handleFlowResponse(message, metadata, io, business) {
     }
 
     // Update status based on completion
-    if (name === 'complete' || name === 'COMPLETE') {
+    if (name === FLOW_EVENT_NAMES.COMPLETE || name === FLOW_EVENT_NAMES.COMPLETE_UPPER) {
       await flowResponse.markCompleted();
       logger.info('Flow completed', {
         requestId,
         flowResponseId: flowResponse._id.toString(),
         flowId: flowResponse.flow.toString(),
-        phoneNumber: phoneNormalized
+        phoneNumber: phoneNormalized,
+        processingTime: `${Date.now() - startTime}ms`
       });
     } else {
-      flowResponse.status = 'in_progress';
+      flowResponse.status = FLOW_STATUS.IN_PROGRESS;
     }
 
     // Store raw webhook data
@@ -139,9 +181,9 @@ async function handleFlowResponse(message, metadata, io, business) {
       const responseMessage = {
         whatsappMessageId: message.id,
         type: 'flow_response',
-        timestamp: new Date(parseInt(message.timestamp) * 1000),
-        direction: 'incoming',
-        status: 'received',
+        timestamp: new Date(parseInt(message.timestamp) * TIME_CONSTANTS.SECOND_MS),
+        direction: MESSAGE_DIRECTION.INCOMING,
+        status: MESSAGE_STATUS.RECEIVED,
         content: {
           flowName: name,
           responseSummary,

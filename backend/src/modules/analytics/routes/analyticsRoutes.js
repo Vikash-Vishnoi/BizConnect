@@ -13,6 +13,184 @@ const Conversation = require('../../../core/database/models/Conversation');
 const Template = require('../../../core/database/models/Template');
 const Business = require('../../../core/database/models/Business');
 const { getConversationAnalytics, getMessageAnalytics } = require('../../../common/helpers/graphApiClient');
+const { businessContext } = require('../../../core/middlewares/businessContext');
+const logger = require('../../../common/helpers/logger');
+const { ERROR_CODES, HTTP_STATUS } = require('../../../common/constants');
+const { NotFoundError, ValidationError, ConflictError } = require('../../../core/middlewares/errorHandler');
+
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+// View Types
+const VIEW_TYPES = {
+  OVERVIEW: 'overview',
+  DASHBOARD: 'dashboard',
+  SUMMARY: 'summary'
+};
+
+// Date Range Options
+const DATE_RANGES = {
+  SEVEN_DAYS: '7days',
+  THIRTY_DAYS: '30days',
+  NINETY_DAYS: '90days'
+};
+
+// Period Types
+const PERIOD_TYPES = {
+  DAILY: 'daily',
+  WEEKLY: 'weekly',
+  TRENDS: 'trends',
+  DISTRIBUTION: 'distribution'
+};
+
+// Granularity Options
+const GRANULARITY_OPTIONS = {
+  DAILY: 'DAILY',
+  MONTHLY: 'MONTHLY'
+};
+
+// Campaign Status
+const CAMPAIGN_STATUS = {
+  ACTIVE: 'active',
+  COMPLETED: 'completed'
+};
+
+// Template Status
+const TEMPLATE_STATUS = {
+  APPROVED: 'approved'
+};
+
+// Conversation Status
+const CONVERSATION_STATUS = {
+  ACTIVE: 'active',
+  ARCHIVED: 'archived'
+};
+
+// Message Direction
+const MESSAGE_DIRECTION = {
+  INCOMING: 'in',
+  OUTGOING: 'out'
+};
+
+// Message Status
+const MESSAGE_STATUS = {
+  SENT: 'sent',
+  DELIVERED: 'delivered',
+  READ: 'read',
+  FAILED: 'failed'
+};
+
+// Quality Score Thresholds
+const QUALITY_THRESHOLDS = {
+  HIGH: 80,
+  MEDIUM: 60
+};
+
+// Quality Status
+const QUALITY_STATUS = {
+  HIGH: 'high',
+  MEDIUM: 'medium',
+  LOW: 'low'
+};
+
+// Quality Weights
+const QUALITY_WEIGHTS = {
+  DELIVERY_RATE: 0.4,
+  RESPONSE_RATE: 0.3,
+  TEMPLATE_QUALITY: 0.3
+};
+
+// Time Constants (milliseconds)
+const TIME_CONSTANTS = {
+  DAY_IN_MS: 24 * 60 * 60 * 1000,
+  SEVEN_DAYS_MS: 7 * 24 * 60 * 60 * 1000,
+  THIRTY_DAYS_MS: 30 * 24 * 60 * 60 * 1000,
+  NINETY_DAYS_MS: 90 * 24 * 60 * 60 * 1000
+};
+
+// Default Values
+const DEFAULT_VIEW = VIEW_TYPES.DASHBOARD;
+const DEFAULT_PERIOD = 30;
+const DEFAULT_GRANULARITY = GRANULARITY_OPTIONS.DAILY;
+const DEFAULT_GROUP_BY = PERIOD_TYPES.DAILY;
+const DEFAULT_TOP_TEMPLATES_LIMIT = 10;
+const DEFAULT_RECENT_CAMPAIGNS_LIMIT = 10;
+const DEFAULT_RECENT_TEMPLATES_LIMIT = 5;
+const DEFAULT_RECENT_ACTIVITY_LIMIT = 10;
+const DEFAULT_CAMPAIGN_LIMIT = 10;
+
+// Error Messages
+const ERROR_MESSAGES = {
+  ANALYTICS_ERROR: 'Failed to fetch analytics',
+  TIMESERIES_ERROR: 'Failed to fetch timeseries analytics',
+  CONVERSATION_ERROR: 'Failed to fetch conversation analytics',
+  MESSAGE_ERROR: 'Failed to fetch message analytics',
+  CAMPAIGN_ERROR: 'Failed to fetch campaign analytics',
+  QUALITY_ERROR: 'Failed to fetch quality score',
+  EXPORT_ERROR: 'Failed to create export',
+  CACHE_ERROR: 'Failed to clear cache',
+  MISSING_PARAMS: 'Missing required parameters',
+  START_END_REQUIRED: 'start and end timestamps are required',
+  START_END_REQUIRED_OFFICIAL: 'start and end timestamps are required for official API',
+  WABA_NOT_CONFIGURED: 'WhatsApp Business Account ID and access token are required. Please complete embedded signup.',
+  WABA_NOT_CONFIGURED_SHORT: 'WhatsApp Business Account ID and access token are required.',
+  CACHE_NOT_AVAILABLE: 'AnalyticsCache model does not exist'
+};
+
+// Success Messages
+const SUCCESS_MESSAGES = {
+  ANALYTICS_SUMMARY: 'Analytics summary retrieved successfully',
+  TIMESERIES_RETRIEVED: 'Timeseries analytics retrieved successfully',
+  DISTRIBUTION_RETRIEVED: 'Message status distribution retrieved successfully',
+  TRENDS_RETRIEVED: 'Message trends retrieved successfully',
+  CONVERSATION_RETRIEVED: 'Conversation analytics retrieved successfully',
+  CONVERSATION_OFFICIAL: 'Conversation analytics from Graph API retrieved successfully',
+  MESSAGE_RETRIEVED: 'Message analytics from Graph API retrieved successfully',
+  CAMPAIGN_RETRIEVED: 'Campaign analytics retrieved successfully',
+  QUALITY_RETRIEVED: 'Quality score retrieved successfully',
+  EXPORT_CREATED: 'Export job created successfully'
+};
+
+// API Error Codes
+const API_ERROR_CODES = {
+  WABA_NOT_CONFIGURED: 'WABA not configured',
+  MISSING_PARAMS: 'Missing required parameters'
+};
+
+// Activity Types
+const ACTIVITY_TYPES = {
+  CAMPAIGN_SENT: 'campaign_sent',
+  CAMPAIGN_CREATED: 'campaign_created',
+  TEMPLATE_APPROVED: 'template_approved'
+};
+
+// Export Status
+const EXPORT_STATUS = {
+  PENDING: 'pending',
+  COMPLETED: 'completed',
+  FAILED: 'failed'
+};
+
+// Export Types
+const EXPORT_TYPES = {
+  CONVERSATIONS: 'conversations',
+  CAMPAIGNS: 'campaigns',
+  MESSAGES: 'messages',
+  QUALITY: 'quality'
+};
+
+// Export Formats
+const EXPORT_FORMATS = {
+  CSV: 'csv',
+  JSON: 'json'
+};
+
+// Boolean String Values
+const BOOLEAN_STRINGS = {
+  TRUE: 'true',
+  FALSE: 'false'
+};
 
 // ============================================================================
 // CONSOLIDATED DASHBOARD/OVERVIEW/SUMMARY ROUTE
@@ -28,36 +206,43 @@ const { getConversationAnalytics, getMessageAnalytics } = require('../../../comm
  * @query {number} period - Period in days (for summary view)
  */
 router.get('/', async (req, res) => {
+  const startTime = Date.now();
   try {
-    const { view = 'dashboard', startDate, endDate, range, period = '30' } = req.query;
+    const { view = DEFAULT_VIEW, startDate, endDate, range, period = DEFAULT_PERIOD } = req.query;
     
     // Handle date range
     let start, end;
-    if (range === '7days') {
-      start = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    if (range === DATE_RANGES.SEVEN_DAYS) {
+      start = new Date(Date.now() - TIME_CONSTANTS.SEVEN_DAYS_MS);
       end = new Date();
-    } else if (range === '30days') {
-      start = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    } else if (range === DATE_RANGES.THIRTY_DAYS) {
+      start = new Date(Date.now() - TIME_CONSTANTS.THIRTY_DAYS_MS);
       end = new Date();
-    } else if (range === '90days') {
-      start = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    } else if (range === DATE_RANGES.NINETY_DAYS) {
+      start = new Date(Date.now() - TIME_CONSTANTS.NINETY_DAYS_MS);
       end = new Date();
-    } else if (view === 'summary') {
+    } else if (view === VIEW_TYPES.SUMMARY) {
       const days = parseInt(period);
-      start = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+      start = new Date(Date.now() - days * TIME_CONSTANTS.DAY_IN_MS);
       end = new Date();
     } else {
-      start = startDate ? new Date(startDate) : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      start = startDate ? new Date(startDate) : new Date(Date.now() - TIME_CONSTANTS.SEVEN_DAYS_MS);
       end = endDate ? new Date(endDate) : new Date();
     }
 
     // For summary view, return simplified data
-    if (view === 'summary') {
+    if (view === VIEW_TYPES.SUMMARY) {
       const summary = await Analytics.getSummary(req.businessId, start, end);
-      return res.json({ 
-        summary, 
-        period: parseInt(period),
-        dateRange: { startDate: start, endDate: end }
+      const processingTime = Date.now() - startTime;
+      return res.status(HTTP_STATUS.OK).json({
+        success: true,
+        data: { 
+          summary, 
+          period: parseInt(period),
+          dateRange: { startDate: start, endDate: end }
+        },
+        message: SUCCESS_MESSAGES.ANALYTICS_SUMMARY,
+        processingTime
       });
     }
 
@@ -76,12 +261,12 @@ router.get('/', async (req, res) => {
       activeConversations
     ] = await Promise.all([
       Campaign.countDocuments({ businessId: req.businessId }),
-      Campaign.countDocuments({ businessId: req.businessId, status: 'active' }),
-      Campaign.countDocuments({ businessId: req.businessId, status: 'completed' }),
+      Campaign.countDocuments({ businessId: req.businessId, status: CAMPAIGN_STATUS.ACTIVE }),
+      Campaign.countDocuments({ businessId: req.businessId, status: CAMPAIGN_STATUS.COMPLETED }),
       Template.countDocuments({ businessId: req.businessId }),
-      Template.countDocuments({ businessId: req.businessId, status: 'approved' }),
+      Template.countDocuments({ businessId: req.businessId, status: TEMPLATE_STATUS.APPROVED }),
       Conversation.countDocuments({ businessId: req.businessId }),
-      Conversation.countDocuments({ businessId: req.businessId, status: 'active' })
+      Conversation.countDocuments({ businessId: req.businessId, status: CONVERSATION_STATUS.ACTIVE })
     ]);
 
     // Calculate growth metrics
@@ -149,7 +334,7 @@ router.get('/', async (req, res) => {
         }
       },
       { $sort: { sent: -1 } },
-      { $limit: 10 }
+      { $limit: DEFAULT_TOP_TEMPLATES_LIMIT }
     ]);
 
     const formattedTemplatePerformance = templatePerformance.map(item => ({
@@ -188,23 +373,23 @@ router.get('/', async (req, res) => {
       businessId: req.businessId 
     })
       .sort({ createdAt: -1 })
-      .limit(10)
+      .limit(DEFAULT_RECENT_CAMPAIGNS_LIMIT)
       .select('name status createdAt totalSent');
 
     const recentTemplates = await Template.find({ 
       businessId: req.businessId,
-      status: 'approved'
+      status: TEMPLATE_STATUS.APPROVED
     })
       .sort({ updatedAt: -1 })
-      .limit(5)
+      .limit(DEFAULT_RECENT_TEMPLATES_LIMIT)
       .select('name status updatedAt');
 
     const activities = [];
     recentCampaigns.forEach(campaign => {
       activities.push({
         _id: campaign._id,
-        type: campaign.status === 'active' ? 'campaign_sent' : 'campaign_created',
-        description: `Campaign "${campaign.name}" ${campaign.status === 'active' ? 'is active' : 'was created'}`,
+        type: campaign.status === CAMPAIGN_STATUS.ACTIVE ? ACTIVITY_TYPES.CAMPAIGN_SENT : ACTIVITY_TYPES.CAMPAIGN_CREATED,
+        description: `Campaign "${campaign.name}" ${campaign.status === CAMPAIGN_STATUS.ACTIVE ? 'is active' : 'was created'}`,
         timestamp: campaign.createdAt
       });
     });
@@ -212,7 +397,7 @@ router.get('/', async (req, res) => {
     recentTemplates.forEach(template => {
       activities.push({
         _id: template._id,
-        type: 'template_approved',
+        type: ACTIVITY_TYPES.TEMPLATE_APPROVED,
         description: `Template "${template.name}" was approved`,
         timestamp: template.updatedAt
       });
@@ -220,68 +405,88 @@ router.get('/', async (req, res) => {
 
     activities.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
-    res.json({
-      view,
-      // Stats for cards
-      totalMessages: summary?.totalMessagesSent || 0,
-      delivered: summary?.totalMessagesDelivered || 0,
-      read: summary?.totalMessagesRead || 0,
-      failed: summary?.totalMessagesFailed || 0,
-      deliveryRate: Math.round(summary?.avgDeliveryRate || 0),
-      readRate: Math.round(summary?.avgReadRate || 0),
-      messagesToday: todayData.totalSent || 0,
-      
-      // Chart data
-      messageVolume: messageVolume.length > 0 ? messageVolume : [{ date: 'Today', count: 0 }],
-      deliveryStatus,
-      templatePerformance: formattedTemplatePerformance.length > 0 ? formattedTemplatePerformance : [
-        { name: 'No Data', sent: 0, delivered: 0, read: 0 }
-      ],
-      
-      // Additional data
-      overview: {
-        totalCampaigns,
-        activeCampaigns,
-        completedCampaigns,
-        totalTemplates,
-        approvedTemplates,
-        totalConversations,
-        activeConversations,
-        totalMessages
+    const processingTime = Date.now() - startTime;
+    res.status(HTTP_STATUS.OK).json({
+      success: true,
+      data: {
+        view,
+        // Stats for cards
+        totalMessages: summary?.totalMessagesSent || 0,
+        delivered: summary?.totalMessagesDelivered || 0,
+        read: summary?.totalMessagesRead || 0,
+        failed: summary?.totalMessagesFailed || 0,
+        deliveryRate: Math.round(summary?.avgDeliveryRate || 0),
+        readRate: Math.round(summary?.avgReadRate || 0),
+        messagesToday: todayData.totalSent || 0,
+        
+        // Chart data
+        messageVolume: messageVolume.length > 0 ? messageVolume : [{ date: 'Today', count: 0 }],
+        deliveryStatus,
+        templatePerformance: formattedTemplatePerformance.length > 0 ? formattedTemplatePerformance : [
+          { name: 'No Data', sent: 0, delivered: 0, read: 0 }
+        ],
+        
+        // Additional data
+        overview: {
+          totalCampaigns,
+          activeCampaigns,
+          completedCampaigns,
+          totalTemplates,
+          approvedTemplates,
+          totalConversations,
+          activeConversations,
+          totalMessages
+        },
+        metrics: {
+          messagesSent: summary?.totalMessagesSent || 0,
+          messagesDelivered: summary?.totalMessagesDelivered || 0,
+          messagesRead: summary?.totalMessagesRead || 0,
+          messagesFailed: summary?.totalMessagesFailed || 0,
+          messagesReplied: todayData.totalReplied || 0,
+          avgDeliveryRate: Math.round(summary?.avgDeliveryRate || 0),
+          avgReadRate: Math.round(summary?.avgReadRate || 0),
+          avgQualityScore: Math.round(summary?.avgQualityScore || 0)
+        },
+        growth: {
+          campaignsGrowth: calculateGrowth(
+            summary?.totalCompletedCampaigns || 0,
+            previousSummary?.totalCompletedCampaigns || 0
+          ),
+          messagesGrowth: calculateGrowth(
+            summary?.totalMessagesSent || 0,
+            previousSummary?.totalMessagesSent || 0
+          ),
+          conversationsGrowth: calculateGrowth(
+            summary?.totalNewConversations || 0,
+            previousSummary?.totalNewConversations || 0
+          )
+        },
+        recentActivity: activities.slice(0, DEFAULT_RECENT_ACTIVITY_LIMIT),
+        dateRange: {
+          startDate: start,
+          endDate: end
+        }
       },
-      metrics: {
-        messagesSent: summary?.totalMessagesSent || 0,
-        messagesDelivered: summary?.totalMessagesDelivered || 0,
-        messagesRead: summary?.totalMessagesRead || 0,
-        messagesFailed: summary?.totalMessagesFailed || 0,
-        messagesReplied: todayData.totalReplied || 0,
-        avgDeliveryRate: Math.round(summary?.avgDeliveryRate || 0),
-        avgReadRate: Math.round(summary?.avgReadRate || 0),
-        avgQualityScore: Math.round(summary?.avgQualityScore || 0)
-      },
-      growth: {
-        campaignsGrowth: calculateGrowth(
-          summary?.totalCompletedCampaigns || 0,
-          previousSummary?.totalCompletedCampaigns || 0
-        ),
-        messagesGrowth: calculateGrowth(
-          summary?.totalMessagesSent || 0,
-          previousSummary?.totalMessagesSent || 0
-        ),
-        conversationsGrowth: calculateGrowth(
-          summary?.totalNewConversations || 0,
-          previousSummary?.totalNewConversations || 0
-        )
-      },
-      recentActivity: activities.slice(0, 10),
-      dateRange: {
-        startDate: start,
-        endDate: end
-      }
+      processingTime
     });
   } catch (error) {
-    console.error('Get analytics error:', error);
-    res.status(500).json({ error: 'Failed to fetch analytics' });
+    const processingTime = Date.now() - startTime;
+    logger.error('Get analytics error', {
+      error: error.message,
+      stack: error.stack,
+      businessId: req.businessId?.toString(),
+      processingTime
+    });
+
+    if (error instanceof NotFoundError || error instanceof ValidationError || error instanceof ConflictError) {
+      throw error;
+    }
+
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      error: ERROR_MESSAGES.ANALYTICS_ERROR,
+      processingTime
+    });
   }
 });
 
@@ -297,13 +502,14 @@ router.get('/', async (req, res) => {
  * @query {string} endDate - End date
  */
 router.get('/timeseries', async (req, res) => {
+  const startTime = Date.now();
   try {
-    const { period = 'daily', startDate, endDate } = req.query;
+    const { period = DEFAULT_GROUP_BY, startDate, endDate } = req.query;
     
-    const start = startDate ? new Date(startDate) : new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const start = startDate ? new Date(startDate) : new Date(Date.now() - TIME_CONSTANTS.THIRTY_DAYS_MS);
     const end = endDate ? new Date(endDate) : new Date();
 
-    if (period === 'distribution') {
+    if (period === PERIOD_TYPES.DISTRIBUTION) {
       // Return message status distribution
       const conversations = await Conversation.find({ businessId: req.businessId }, 'messages');
       
@@ -333,13 +539,19 @@ router.get('/timeseries', async (req, res) => {
         percentage: Math.round((count / total) * 100),
       }));
 
-      return res.json({ 
-        period: 'distribution',
-        data: statusDistribution 
+      const processingTime = Date.now() - startTime;
+      return res.status(HTTP_STATUS.OK).json({
+        success: true,
+        data: { 
+          period: PERIOD_TYPES.DISTRIBUTION,
+          data: statusDistribution 
+        },
+        message: SUCCESS_MESSAGES.DISTRIBUTION_RETRIEVED,
+        processingTime
       });
     }
 
-    if (period === 'trends') {
+    if (period === PERIOD_TYPES.TRENDS) {
       // Return message trends over time
       const conversations = await Conversation.find({
         businessId: req.businessId,
@@ -365,10 +577,10 @@ router.get('/timeseries', async (req, res) => {
           trendsMap.set(date, { sent: 0, delivered: 0, read: 0, failed: 0 });
         }
         const trend = trendsMap.get(date);
-        if (msg.status === 'sent') trend.sent++;
-        else if (msg.status === 'delivered') trend.delivered++;
-        else if (msg.status === 'read') trend.read++;
-        else if (msg.status === 'failed') trend.failed++;
+        if (msg.status === MESSAGE_STATUS.SENT) trend.sent++;
+        else if (msg.status === MESSAGE_STATUS.DELIVERED) trend.delivered++;
+        else if (msg.status === MESSAGE_STATUS.READ) trend.read++;
+        else if (msg.status === MESSAGE_STATUS.FAILED) trend.failed++;
       });
 
       const trends = Array.from(trendsMap.entries()).map(([date, stats]) => ({
@@ -376,9 +588,15 @@ router.get('/timeseries', async (req, res) => {
         ...stats,
       }));
 
-      return res.json({ 
-        period: 'trends',
-        data: trends 
+      const processingTime = Date.now() - startTime;
+      return res.status(HTTP_STATUS.OK).json({
+        success: true,
+        data: { 
+          period: PERIOD_TYPES.TRENDS,
+          data: trends 
+        },
+        message: SUCCESS_MESSAGES.TRENDS_RETRIEVED,
+        processingTime
       });
     }
 
@@ -389,13 +607,34 @@ router.get('/timeseries', async (req, res) => {
       campaignId: null
     }).sort({ date: 1 });
 
-    res.json({ 
-      period,
-      data: analytics 
+    const processingTime = Date.now() - startTime;
+    res.status(HTTP_STATUS.OK).json({
+      success: true,
+      data: { 
+        period,
+        data: analytics 
+      },
+      message: SUCCESS_MESSAGES.TIMESERIES_RETRIEVED,
+      processingTime
     });
   } catch (error) {
-    console.error('Get timeseries analytics error:', error);
-    res.status(500).json({ error: 'Failed to fetch timeseries analytics' });
+    const processingTime = Date.now() - startTime;
+    logger.error('Get timeseries analytics error', {
+      error: error.message,
+      stack: error.stack,
+      businessId: req.businessId?.toString(),
+      processingTime
+    });
+
+    if (error instanceof NotFoundError || error instanceof ValidationError || error instanceof ConflictError) {
+      throw error;
+    }
+
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      error: ERROR_MESSAGES.TIMESERIES_ERROR,
+      processingTime
+    });
   }
 });
 
@@ -412,15 +651,19 @@ router.get('/timeseries', async (req, res) => {
  * @query {string} granularity - 'DAILY' | 'MONTHLY' (for official API)
  */
 router.get('/conversations', async (req, res) => {
+  const startTime = Date.now();
   try {
-    const { official = 'false', start, end, granularity = 'DAILY', useCache = 'true' } = req.query;
+    const { official = BOOLEAN_STRINGS.FALSE, start, end, granularity = DEFAULT_GRANULARITY, useCache = BOOLEAN_STRINGS.TRUE } = req.query;
 
     // If official=true, fetch from WhatsApp Graph API
-    if (official === 'true') {
+    if (official === BOOLEAN_STRINGS.TRUE) {
       if (!start || !end) {
-        return res.status(400).json({
-          error: 'Missing required parameters',
-          message: 'start and end timestamps are required for official API'
+        const processingTime = Date.now() - startTime;
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({
+          success: false,
+          error: API_ERROR_CODES.MISSING_PARAMS,
+          message: ERROR_MESSAGES.START_END_REQUIRED_OFFICIAL,
+          processingTime
         });
       }
 
@@ -430,14 +673,19 @@ router.get('/conversations', async (req, res) => {
       // Get business WABA and access token
       const business = await Business.findById(req.businessId);
       if (!business.waba?.id || !business.accessToken) {
-        return res.status(400).json({
-          error: 'WABA not configured',
-          message: 'WhatsApp Business Account ID and access token are required. Please complete embedded signup.'
+        const processingTime = Date.now() - startTime;
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({
+          success: false,
+          error: API_ERROR_CODES.WABA_NOT_CONFIGURED,
+          message: ERROR_MESSAGES.WABA_NOT_CONFIGURED,
+          processingTime
         });
       }
 
       // Fetch from Graph API
-      console.log('📊 Fetching conversation analytics from WhatsApp API...');
+      logger.info('Fetching conversation analytics from WhatsApp API', {
+        businessId: req.businessId?.toString()
+      });
       const analyticsData = await getConversationAnalytics(
         business.waba.id, 
         { start: parseInt(start), end: parseInt(end), granularity }, 
@@ -447,7 +695,13 @@ router.get('/conversations', async (req, res) => {
       // Transform data
       const transformedData = transformConversationAnalytics(analyticsData);
 
-      res.json(transformedData);
+      const processingTime = Date.now() - startTime;
+      return res.status(HTTP_STATUS.OK).json({
+        success: true,
+        data: transformedData,
+        message: SUCCESS_MESSAGES.CONVERSATION_OFFICIAL,
+        processingTime
+      });
     }
 
     // Otherwise, return local conversation analytics
@@ -457,8 +711,8 @@ router.get('/conversations', async (req, res) => {
       archivedConversations
     ] = await Promise.all([
       Conversation.countDocuments({ businessId: req.businessId }),
-      Conversation.countDocuments({ businessId: req.businessId, status: 'active' }),
-      Conversation.countDocuments({ businessId: req.businessId, status: 'archived' })
+      Conversation.countDocuments({ businessId: req.businessId, status: CONVERSATION_STATUS.ACTIVE }),
+      Conversation.countDocuments({ businessId: req.businessId, status: CONVERSATION_STATUS.ARCHIVED })
     ]);
 
     const conversations = await Conversation.find({ businessId: req.businessId }, 'messages');
@@ -470,8 +724,8 @@ router.get('/conversations', async (req, res) => {
     conversations.forEach(conv => {
       if (conv.messages) {
         totalMessagesCount += conv.messages.length;
-        incomingCount += conv.messages.filter(m => m.direction === 'incoming').length;
-        outgoingCount += conv.messages.filter(m => m.direction === 'outgoing').length;
+        incomingCount += conv.messages.filter(m => m.direction === MESSAGE_DIRECTION.INCOMING).length;
+        outgoingCount += conv.messages.filter(m => m.direction === MESSAGE_DIRECTION.OUTGOING).length;
       }
     });
 
@@ -483,18 +737,39 @@ router.get('/conversations', async (req, res) => {
       ? Math.round((outgoingCount / incomingCount) * 100) 
       : 0;
 
-    res.json({
-      totalConversations,
-      activeConversations,
-      archivedConversations,
-      avgMessagesPerConversation,
-      responseRate,
-      incomingMessages: incomingCount,
-      outgoingMessages: outgoingCount
+    const processingTime = Date.now() - startTime;
+    res.status(HTTP_STATUS.OK).json({
+      success: true,
+      data: {
+        totalConversations,
+        activeConversations,
+        archivedConversations,
+        avgMessagesPerConversation,
+        responseRate,
+        incomingMessages: incomingCount,
+        outgoingMessages: outgoingCount
+      },
+      message: SUCCESS_MESSAGES.CONVERSATION_RETRIEVED,
+      processingTime
     });
   } catch (error) {
-    console.error('Get conversation analytics error:', error);
-    res.status(500).json({ error: 'Failed to fetch conversation analytics' });
+    const processingTime = Date.now() - startTime;
+    logger.error('Get conversation analytics error', {
+      error: error.message,
+      stack: error.stack,
+      businessId: req.businessId?.toString(),
+      processingTime
+    });
+
+    if (error instanceof NotFoundError || error instanceof ValidationError || error instanceof ConflictError) {
+      throw error;
+    }
+
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      error: ERROR_MESSAGES.CONVERSATION_ERROR,
+      processingTime
+    });
   }
 });
 
@@ -510,13 +785,17 @@ router.get('/conversations', async (req, res) => {
  * @query {string} granularity - 'DAILY' | 'MONTHLY'
  */
 router.get('/messages', async (req, res) => {
+  const startTime = Date.now();
   try {
-    const { start, end, granularity = 'DAILY' } = req.query;
+    const { start, end, granularity = DEFAULT_GRANULARITY } = req.query;
 
     if (!start || !end) {
-      return res.status(400).json({
-        error: 'Missing required parameters',
-        message: 'start and end timestamps are required'
+      const processingTime = Date.now() - startTime;
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        success: false,
+        error: API_ERROR_CODES.MISSING_PARAMS,
+        message: ERROR_MESSAGES.START_END_REQUIRED,
+        processingTime
       });
     }
 
@@ -526,9 +805,12 @@ router.get('/messages', async (req, res) => {
     // Get business WABA and access token
     const business = await Business.findById(req.businessId);
     if (!business.waba?.id || !business.accessToken) {
-      return res.status(400).json({
-        error: 'WABA not configured',
-        message: 'WhatsApp Business Account ID and access token are required.'
+      const processingTime = Date.now() - startTime;
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        success: false,
+        error: API_ERROR_CODES.WABA_NOT_CONFIGURED,
+        message: ERROR_MESSAGES.WABA_NOT_CONFIGURED_SHORT,
+        processingTime
       });
     }
 
@@ -542,12 +824,31 @@ router.get('/messages', async (req, res) => {
     // Transform data
     const transformedData = transformMessageAnalytics(analyticsData);
 
-    res.json(transformedData);
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
+      success: true,
+      data: transformedData,
+      message: SUCCESS_MESSAGES.MESSAGE_RETRIEVED,
+      processingTime
+    });
   } catch (error) {
-    console.error('❌ Error fetching message analytics:', error);
-    res.status(500).json({
-      error: 'Failed to fetch message analytics',
-      message: error.message
+    const processingTime = Date.now() - startTime;
+    logger.error('Error fetching message analytics', {
+      error: error.message,
+      stack: error.stack,
+      businessId: req.businessId?.toString(),
+      processingTime
+    });
+
+    if (error instanceof NotFoundError || error instanceof ValidationError || error instanceof ConflictError) {
+      throw error;
+    }
+
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      error: ERROR_MESSAGES.MESSAGE_ERROR,
+      message: error.message,
+      processingTime
     });
   }
 });
@@ -563,6 +864,7 @@ router.get('/messages', async (req, res) => {
  * @query {string} endDate - End date
  */
 router.get('/campaigns', async (req, res) => {
+  const startTime = Date.now();
   try {
     const { startDate, endDate } = req.query;
     const query = { businessId: req.businessId };
@@ -573,13 +875,13 @@ router.get('/campaigns', async (req, res) => {
         $lte: new Date(endDate)
       };
     } else {
-      query.status = { $in: ['completed', 'active'] };
+      query.status = { $in: [CAMPAIGN_STATUS.COMPLETED, CAMPAIGN_STATUS.ACTIVE] };
     }
 
     const campaigns = await Campaign.find(query)
       .select('name status stats createdAt completedAt')
       .sort({ createdAt: -1 })
-      .limit(10);
+      .limit(DEFAULT_CAMPAIGN_LIMIT);
 
     const campaignStats = campaigns.map(campaign => {
       const total = campaign.stats?.total || campaign.stats?.sent || 0;
@@ -607,10 +909,31 @@ router.get('/campaigns', async (req, res) => {
       };
     });
 
-    res.json({ campaigns: campaignStats });
+    const processingTime = Date.now() - startTime;
+    res.status(HTTP_STATUS.OK).json({
+      success: true,
+      data: { campaigns: campaignStats },
+      message: SUCCESS_MESSAGES.CAMPAIGN_RETRIEVED,
+      processingTime
+    });
   } catch (error) {
-    console.error('Get campaign analytics error:', error);
-    res.status(500).json({ error: 'Failed to fetch campaign analytics' });
+    const processingTime = Date.now() - startTime;
+    logger.error('Get campaign analytics error', {
+      error: error.message,
+      stack: error.stack,
+      businessId: req.businessId?.toString(),
+      processingTime
+    });
+
+    if (error instanceof NotFoundError || error instanceof ValidationError || error instanceof ConflictError) {
+      throw error;
+    }
+
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      error: ERROR_MESSAGES.CAMPAIGN_ERROR,
+      processingTime
+    });
   }
 });
 
@@ -623,16 +946,23 @@ router.get('/campaigns', async (req, res) => {
  * GET /quality - Quality score and rating
  */
 router.get('/quality', async (req, res) => {
+  const startTime = Date.now();
   try {
     const campaigns = await Campaign.find({ businessId: req.businessId });
     const totalCampaigns = campaigns.length;
     
     if (totalCampaigns === 0) {
-      return res.json({
-        score: 0,
-        status: 'low',
-        phoneNumberId: req.business?.whatsappConfig?.phoneNumberId || '',
-        lastUpdated: new Date().toISOString(),
+      const processingTime = Date.now() - startTime;
+      return res.status(HTTP_STATUS.OK).json({
+        success: true,
+        data: {
+          score: 0,
+          status: QUALITY_STATUS.LOW,
+          phoneNumberId: req.business?.whatsappConfig?.phoneNumberId || '',
+          lastUpdated: new Date().toISOString(),
+        },
+        message: SUCCESS_MESSAGES.QUALITY_RETRIEVED,
+        processingTime
       });
     }
 
@@ -644,29 +974,50 @@ router.get('/quality', async (req, res) => {
     const responseRate = totalDelivered > 0 ? Math.round((totalRead / totalDelivered) * 100) : 0;
     
     const templates = await Template.find({ businessId: req.businessId });
-    const approvedTemplates = templates.filter(t => t.status === 'approved').length;
+    const approvedTemplates = templates.filter(t => t.status === TEMPLATE_STATUS.APPROVED).length;
     const templateQuality = templates.length > 0 ? Math.round((approvedTemplates / templates.length) * 100) : 0;
     
-    const score = Math.round((deliveryRate * 0.4) + (responseRate * 0.3) + (templateQuality * 0.3));
+    const score = Math.round((deliveryRate * QUALITY_WEIGHTS.DELIVERY_RATE) + (responseRate * QUALITY_WEIGHTS.RESPONSE_RATE) + (templateQuality * QUALITY_WEIGHTS.TEMPLATE_QUALITY));
     
-    let status = 'low';
-    if (score >= 80) status = 'high';
-    else if (score >= 60) status = 'medium';
+    let status = QUALITY_STATUS.LOW;
+    if (score >= QUALITY_THRESHOLDS.HIGH) status = QUALITY_STATUS.HIGH;
+    else if (score >= QUALITY_THRESHOLDS.MEDIUM) status = QUALITY_STATUS.MEDIUM;
 
-    res.json({
-      score,
-      status,
-      phoneNumberId: req.business?.whatsappConfig?.phoneNumberId || '',
-      lastUpdated: new Date().toISOString(),
-      components: {
-        deliveryRate,
-        responseRate,
-        templateQuality
-      }
+    const processingTime = Date.now() - startTime;
+    res.status(HTTP_STATUS.OK).json({
+      success: true,
+      data: {
+        score,
+        status,
+        phoneNumberId: req.business?.whatsappConfig?.phoneNumberId || '',
+        lastUpdated: new Date().toISOString(),
+        components: {
+          deliveryRate,
+          responseRate,
+          templateQuality
+        }
+      },
+      message: SUCCESS_MESSAGES.QUALITY_RETRIEVED,
+      processingTime
     });
   } catch (error) {
-    console.error('Get quality score error:', error);
-    res.status(500).json({ message: 'Server error' });
+    const processingTime = Date.now() - startTime;
+    logger.error('Get quality score error', {
+      error: error.message,
+      stack: error.stack,
+      businessId: req.businessId?.toString(),
+      processingTime
+    });
+
+    if (error instanceof NotFoundError || error instanceof ValidationError || error instanceof ConflictError) {
+      throw error;
+    }
+
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: ERROR_MESSAGES.QUALITY_ERROR,
+      processingTime
+    });
   }
 });
 
@@ -682,13 +1033,17 @@ router.get('/quality', async (req, res) => {
  * @body {object} dateRange - { startDate, endDate }
  */
 router.post('/export', async (req, res) => {
+  const startTime = Date.now();
   try {
-    const { type, format = 'csv', dateRange } = req.body;
+    const { type, format = EXPORT_FORMATS.CSV, dateRange } = req.body;
 
     if (!type) {
-      return res.status(400).json({
-        error: 'Missing required parameter',
-        message: 'Export type is required'
+      const processingTime = Date.now() - startTime;
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        success: false,
+        error: API_ERROR_CODES.MISSING_PARAMS,
+        message: 'Export type is required',
+        processingTime
       });
     }
 
@@ -698,7 +1053,7 @@ router.post('/export', async (req, res) => {
       type,
       format,
       dateRange,
-      status: 'pending',
+      status: EXPORT_STATUS.PENDING,
       createdAt: new Date()
     };
 
@@ -708,14 +1063,34 @@ router.post('/export', async (req, res) => {
     // 2. Queue background job to generate file
     // 3. Store file in exports/ directory or cloud storage
     // 4. Send notification when ready
-    res.json({
+    const processingTime = Date.now() - startTime;
+    res.status(HTTP_STATUS.OK).json({
       success: true,
-      message: 'Export job created',
-      export: exportData
+      data: {
+        message: 'Export job created',
+        export: exportData
+      },
+      message: SUCCESS_MESSAGES.EXPORT_CREATED,
+      processingTime
     });
   } catch (error) {
-    console.error('Export analytics error:', error);
-    res.status(500).json({ error: 'Failed to create export' });
+    const processingTime = Date.now() - startTime;
+    logger.error('Export analytics error', {
+      error: error.message,
+      stack: error.stack,
+      businessId: req.businessId?.toString(),
+      processingTime
+    });
+
+    if (error instanceof NotFoundError || error instanceof ValidationError || error instanceof ConflictError) {
+      throw error;
+    }
+
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      error: ERROR_MESSAGES.EXPORT_ERROR,
+      processingTime
+    });
   }
 });
 
@@ -730,17 +1105,29 @@ router.post('/export', async (req, res) => {
  * @query {string} type - Cache type to clear
  */
 router.delete('/cache', async (req, res) => {
+  const startTime = Date.now();
   try {
-    res.status(501).json({
+    const processingTime = Date.now() - startTime;
+    res.status(HTTP_STATUS.SERVICE_UNAVAILABLE).json({
       success: false,
       error: 'Cache functionality not available',
-      message: 'AnalyticsCache model does not exist'
+      message: ERROR_MESSAGES.CACHE_NOT_AVAILABLE,
+      processingTime
     });
   } catch (error) {
-    console.error('❌ Error clearing cache:', error);
-    res.status(500).json({
-      error: 'Failed to clear cache',
-      message: error.message
+    const processingTime = Date.now() - startTime;
+    logger.error('Error clearing cache', {
+      error: error.message,
+      stack: error.stack,
+      businessId: req.businessId?.toString(),
+      processingTime
+    });
+
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      error: ERROR_MESSAGES.CACHE_ERROR,
+      message: error.message,
+      processingTime
     });
   }
 });

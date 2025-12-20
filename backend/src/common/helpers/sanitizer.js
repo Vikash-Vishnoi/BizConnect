@@ -1,15 +1,85 @@
 /**
  * Input Sanitization Utility
  * Prevents XSS attacks by sanitizing user input
- * @module utils/sanitizer
+ * Supports multi-business context
+ * @module common/helpers/sanitizer
  */
 
 const validator = require('validator');
+const { REGEX_PATTERNS } = require('../constants');
+const config = require('../../config/server.config');
 
-/** 
+// Sanitization constants
+const SANITIZATION_LIMITS = {
+  MAX_NAME_LENGTH: parseInt(process.env.MAX_NAME_LENGTH, 10) || 100,
+  MAX_MESSAGE_LENGTH: parseInt(process.env.MAX_MESSAGE_LENGTH, 10) || 4096,
+  MAX_CAPTION_LENGTH: parseInt(process.env.MAX_CAPTION_LENGTH, 10) || 1024,
+  MAX_DESCRIPTION_LENGTH: parseInt(process.env.MAX_DESCRIPTION_LENGTH, 10) || 1000,
+  MAX_URL_LENGTH: parseInt(process.env.MAX_URL_LENGTH, 10) || 2048,
+  MAX_FILENAME_LENGTH: 255,
+  MAX_ADDRESS_LENGTH: 500,
+  MAX_RECURSION_DEPTH: 10,
+};
+
+// WhatsApp CDN domains
+const WHATSAPP_CDN_DOMAINS = [
+  'mmg.whatsapp.net',
+  'mmg-fna.whatsapp.net',
+  'pps.whatsapp.net',
+  'scontent.whatsapp.net',
+  'lookaside.fbsbx.com',
+  'scontent.xx.fbcdn.net',
+];
+
+// XSS attack patterns
+const XSS_PATTERNS = [
+  /<script[^>]*>.*?<\/script>/gi,
+  /javascript:/gi,
+  /on\w+\s*=/gi,
+  /<iframe[^>]*>/gi,
+  /<embed[^>]*>/gi,
+  /<object[^>]*>/gi,
+  /eval\s*\(/gi,
+  /expression\s*\(/gi,
+];
+
+// Sensitive field patterns for redaction
+const SENSITIVE_FIELD_PATTERNS = [
+  /password/i,
+  /passwd/i,
+  /pwd/i,
+  /secret/i,
+  /token/i,
+  /apikey/i,
+  /api_key/i,
+  /accesstoken/i,
+  /access_token/i,
+  /refreshtoken/i,
+  /refresh_token/i,
+  /auth/i,
+  /authorization/i,
+  /bearer/i,
+  /credential/i,
+  /privatekey/i,
+  /private_key/i,
+  /publickey/i,
+  /public_key/i,
+  /cookie/i,
+  /session/i,
+  /ssn/i,
+  /credit.*card/i,
+  /card.*number/i,
+  /cvv/i,
+  /pin/i,
+];
+
+/**
  * Sanitize text input to prevent XSS
  * @param {string} input - The text to sanitize
  * @param {object} options - Sanitization options
+ * @param {boolean} options.allowNewlines - Allow newline characters (default: true)
+ * @param {number} options.maxLength - Maximum length (default: null)
+ * @param {boolean} options.stripHtml - Strip HTML tags (default: true)
  * @returns {string} Sanitized text
  */
 function sanitizeText(input, options = {}) {
@@ -20,7 +90,7 @@ function sanitizeText(input, options = {}) {
   const {
     allowNewlines = true,
     maxLength = null,
-    stripHtml = true
+    stripHtml = true,
   } = options;
 
   let sanitized = input;
@@ -28,9 +98,7 @@ function sanitizeText(input, options = {}) {
   // Strip HTML tags to prevent XSS
   if (stripHtml) {
     sanitized = validator.stripLow(sanitized);
-    // Remove any HTML/script tags
     sanitized = sanitized.replace(/<[^>]*>/g, '');
-    // Escape remaining special characters
     sanitized = validator.escape(sanitized);
   }
 
@@ -62,8 +130,8 @@ function sanitizeName(name) {
 
   return sanitizeText(name, {
     allowNewlines: false,
-    maxLength: parseInt(process.env.MAX_NAME_LENGTH) || 100,
-    stripHtml: true
+    maxLength: SANITIZATION_LIMITS.MAX_NAME_LENGTH,
+    stripHtml: true,
   });
 }
 
@@ -79,8 +147,8 @@ function sanitizeMessage(message) {
 
   return sanitizeText(message, {
     allowNewlines: true,
-    maxLength: parseInt(process.env.MAX_MESSAGE_LENGTH) || 4096,
-    stripHtml: true
+    maxLength: SANITIZATION_LIMITS.MAX_MESSAGE_LENGTH,
+    stripHtml: true,
   });
 }
 
@@ -96,8 +164,8 @@ function sanitizeCaption(caption) {
 
   return sanitizeText(caption, {
     allowNewlines: true,
-    maxLength: parseInt(process.env.MAX_CAPTION_LENGTH) || 1024,
-    stripHtml: true
+    maxLength: SANITIZATION_LIMITS.MAX_CAPTION_LENGTH,
+    stripHtml: true,
   });
 }
 
@@ -152,8 +220,8 @@ function sanitizeUrl(url, options = {}) {
 
   const {
     allowedProtocols = ['http', 'https'],
-    allowedDomains = null, // Array of allowed domains or null for all
-    maxLength = parseInt(process.env.MAX_URL_LENGTH) || 2048
+    allowedDomains = null,
+    maxLength = SANITIZATION_LIMITS.MAX_URL_LENGTH,
   } = options;
 
   // Trim and check length
@@ -203,19 +271,10 @@ function sanitizeUrl(url, options = {}) {
  * @returns {string|null} Sanitized URL or null if invalid
  */
 function sanitizeWhatsAppMediaUrl(url) {
-  const whatsappDomains = [
-    'mmg.whatsapp.net',
-    'mmg-fna.whatsapp.net',
-    'pps.whatsapp.net',
-    'scontent.whatsapp.net',
-    'lookaside.fbsbx.com', // Facebook CDN used by WhatsApp
-    'scontent.xx.fbcdn.net'
-  ];
-
   return sanitizeUrl(url, {
     allowedProtocols: ['https'],
-    allowedDomains: whatsappDomains,
-    maxLength: parseInt(process.env.MAX_URL_LENGTH) || 2048
+    allowedDomains: WHATSAPP_CDN_DOMAINS,
+    maxLength: SANITIZATION_LIMITS.MAX_URL_LENGTH,
   });
 }
 
@@ -251,12 +310,12 @@ function sanitizeContact(contact) {
     name: sanitizeName,
     phoneNumber: sanitizePhoneNumber,
     email: sanitizeEmail,
-    notes: (notes) => sanitizeText(notes, { maxLength: parseInt(process.env.MAX_DESCRIPTION_LENGTH) || 1000 }),
+    notes: notes => sanitizeText(notes, { maxLength: SANITIZATION_LIMITS.MAX_DESCRIPTION_LENGTH }),
     companyName: sanitizeName,
     jobTitle: sanitizeName,
-    address: (addr) => sanitizeText(addr, { maxLength: 500 }),
+    address: addr => sanitizeText(addr, { maxLength: SANITIZATION_LIMITS.MAX_ADDRESS_LENGTH }),
     city: sanitizeName,
-    country: sanitizeName
+    country: sanitizeName,
   });
 }
 
@@ -298,8 +357,8 @@ function sanitizeMessageContent(content) {
   if (sanitized.filename) {
     sanitized.filename = sanitizeText(sanitized.filename, {
       allowNewlines: false,
-      maxLength: 255,
-      stripHtml: true
+      maxLength: SANITIZATION_LIMITS.MAX_FILENAME_LENGTH,
+      stripHtml: true,
     });
   }
 
@@ -316,18 +375,7 @@ function containsXssPatterns(input) {
     return false;
   }
 
-  const xssPatterns = [
-    /<script[^>]*>.*?<\/script>/gi,
-    /javascript:/gi,
-    /on\w+\s*=/gi, // event handlers like onclick=
-    /<iframe[^>]*>/gi,
-    /<embed[^>]*>/gi,
-    /<object[^>]*>/gi,
-    /eval\s*\(/gi,
-    /expression\s*\(/gi
-  ];
-
-  return xssPatterns.some(pattern => pattern.test(input));
+  return XSS_PATTERNS.some(pattern => pattern.test(input));
 }
 
 /**
@@ -354,7 +402,7 @@ function sanitizeAndValidate(input, fieldName = 'input') {
  */
 function deepSanitize(obj, depth = 0) {
   // Prevent deep recursion
-  if (depth > 10) {
+  if (depth > SANITIZATION_LIMITS.MAX_RECURSION_DEPTH) {
     return '[Max Depth Reached]';
   }
 
@@ -378,35 +426,8 @@ function deepSanitize(obj, depth = 0) {
     return obj;
   }
 
-  // Sensitive field patterns (field names that should be redacted)
-  const sensitivePatterns = [
-    /password/i,
-    /passwd/i,
-    /pwd/i,
-    /secret/i,
-    /token/i,
-    /apikey/i,
-    /api_key/i,
-    /accesstoken/i,
-    /access_token/i,
-    /refreshtoken/i,
-    /refresh_token/i,
-    /auth/i,
-    /authorization/i,
-    /bearer/i,
-    /credential/i,
-    /privatekey/i,
-    /private_key/i,
-    /publickey/i,
-    /public_key/i,
-    /cookie/i,
-    /session/i,
-    /ssn/i,
-    /credit.*card/i,
-    /card.*number/i,
-    /cvv/i,
-    /pin/i
-  ];
+  // Use constant sensitive patterns
+  const sensitivePatterns = [...SENSITIVE_FIELD_PATTERNS];
 
   // Optionally redact phone numbers in logs (configurable)
   const redactPhones = process.env.LOG_REDACT_PHONES === 'true';

@@ -9,106 +9,109 @@
 const express = require('express');
 const router = express.Router();
 const Contact = require('../../../core/database/models/Contact');
-const { auth, requireBusiness, requireBusinessPermission } = require('../../../core/middlewares/auth');
-const { requireBusinessOwnership } = require('../../../core/middlewares/rbac');
+const { authenticate } = require('../../../core/middlewares/auth');
+const { requireBusiness, requirePermission, requireBusinessPermission, requireOwnerOrAdmin } = require('../../../core/middlewares/authorization');
+const auth = authenticate;
+const { asyncHandler, ValidationError } = require('../../../core/middlewares/errorHandler');
+const logger = require('../../../common/helpers/logger');
+const { ERROR_CODES, HTTP_STATUS } = require('../../../common/constants');
+
+// Constants for contact deduplication
+const DUPLICATE_THRESHOLD_DEFAULT = 80; // Default similarity threshold (0-100)
+const DUPLICATES_LIMIT_DEFAULT = 50; // Default limit for duplicate results
+const DUPLICATE_SCORE_HIGH = 90; // High confidence duplicate (>= 90%)
+const DUPLICATE_SCORE_MEDIUM = 70; // Medium confidence duplicate (>= 70%)
+const DUPLICATE_SCORE_LOW = 50; // Low confidence duplicate (>= 50%)
+const DEDUPLICATION_FIELDS_DEFAULT = ['phoneNumber', 'name', 'email']; // Fields to check for duplicates
  
 /**
  * @route   POST /api/contacts/deduplicate
  * @desc    Run deduplication process and merge duplicates
  * @access  Private - Manager+ only
  */
-router.post('/deduplicate', auth, requireBusiness, requireBusinessOwnership, requireBusinessPermission('manage_conversations'), async (req, res) => {
-  try {
-    const { 
-      autoMerge = false, 
-      threshold = 80,
-      fields = ['phoneNumber', 'name', 'email']
-    } = req.body;
+router.post('/deduplicate', auth, requireBusiness, requireOwnerOrAdmin, requireBusinessPermission('manage_conversations'), asyncHandler(async (req, res) => {
+  const startTime = Date.now();
+  const { 
+    autoMerge = false, 
+    threshold = DUPLICATE_THRESHOLD_DEFAULT,
+    fields = DEDUPLICATION_FIELDS_DEFAULT
+  } = req.body;
 
-    // Find all contacts for business
-    const contacts = await Contact.find({
-      businessId: req.businessId,
-      isDuplicate: false, // Don't process already marked duplicates
-      mergedInto: null
-    }).lean();
+  // Find all contacts for business
+  const contacts = await Contact.find({
+    businessId: req.businessId,
+    isDuplicate: false, // Don't process already marked duplicates
+    mergedInto: null
+  }).lean();
 
-    if (contacts.length < 2) {
-      return res.json({
-        message: 'Not enough contacts to check for duplicates',
-        duplicatesFound: 0,
-        merged: 0
-      });
-    }
+  if (contacts.length < 2) {
+    return res.success({
+      duplicatesFound: 0,
+      merged: 0
+    }, 'Not enough contacts to check for duplicates');
+  }
 
-    // Find potential duplicates
-    const duplicateGroups = findDuplicateGroups(contacts, fields, threshold);
+  // Find potential duplicates
+  const duplicateGroups = findDuplicateGroups(contacts, fields, threshold);
 
-    let mergedCount = 0;
-    const duplicateDetails = [];
+  let mergedCount = 0;
+  const duplicateDetails = [];
 
-    // Process each duplicate group
-    for (const group of duplicateGroups) {
-      const master = group.contacts[0]; // Keep first as master
-      const duplicates = group.contacts.slice(1);
+  // Process each duplicate group
+  for (const group of duplicateGroups) {
+    const master = group.contacts[0]; // Keep first as master
+    const duplicates = group.contacts.slice(1);
 
-      duplicateDetails.push({
-        masterId: master._id,
-        masterPhone: master.phoneNumber,
-        masterName: master.name,
-        duplicates: duplicates.map(d => ({
-          id: d._id,
-          phone: d.phoneNumber,
-          name: d.name,
-          email: d.email,
-          score: d.duplicateScore
-        })),
-        similarityScore: group.score
-      });
+    duplicateDetails.push({
+      masterId: master._id,
+      masterPhone: master.phoneNumber,
+      masterName: master.name,
+      duplicates: duplicates.map(d => ({
+        id: d._id,
+        phone: d.phoneNumber,
+        name: d.name,
+        email: d.email,
+        score: d.duplicateScore
+      })),
+      similarityScore: group.score
+    });
 
-      if (autoMerge) {
-        // Merge duplicates into master
-        for (const duplicate of duplicates) {
-          await mergeContacts(master._id, duplicate._id, req.businessId);
-          mergedCount++;
-        }
-      } else {
-        // Just mark them as duplicates
-        for (const duplicate of duplicates) {
-          await Contact.findByIdAndUpdate(duplicate._id, {
-            isDuplicate: true,
-            mergedInto: null,
-            duplicateScore: duplicate.duplicateScore
-          });
-        }
+    if (autoMerge) {
+      // Merge duplicates into master
+      for (const duplicate of duplicates) {
+        await mergeContacts(master._id, duplicate._id, req.businessId);
+        mergedCount++;
+      }
+    } else {
+      // Just mark them as duplicates
+      for (const duplicate of duplicates) {
+        await Contact.findByIdAndUpdate(duplicate._id, {
+          isDuplicate: true,
+          mergedInto: null,
+          duplicateScore: duplicate.duplicateScore
+        });
       }
     }
-
-    res.json({
-      message: autoMerge 
-        ? `Deduplication complete. Merged ${mergedCount} duplicate contacts.`
-        : `Found ${duplicateGroups.length} duplicate groups. Review and merge manually.`,
-      duplicatesFound: duplicateGroups.length,
-      totalDuplicateContacts: duplicateGroups.reduce((sum, g) => sum + g.contacts.length - 1, 0),
-      merged: mergedCount,
-      groups: duplicateDetails,
-      autoMerge,
-      threshold
-    });
-  } catch (error) {
-    console.error('Deduplication error:', error);
-    res.status(500).json({ 
-      error: 'Failed to deduplicate contacts',
-      details: error.message 
-    });
   }
-});
+
+  return res.success({
+    duplicatesFound: duplicateGroups.length,
+    totalDuplicateContacts: duplicateGroups.reduce((sum, g) => sum + g.contacts.length - 1, 0),
+    merged: mergedCount,
+    groups: duplicateDetails,
+    autoMerge,
+    threshold
+  }, autoMerge 
+    ? `Deduplication complete. Merged ${mergedCount} duplicate contacts.`
+    : `Found ${duplicateGroups.length} duplicate groups. Review and merge manually.`);
+}));
 
 /**
  * @route   GET /api/contacts/duplicates
  * @desc    Get list of potential duplicate contacts
  * @access  Private - All authenticated users
  */
-router.post('/deduplicate', auth, requireBusiness, requireBusinessOwnership, requireBusinessPermission('manage_conversations'), async (req, res) => {
+router.post('/deduplicate', auth, requireBusiness, requireOwnerOrAdmin, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const defaultThreshold = parseInt(process.env.CONTACT_DUPLICATE_THRESHOLD || '80');
     const defaultLimit = parseInt(process.env.CONTACT_DUPLICATES_LIMIT || '50');
@@ -134,11 +137,11 @@ router.post('/deduplicate', auth, requireBusiness, requireBusinessOwnership, req
       .lean();
 
     if (contacts.length < 2) {
-      return res.json({
+      return res.success({
         duplicates: [],
         total: 0,
         message: 'No duplicates found'
-      });
+      }, 'No duplicates found');
     }
 
     // Find duplicate groups
@@ -189,7 +192,7 @@ router.post('/deduplicate', auth, requireBusiness, requireBusinessOwnership, req
       parseInt(skip) + parseInt(limit)
     );
 
-    res.json({
+    res.success({
       duplicates: paginatedDuplicates,
       total: duplicates.length,
       showing: paginatedDuplicates.length,
@@ -199,10 +202,10 @@ router.post('/deduplicate', auth, requireBusiness, requireBusinessOwnership, req
         skip: parseInt(skip),
         hasMore: parseInt(skip) + paginatedDuplicates.length < duplicates.length
       }
-    });
+    }, 'Duplicates retrieved successfully');
   } catch (error) {
-    console.error('Get duplicates error:', error);
-    res.status(500).json({ 
+    logger.error('Get duplicates error', { businessId: req.businessId, error: error.message });
+    res.status(500).json({
       error: 'Failed to fetch duplicate contacts',
       details: error.message 
     });
@@ -214,7 +217,7 @@ router.post('/deduplicate', auth, requireBusiness, requireBusinessOwnership, req
  * @desc    Manually merge a duplicate contact into another contact
  * @access  Private - Manager+ only
  */
-router.post('/:id/merge', auth, requireBusiness, requireBusinessOwnership, requireBusinessPermission('manage_conversations'), async (req, res) => {
+router.post('/:id/merge', auth, requireBusiness, requireOwnerOrAdmin, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const { mergeIntoId } = req.body;
 
@@ -247,14 +250,14 @@ router.post('/:id/merge', auth, requireBusiness, requireBusinessOwnership, requi
     // Perform merge
     const result = await mergeContacts(master._id, duplicate._id, req.businessId);
 
-    res.json({
+    res.success({
       message: 'Contacts merged successfully',
       master: result.master,
       mergedData: result.mergedData
-    });
+    }, 'Contacts merged successfully');
   } catch (error) {
-    console.error('Merge contacts error:', error);
-    res.status(500).json({ 
+    logger.error('Merge contacts error', { businessId: req.businessId, contactId: req.params.id, error: error.message });
+    res.status(500).json({
       error: 'Failed to merge contacts',
       details: error.message 
     });
@@ -266,7 +269,7 @@ router.post('/:id/merge', auth, requireBusiness, requireBusinessOwnership, requi
  * @desc    Unmark a contact as duplicate
  * @access  Private - Manager+ only
  */
-router.post('/:id/unmark-duplicate', auth, requireBusiness, requireBusinessOwnership, requireBusinessPermission('manage_conversations'), async (req, res) => {
+router.post('/:id/unmark-duplicate', auth, requireBusiness, requireOwnerOrAdmin, requireBusinessPermission('manage_conversations'), async (req, res) => {
   try {
     const contact = await Contact.findOne({
       _id: req.params.id,
@@ -281,13 +284,13 @@ router.post('/:id/unmark-duplicate', auth, requireBusiness, requireBusinessOwner
     contact.duplicateScore = 0;
     await contact.save();
 
-    res.json({
+    res.success({
       message: 'Contact unmarked as duplicate',
       contact
-    });
+    }, 'Contact unmarked as duplicate');
   } catch (error) {
-    console.error('Unmark duplicate error:', error);
-    res.status(500).json({ 
+    logger.error('Unmark duplicate error', { businessId: req.businessId, contactId: req.params.id, error: error.message });
+    res.status(500).json({
       error: 'Failed to unmark contact',
       details: error.message 
     });

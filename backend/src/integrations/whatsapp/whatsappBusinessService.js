@@ -1,4 +1,27 @@
 const axios = require('axios');
+const logger = require('../../common/helpers/logger');
+const { ERROR_CODES, TIME_CONSTANTS } = require('../../common/constants');
+const config = require('../../config/app.config');
+
+/**
+ * WhatsApp Business Service Constants
+ */
+const GRAPH_API_TIMEOUT = parseInt(config.whatsapp?.timeout || process.env.WHATSAPP_API_TIMEOUT || '30000');
+const RETRY_ATTEMPTS = parseInt(config.whatsapp?.retryAttempts || process.env.WHATSAPP_RETRY_ATTEMPTS || '3');
+const RETRY_DELAY_MS = parseInt(config.whatsapp?.retryDelay || process.env.WHATSAPP_RETRY_DELAY || '1000');
+
+const BUSINESS_PROFILE_FIELDS = [
+  'about',
+  'address',
+  'description',
+  'email',
+  'profile_picture_url',
+  'websites',
+  'vertical'
+];
+
+const DAYS_OF_WEEK = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
+const TIME_FORMAT_REGEX = /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/;
 
 /**
  * WhatsApp Business Service
@@ -6,41 +29,58 @@ const axios = require('axios');
  */
 class WhatsAppBusinessService {
   constructor(config) {
+    if (!config || !config.phoneNumberId || !config.accessToken) {
+      throw new Error('WhatsApp config with phoneNumberId and accessToken is required');
+    }
+
     this.phoneNumberId = config.phoneNumberId;
     this.accessToken = config.accessToken;
-    this.apiVersion = config.apiVersion;
+    this.apiVersion = config.apiVersion || 'v22.0';
     this.apiUrl = `https://graph.facebook.com/${this.apiVersion}`;
+    this.timeout = GRAPH_API_TIMEOUT;
   }
 
   /**
    * Get Business Profile information
    */
   async getBusinessProfile() {
+    const startTime = Date.now();
+    
     try {
       const response = await axios.get(
         `${this.apiUrl}/${this.phoneNumberId}/whatsapp_business_profile`,
         {
           params: {
-            fields: 'about,address,description,email,profile_picture_url,websites,vertical'
+            fields: BUSINESS_PROFILE_FIELDS.join(',')
           },
           headers: {
             'Authorization': `Bearer ${this.accessToken}`,
             'Content-Type': 'application/json'
-          }
+          },
+          timeout: this.timeout
         }
       );
 
-      console.log('📊 Business profile retrieved successfully');
+      logger.info('Business profile retrieved successfully', {
+        phoneNumberId: this.phoneNumberId,
+        processingTime: `${Date.now() - startTime}ms`
+      });
       
       return {
         success: true,
         data: response.data.data[0] || {}
       };
     } catch (error) {
-      console.error('Get Business Profile Error:', error.response?.data || error.message);
+      logger.error('Get Business Profile Error', {
+        error: error.response?.data || error.message,
+        phoneNumberId: this.phoneNumberId,
+        code: error.code || ERROR_CODES.EXTERNAL_SERVICE_ERROR,
+        processingTime: `${Date.now() - startTime}ms`
+      });
       return {
         success: false,
-        error: error.response?.data?.error || error.message
+        error: error.response?.data?.error || error.message,
+        code: ERROR_CODES.EXTERNAL_SERVICE_ERROR
       };
     }
   }
@@ -49,6 +89,8 @@ class WhatsAppBusinessService {
    * Update Business Profile information
    */
   async updateBusinessProfile(profileData) {
+    const startTime = Date.now();
+    
     try {
       const response = await axios.post(
         `${this.apiUrl}/${this.phoneNumberId}/whatsapp_business_profile`,
@@ -60,21 +102,31 @@ class WhatsAppBusinessService {
           headers: {
             'Authorization': `Bearer ${this.accessToken}`,
             'Content-Type': 'application/json'
-          }
+          },
+          timeout: this.timeout
         }
       );
 
-      console.log('✅ Business profile updated successfully');
+      logger.info('Business profile updated successfully', {
+        phoneNumberId: this.phoneNumberId,
+        processingTime: `${Date.now() - startTime}ms`
+      });
       
       return {
         success: true,
         data: response.data
       };
     } catch (error) {
-      console.error('Update Business Profile Error:', error.response?.data || error.message);
+      logger.error('Update Business Profile Error', {
+        error: error.response?.data || error.message,
+        phoneNumberId: this.phoneNumberId,
+        code: error.code || ERROR_CODES.EXTERNAL_SERVICE_ERROR,
+        processingTime: `${Date.now() - startTime}ms`
+      });
       return {
         success: false,
-        error: error.response?.data?.error || error.message
+        error: error.response?.data?.error || error.message,
+        code: ERROR_CODES.EXTERNAL_SERVICE_ERROR
       };
     }
   }
@@ -83,7 +135,17 @@ class WhatsAppBusinessService {
    * Upload and set business profile photo
    */
   async updateProfilePhoto(mediaId) {
+    const startTime = Date.now();
+    
     try {
+      if (!mediaId) {
+        return {
+          success: false,
+          error: 'Media ID is required',
+          code: ERROR_CODES.VALIDATION_ERROR
+        };
+      }
+
       const response = await axios.post(
         `${this.apiUrl}/${this.phoneNumberId}/whatsapp_business_profile`,
         {
@@ -94,21 +156,32 @@ class WhatsAppBusinessService {
           headers: {
             'Authorization': `Bearer ${this.accessToken}`,
             'Content-Type': 'application/json'
-          }
+          },
+          timeout: this.timeout
         }
       );
 
-      console.log('✅ Profile photo updated successfully');
+      logger.info('Profile photo updated successfully', {
+        phoneNumberId: this.phoneNumberId,
+        mediaId,
+        processingTime: `${Date.now() - startTime}ms`
+      });
       
       return {
         success: true,
         data: response.data
       };
     } catch (error) {
-      console.error('Update Profile Photo Error:', error.response?.data || error.message);
+      logger.error('Update Profile Photo Error', {
+        error: error.response?.data || error.message,
+        phoneNumberId: this.phoneNumberId,
+        code: error.code || ERROR_CODES.EXTERNAL_SERVICE_ERROR,
+        processingTime: `${Date.now() - startTime}ms`
+      });
       return {
         success: false,
-        error: error.response?.data?.error || error.message
+        error: error.response?.data?.error || error.message,
+        code: ERROR_CODES.EXTERNAL_SERVICE_ERROR
       };
     }
   }
@@ -117,19 +190,25 @@ class WhatsAppBusinessService {
    * Update Business Hours
    */
   async updateBusinessHours(businessHours) {
+    const startTime = Date.now();
+    
     try {
-      console.log('⏰ Updating business hours...');
+      logger.info('Updating business hours', {
+        phoneNumberId: this.phoneNumberId
+      });
 
-      const validDays = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
-      const timeRegex = /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/;
-
-      for (const day of validDays) {
+      // Validate business hours format
+      for (const day of DAYS_OF_WEEK) {
         if (businessHours[day]) {
           const { open_time, close_time, is_open } = businessHours[day];
           
           if (is_open) {
-            if (!timeRegex.test(open_time)) {
-              throw new Error(`Invalid open_time format for ${day}. Use HH:MM (24-hour format)`);
+            if (!TIME_FORMAT_REGEX.test(open_time)) {
+              return {
+                success: false,
+                error: `Invalid open_time format for ${day}. Use HH:MM (24-hour format)`,
+                code: ERROR_CODES.VALIDATION_ERROR
+              };
             }
             if (!timeRegex.test(close_time)) {
               throw new Error(`Invalid close_time format for ${day}. Use HH:MM (24-hour format)`);
@@ -152,14 +231,19 @@ class WhatsAppBusinessService {
         }
       );
 
-      console.log('✅ Business hours updated successfully');
+      logger.info('Business hours updated successfully', {
+        phoneNumberId: this.phoneNumberId
+      });
       
       return {
         success: true,
         data: response.data
       };
     } catch (error) {
-      console.error('Update Business Hours Error:', error.response?.data || error.message);
+      logger.error('Update Business Hours Error', {
+        error: error.response?.data || error.message,
+        phoneNumberId: this.phoneNumberId
+      });
       return {
         success: false,
         error: error.response?.data?.error || error.message
@@ -186,14 +270,19 @@ class WhatsAppBusinessService {
       );
 
       const businessHours = response.data.data[0]?.business_hours || {};
-      console.log('⏰ Business hours retrieved successfully');
+      logger.info('Business hours retrieved successfully', {
+        phoneNumberId: this.phoneNumberId
+      });
       
       return {
         success: true,
         data: businessHours
       };
     } catch (error) {
-      console.error('Get Business Hours Error:', error.response?.data || error.message);
+      logger.error('Get Business Hours Error', {
+        error: error.response?.data || error.message,
+        phoneNumberId: this.phoneNumberId
+      });
       return {
         success: false,
         error: error.response?.data?.error || error.message
@@ -206,7 +295,9 @@ class WhatsAppBusinessService {
    */
   async updateBusinessLocation(address) {
     try {
-      console.log('📍 Updating business location...');
+      logger.info('Updating business location', {
+        phoneNumberId: this.phoneNumberId
+      });
 
       if (!address || typeof address !== 'string' || address.trim() === '') {
         throw new Error('Valid address is required');
@@ -226,14 +317,19 @@ class WhatsAppBusinessService {
         }
       );
 
-      console.log('✅ Business location updated successfully');
+      logger.info('Business location updated successfully', {
+        phoneNumberId: this.phoneNumberId
+      });
       
       return {
         success: true,
         data: response.data
       };
     } catch (error) {
-      console.error('❌ Update Business Location Error:', error.response?.data || error.message);
+      logger.error('Update Business Location Error', {
+        error: error.response?.data || error.message,
+        phoneNumberId: this.phoneNumberId
+      });
       return {
         success: false,
         error: error.response?.data?.error || error.message
@@ -246,7 +342,9 @@ class WhatsAppBusinessService {
    */
   async getBusinessLocation() {
     try {
-      console.log('📍 Fetching business location...');
+      logger.info('Fetching business location', {
+        phoneNumberId: this.phoneNumberId
+      });
 
       const response = await axios.get(
         `${this.apiUrl}/${this.phoneNumberId}/whatsapp_business_profile`,
@@ -262,14 +360,19 @@ class WhatsAppBusinessService {
       );
 
       const address = response.data.data[0]?.address || '';
-      console.log('✅ Business location retrieved');
+      logger.info('Business location retrieved', {
+        phoneNumberId: this.phoneNumberId
+      });
       
       return {
         success: true,
         address: address
       };
     } catch (error) {
-      console.error('❌ Get Business Location Error:', error.response?.data || error.message);
+      logger.error('Get Business Location Error', {
+        error: error.response?.data || error.message,
+        phoneNumberId: this.phoneNumberId
+      });
       return {
         success: false,
         error: error.response?.data?.error || error.message

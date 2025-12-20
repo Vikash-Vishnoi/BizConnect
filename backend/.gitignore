@@ -106,9 +106,41 @@ dist
 .yarn/install-state.gz
 .pnp.*
 
-# Uploads
+# Uploads and temporary files
 uploads/
+uploads/*
+!uploads/.gitkeep
+temp/
+tmp/
+*.tmp
 
-# OS
+# OS-specific files
 .DS_Store
 Thumbs.db
+Desktop.ini
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.settings/
+.classpath
+
+# Test coverage and reports
+coverage/
+test-results/
+*.lcov
+.nyc_output/
+
+# Build and distribution
+dist/
+build/
+out/
+
+# Database dumps and backups
+*.sql
+*.dump
+*.backup

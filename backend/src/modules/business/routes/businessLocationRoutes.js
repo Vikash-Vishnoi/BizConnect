@@ -8,6 +8,32 @@
 const express = require('express');
 const router = express.Router({ mergeParams: true });
 const Business = require('../../../core/database/models/Business');
+const { asyncHandler, NotFoundError, ValidationError } = require('../../../core/middlewares/errorHandler');
+const { businessContext } = require('../../../core/middlewares/businessContext');
+const { HTTP_STATUS, ERROR_CODES } = require('../../../common/constants');
+const logger = require('../../../common/helpers/logger');
+
+// Constants
+const VALIDATION_LIMITS = {
+  ADDRESS_MAX_LENGTH: 500,
+  DESCRIPTION_MAX_LENGTH: 200
+};
+
+const COORDINATE_LIMITS = {
+  LATITUDE_MIN: -90,
+  LATITUDE_MAX: 90,
+  LONGITUDE_MIN: -180,
+  LONGITUDE_MAX: 180
+};
+
+const DEFAULT_LOCATION = {
+  enabled: false,
+  address: '',
+  latitude: null,
+  longitude: null,
+  description: '',
+  updatedAt: null
+};
 
 /**
  * Validate coordinates (internal utility)
@@ -17,14 +43,14 @@ function validateCoordinates(latitude, longitude) {
   const errors = [];
 
   if (latitude !== null && latitude !== undefined) {
-    if (typeof latitude !== 'number' || latitude < -90 || latitude > 90) {
-      errors.push('Latitude must be a number between -90 and 90');
+    if (typeof latitude !== 'number' || latitude < COORDINATE_LIMITS.LATITUDE_MIN || latitude > COORDINATE_LIMITS.LATITUDE_MAX) {
+      errors.push(`Latitude must be a number between ${COORDINATE_LIMITS.LATITUDE_MIN} and ${COORDINATE_LIMITS.LATITUDE_MAX}`);
     }
   }
 
   if (longitude !== null && longitude !== undefined) {
-    if (typeof longitude !== 'number' || longitude < -180 || longitude > 180) {
-      errors.push('Longitude must be a number between -180 and 180');
+    if (typeof longitude !== 'number' || longitude < COORDINATE_LIMITS.LONGITUDE_MIN || longitude > COORDINATE_LIMITS.LONGITUDE_MAX) {
+      errors.push(`Longitude must be a number between ${COORDINATE_LIMITS.LONGITUDE_MIN} and ${COORDINATE_LIMITS.LONGITUDE_MAX}`);
     }
   }
 
@@ -43,37 +69,36 @@ function validateCoordinates(latitude, longitude) {
  * @desc    Get business location
  * @access  Private
  */
-router.get('/', async (req, res) => {
+router.get('/', asyncHandler(async (req, res) => {
+  const startTime = Date.now();
   try {
     const business = await Business.findById(req.params.id).select('businessLocation');
 
     if (!business) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Business not found' 
+      const processingTime = Date.now() - startTime;
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        success: false,
+        message: 'Business not found',
+        processingTime
       });
     }
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
       success: true,
-      data: business.businessLocation || {
-        enabled: false,
-        address: '',
-        latitude: null,
-        longitude: null,
-        description: '',
-        updatedAt: null
-      }
+      data: business.businessLocation || DEFAULT_LOCATION,
+      processingTime
     });
   } catch (error) {
-    console.error('❌ Error fetching business location:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to fetch business location',
-      error: error.message
+    const processingTime = Date.now() - startTime;
+    logger.error('Error getting business location', {
+      businessId: req.params.id,
+      error: error.message,
+      processingTime
     });
+    throw error;
   }
-});
+}));
 
 /**
  * @route   PUT /api/business/:id/location
@@ -82,6 +107,7 @@ router.get('/', async (req, res) => {
  * @note    Consolidates: PUT /, POST /validate-coordinates (now auto-validated)
  */
 router.put('/', async (req, res) => {
+  const startTime = Date.now();
   try {
     const { enabled, address, latitude, longitude, description } = req.body;
 
@@ -89,27 +115,33 @@ router.put('/', async (req, res) => {
     if (latitude !== undefined || longitude !== undefined) {
       const validation = validateCoordinates(latitude, longitude);
       if (!validation.valid) {
-        return res.status(400).json({
+        const processingTime = Date.now() - startTime;
+        return res.status(HTTP_STATUS.BAD_REQUEST).json({
           success: false,
           message: 'Invalid coordinates',
-          errors: validation.errors
+          errors: validation.errors,
+          processingTime
         });
       }
     }
 
     // Validate address length if provided
-    if (address && address.length > 500) {
-      return res.status(400).json({
+    if (address && address.length > VALIDATION_LIMITS.ADDRESS_MAX_LENGTH) {
+      const processingTime = Date.now() - startTime;
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
         success: false,
-        message: 'Address cannot exceed 500 characters'
+        message: `Address cannot exceed ${VALIDATION_LIMITS.ADDRESS_MAX_LENGTH} characters`,
+        processingTime
       });
     }
 
     // Validate description length if provided
-    if (description && description.length > 200) {
-      return res.status(400).json({
+    if (description && description.length > VALIDATION_LIMITS.DESCRIPTION_MAX_LENGTH) {
+      const processingTime = Date.now() - startTime;
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
         success: false,
-        message: 'Description cannot exceed 200 characters'
+        message: `Description cannot exceed ${VALIDATION_LIMITS.DESCRIPTION_MAX_LENGTH} characters`,
+        processingTime
       });
     }
 
@@ -130,31 +162,41 @@ router.put('/', async (req, res) => {
     ).select('businessLocation');
 
     if (!business) {
-      return res.status(404).json({
+      const processingTime = Date.now() - startTime;
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
         success: false,
-        message: 'Business not found'
+        message: 'Business not found',
+        processingTime
       });
     }
 
     // Ensure businessLocation exists before reading properties
     const bl = business.businessLocation || { enabled: false, latitude: null, longitude: null };
-    console.log('✅ Business location updated:', {
+    logger.info('Business location updated', {
       businessId: req.params.id,
       enabled: bl.enabled,
       hasCoordinates: bl.latitude !== null && bl.longitude !== null
     });
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
       success: true,
       message: 'Business location updated successfully',
-      data: business.businessLocation
+      data: business.businessLocation,
+      processingTime
     });
   } catch (error) {
-    console.error('❌ Error updating business location:', error);
-    res.status(500).json({
+    const processingTime = Date.now() - startTime;
+    logger.error('Error updating business location', {
+      businessId: req.params.id,
+      error: error.message,
+      processingTime
+    });
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: 'Failed to update business location',
-      error: error.message
+      error: error.message,
+      processingTime
     });
   }
 });
@@ -165,7 +207,8 @@ router.put('/', async (req, res) => {
  * @access  Private
  * @note    Data preservation policy - disables instead of deleting
  */
-router.delete('/', async (req, res) => {
+router.delete('/', asyncHandler(async (req, res) => {
+  const startTime = Date.now();
   try {
     const business = await Business.findByIdAndUpdate(
       req.params.id,
@@ -179,29 +222,34 @@ router.delete('/', async (req, res) => {
     ).select('businessLocation');
 
     if (!business) {
-      return res.status(404).json({
+      const processingTime = Date.now() - startTime;
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
         success: false,
-        message: 'Business not found'
+        message: 'Business not found',
+        processingTime
       });
     }
 
-    console.log('✅ Business location disabled (data preserved):', {
+    logger.info('Business location disabled (data preserved)', {
       businessId: req.params.id
     });
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
       success: true,
       message: 'Business location disabled successfully (data preserved)',
-      data: business.businessLocation
+      data: business.businessLocation,
+      processingTime
     });
   } catch (error) {
-    console.error('❌ Error disabling business location:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to disable business location',
-      error: error.message
+    const processingTime = Date.now() - startTime;
+    logger.error('Error disabling business location', {
+      businessId: req.params.id,
+      error: error.message,
+      processingTime
     });
+    throw error;
   }
-});
+}));
 
 module.exports = router;

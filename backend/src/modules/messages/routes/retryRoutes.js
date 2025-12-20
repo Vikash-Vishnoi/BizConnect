@@ -1,9 +1,18 @@
 const express = require('express');
 const router = express.Router();
 const retryService = require('../services/retryService');
-const { auth } = require('../../../core/middlewares/auth');
-const { enforceBusinessIsolation } = require('../../../core/middlewares/businessSecurity');
+const { authenticate: auth } = require('../../../core/middlewares/auth');
+const { requireBusiness } = require('../../../core/middlewares/authorization');
+const { businessContext } = require('../../../core/middlewares/businessContext');
 const logger = require('../../../common/helpers/logger');
+const { ERROR_CODES, HTTP_STATUS } = require('../../../common/constants');
+
+// Constants for message retry operations
+const DEFAULT_FAILED_MESSAGES_LIMIT = 50; // Default limit for failed messages
+const MAX_FAILED_MESSAGES_LIMIT = 200; // Maximum limit for failed messages
+const DEFAULT_MAX_RETRIES = 3; // Default maximum retry attempts
+const MAX_AUTO_RETRY_ATTEMPTS = 5; // Maximum auto-retry attempts
+const DEFAULT_SKIP = 0; // Default skip for pagination
 
 /**
  * Message Retry Routes
@@ -16,46 +25,43 @@ const logger = require('../../../common/helpers/logger');
  * GET /api/messages/failed
  * Get list of failed messages
  */
-router.get('/failed', auth, async (req, res) => {
+router.get('/failed', auth, requireBusiness, businessContext, async (req, res) => {
+  const startTime = Date.now();
+  
   try {
-    const { businessId, limit, skip, startDate, endDate } = req.query;
+    const { limit, skip, startDate, endDate } = req.query;
 
-    if (!businessId) {
-      return res.status(400).json({
-        success: false,
-        message: 'businessId is required'
-      });
-    }
+    const finalLimit = limit ? Math.min(parseInt(limit), MAX_FAILED_MESSAGES_LIMIT) : DEFAULT_FAILED_MESSAGES_LIMIT;
+    const finalSkip = skip ? parseInt(skip) : DEFAULT_SKIP;
 
-    // Verify business access
-    if (req.user.role !== 'admin' && req.user.businessId.toString() !== businessId) {
-      return res.status(403).json({
-        success: false,
-        message: 'Access denied'
-      });
-    }
-
-    const messages = await retryService.getFailedMessages(businessId, {
-      limit: limit ? parseInt(limit) : 50,
-      skip: skip ? parseInt(skip) : 0,
+    const messages = await retryService.getFailedMessages(req.businessId, {
+      limit: finalLimit,
+      skip: finalSkip,
       startDate,
       endDate
     });
 
-    res.json({
-      success: true,
-      data: messages,
-      count: messages.length
-    });
+    const processingTime = Date.now() - startTime;
 
+    return res.status(HTTP_STATUS.OK).json({
+      messages,
+      count: messages.length,
+      pagination: {
+        limit: finalLimit,
+        skip: finalSkip
+      },
+      processingTime
+    });
   } catch (error) {
+    const processingTime = Date.now() - startTime;
     logger.error('Get failed messages error', {
-      error: error.message
+      businessId: req.businessId?.toString(),
+      error: error.message,
+      processingTime
     });
-
-    res.status(500).json({
-      success: false,
-      message: error.message
+    return res.status(HTTP_STATUS.INTERNAL_ERROR).json({
+      error: ERROR_CODES.INTERNAL_ERROR,
+      message: 'Failed to retrieve failed messages'
     });
   }
 });
@@ -64,28 +70,39 @@ router.get('/failed', auth, async (req, res) => {
  * POST /api/messages/:conversationId/retry/:messageId
  * Retry a single failed message
  */
-router.post('/:conversationId/retry/:messageId', auth, async (req, res) => {
+router.post('/:conversationId/retry/:messageId', auth, requireBusiness, businessContext, async (req, res) => {
+  const startTime = Date.now();
+  
   try {
     const { conversationId, messageId } = req.params;
 
+    if (!conversationId || !messageId) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        error: ERROR_CODES.VALIDATION_ERROR,
+        message: 'conversationId and messageId are required'
+      });
+    }
+
     const result = await retryService.retryMessage(conversationId, messageId);
 
-    res.json({
-      success: true,
-      data: result,
-      message: 'Message retried successfully'
-    });
+    const processingTime = Date.now() - startTime;
 
+    return res.status(HTTP_STATUS.OK).json({
+      ...result,
+      processingTime
+    });
   } catch (error) {
+    const processingTime = Date.now() - startTime;
     logger.error('Retry message error', {
+      businessId: req.businessId?.toString(),
       conversationId: req.params.conversationId,
       messageId: req.params.messageId,
-      error: error.message
+      error: error.message,
+      processingTime
     });
-
-    res.status(error.message.includes('not found') ? 404 : error.message.includes('not in failed state') ? 400 : 500).json({
-      success: false,
-      message: error.message
+    return res.status(HTTP_STATUS.INTERNAL_ERROR).json({
+      error: ERROR_CODES.INTERNAL_ERROR,
+      message: 'Failed to retry message'
     });
   }
 });
@@ -94,41 +111,39 @@ router.post('/:conversationId/retry/:messageId', auth, async (req, res) => {
  * POST /api/messages/retry-bulk
  * Retry multiple messages in bulk
  */
-router.post('/retry-bulk', auth, async (req, res) => {
+router.post('/retry-bulk', auth, requireBusiness, businessContext, async (req, res) => {
+  const startTime = Date.now();
+  
   try {
-    const { businessId, messages } = req.body;
+    const { messages } = req.body;
 
-    if (!businessId || !messages || !Array.isArray(messages)) {
-      return res.status(400).json({
-        success: false,
-        message: 'businessId and messages array are required'
+    if (!messages || !Array.isArray(messages)) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        error: ERROR_CODES.VALIDATION_ERROR,
+        message: 'messages array is required'
       });
     }
 
-    // Verify business access
-    if (req.user.role !== 'admin' && req.user.businessId.toString() !== businessId) {
-      return res.status(403).json({
-        success: false,
-        message: 'Access denied'
-      });
-    }
+    const results = await retryService.retryBulk(req.businessId, messages);
 
-    const results = await retryService.retryBulk(businessId, messages);
+    const processingTime = Date.now() - startTime;
 
-    res.json({
-      success: true,
-      data: results,
-      message: `Retry completed: ${results.succeeded} succeeded, ${results.failed} failed`
+    return res.status(HTTP_STATUS.OK).json({
+      ...results,
+      message: `Retry completed: ${results.succeeded} succeeded, ${results.failed} failed`,
+      processingTime
     });
-
   } catch (error) {
-    logger.error('Bulk retry error', {
-      error: error.message
+    const processingTime = Date.now() - startTime;
+    logger.error('Retry bulk messages error', {
+      businessId: req.businessId?.toString(),
+      messageCount: req.body.messages?.length,
+      error: error.message,
+      processingTime
     });
-
-    res.status(500).json({
-      success: false,
-      message: error.message
+    return res.status(HTTP_STATUS.INTERNAL_ERROR).json({
+      error: ERROR_CODES.INTERNAL_ERROR,
+      message: 'Failed to retry bulk messages'
     });
   }
 });
@@ -137,41 +152,33 @@ router.post('/retry-bulk', auth, async (req, res) => {
  * POST /api/messages/auto-retry
  * Auto-retry failed messages with exponential backoff
  */
-router.post('/auto-retry', auth, async (req, res) => {
+router.post('/auto-retry', auth, requireBusiness, businessContext, async (req, res) => {
+  const startTime = Date.now();
+  
   try {
-    const { businessId, maxRetries } = req.body;
+    const { maxRetries } = req.body;
 
-    if (!businessId) {
-      return res.status(400).json({
-        success: false,
-        message: 'businessId is required'
-      });
-    }
+    const finalMaxRetries = maxRetries ? Math.min(parseInt(maxRetries), MAX_AUTO_RETRY_ATTEMPTS) : DEFAULT_MAX_RETRIES;
 
-    // Verify business access
-    if (req.user.role !== 'admin' && req.user.businessId.toString() !== businessId) {
-      return res.status(403).json({
-        success: false,
-        message: 'Access denied'
-      });
-    }
+    const results = await retryService.autoRetryFailed(req.businessId, finalMaxRetries);
 
-    const results = await retryService.autoRetryFailed(businessId, maxRetries || 3);
+    const processingTime = Date.now() - startTime;
 
-    res.json({
-      success: true,
-      data: results,
-      message: `Auto-retry completed: ${results.succeeded} succeeded, ${results.failed} failed, ${results.skipped} skipped`
+    return res.status(HTTP_STATUS.OK).json({
+      ...results,
+      message: `Auto-retry completed: ${results.succeeded} succeeded, ${results.failed} failed, ${results.skipped} skipped`,
+      processingTime
     });
-
   } catch (error) {
-    logger.error('Auto-retry error', {
-      error: error.message
+    const processingTime = Date.now() - startTime;
+    logger.error('Auto-retry messages error', {
+      businessId: req.businessId?.toString(),
+      error: error.message,
+      processingTime
     });
-
-    res.status(500).json({
-      success: false,
-      message: error.message
+    return res.status(HTTP_STATUS.INTERNAL_ERROR).json({
+      error: ERROR_CODES.INTERNAL_ERROR,
+      message: 'Failed to auto-retry messages'
     });
   }
 });

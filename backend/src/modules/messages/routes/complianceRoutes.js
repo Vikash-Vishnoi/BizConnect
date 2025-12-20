@@ -9,95 +9,109 @@
 const express = require('express');
 const router = express.Router();
 const Template = require('../../../core/database/models/Template');
-const { auth, requireBusiness, requireBusinessPermission } = require('../../../core/middlewares/auth');
-const { requireManager, requireBusinessOwnership } = require('../../../core/middlewares/rbac');
+const { authenticate: auth } = require('../../../core/middlewares/auth');
+const { requireBusiness, requirePermission, requireBusinessPermission, requireManager, requireOwnerOrAdmin } = require('../../../core/middlewares/authorization');
+const { asyncHandler } = require('../../../core/middlewares/errorHandler');
+const { ValidationError, NotFoundError } = require('../../../common/helpers/errorCodes');
+const logger = require('../../../common/helpers/logger');
+const { ERROR_CODES, HTTP_STATUS } = require('../../../common/constants');
+
+// Constants for compliance checking
+const TEMPLATE_MIN_COMPLIANCE_SCORE = 70; // Minimum score to pass compliance (0-100)
+const MAX_TEMPLATE_NAME_LENGTH = 512; // WhatsApp limit
+const MAX_HEADER_LENGTH = 60; // WhatsApp header character limit
+const MAX_BODY_LENGTH = 1024; // WhatsApp body character limit
+const MAX_FOOTER_LENGTH = 60; // WhatsApp footer character limit
+const MAX_BUTTON_TEXT_LENGTH = 25; // WhatsApp button text limit
+const MAX_BUTTONS_PER_TEMPLATE = 10; // Maximum buttons allowed
    
 /**
  * @route   POST /api/templates/validate
  * @desc    Validate template before submission (comprehensive check)
  * @access  Private - Manager+ only
  */
-router.post('/validate', auth, requireBusiness, requireManager, requireBusinessOwnership, requireBusinessPermission('manage', 'templates'), async (req, res) => {
-  try {
-    const { templateId, name, category, language, components } = req.body;
+router.post('/validate', auth, requireBusiness, requireManager, requireOwnerOrAdmin, requireBusinessPermission('manage', 'templates'), asyncHandler(async (req, res) => {
+  const startTime = Date.now();
+  const { templateId, name, category, language, components } = req.body;
 
-    let template;
-    
-    // Check if validating existing template or new template data
-    if (templateId) {
-      template = await Template.findOne({
-        _id: templateId,
-        businessId: req.businessId
-      });
-
-      if (!template) {
-        return res.status(404).json({ error: 'Template not found' });
-      }
-    } else if (name && category && language && components) {
-      // Validate new template data without saving
-      template = {
-        name,
-        category,
-        language,
-        components,
-        businessId: req.businessId
-      };
-    } else {
-      return res.status(400).json({ 
-        error: 'Either templateId or template data (name, category, language, components) is required' 
-      });
-    }
-
-    // Run comprehensive compliance checks
-    const complianceResult = await performComplianceCheck(template, req.business);
-
-    // Update template with compliance results if it's an existing template
-    if (templateId && template.save) {
-      template.complianceCheck = {
-        passed: complianceResult.passed,
-        checks: complianceResult.checks,
-        lastCheckedAt: new Date()
-      };
-      await template.save();
-    }
-
-    const minComplianceScore = parseInt(process.env.TEMPLATE_MIN_COMPLIANCE_SCORE || '70');
-    res.json({
-      passed: complianceResult.passed,
-      score: complianceResult.score,
-      checks: complianceResult.checks,
-      summary: complianceResult.summary,
-      recommendations: complianceResult.recommendations,
-      canSubmit: complianceResult.passed && complianceResult.score >= minComplianceScore,
-      templateId: templateId || null,
-      checkedAt: new Date()
+  let template;
+  
+  // Check if validating existing template or new template data
+  if (templateId) {
+    template = await Template.findOne({
+      _id: templateId,
+      businessId: req.businessId
     });
-  } catch (error) {
-    console.error('Template validation error:', error);
-    res.status(500).json({ 
-      error: 'Failed to validate template',
-      details: error.message 
-    });
+
+    if (!template) {
+      throw new NotFoundError('Template not found');
+    }
+  } else if (name && category && language && components) {
+    // Validate new template data without saving
+    template = {
+      name,
+      category,
+      language,
+      components,
+      businessId: req.businessId
+    };
+  } else {
+    throw new ValidationError('Either templateId or template data (name, category, language, components) is required');
   }
-});
+
+  // Run comprehensive compliance checks
+  const complianceResult = await performComplianceCheck(template, req.business);
+
+  // Update template with compliance results if it's an existing template
+  if (templateId && template.save) {
+    template.complianceCheck = {
+      passed: complianceResult.passed,
+      checks: complianceResult.checks,
+      lastCheckedAt: new Date()
+    };
+    await template.save();
+  }
+
+  const minComplianceScore = TEMPLATE_MIN_COMPLIANCE_SCORE;
+  const processingTime = Date.now() - startTime;
+  
+  logger.info('Template compliance check completed', {
+    templateId: templateId || null,
+    businessId: req.businessId?.toString(),
+    passed: complianceResult.passed,
+    score: complianceResult.score,
+    processingTime
+  });
+
+  return res.success({
+    passed: complianceResult.passed,
+    score: complianceResult.score,
+    checks: complianceResult.checks,
+    summary: complianceResult.summary,
+    recommendations: complianceResult.recommendations,
+    canSubmit: complianceResult.passed && complianceResult.score >= minComplianceScore,
+    templateId: templateId || null,
+    processingTime,
+    checkedAt: new Date()
+  }, complianceResult.passed ? 'Template passed compliance check' : 'Template failed compliance check');
+}));
 
 /**
  * @route   GET /api/templates/compliance-rules
  * @desc    Get WhatsApp compliance rules and guidelines
  * @access  Private - All authenticated users
  */
-router.get('/compliance-rules', auth, requireBusiness, requireBusinessOwnership, async (req, res) => {
-  try {
-    const rules = {
-      categories: {
-        MARKETING: {
-          description: 'Promotional messages, offers, updates about products/services',
-          requirements: [
-            'Must include opt-out instructions (e.g., "Reply STOP to unsubscribe")',
-            'Cannot be sent after user opt-out',
-            'Must be relevant to your business',
-            'Cannot contain misleading claims'
-          ],
+router.get('/compliance-rules', auth, requireBusiness, requireOwnerOrAdmin, asyncHandler(async (req, res) => {
+  const rules = {
+    categories: {
+      MARKETING: {
+        description: 'Promotional messages, offers, updates about products/services',
+        requirements: [
+          'Must include opt-out instructions (e.g., "Reply STOP to unsubscribe")',
+          'Cannot be sent after user opt-out',
+          'Must be relevant to your business',
+          'Cannot contain misleading claims'
+        ],
           restrictions: [
             'No get-rich-quick schemes',
             'No adult content or explicit material',
@@ -305,20 +319,13 @@ router.get('/compliance-rules', auth, requireBusiness, requireBusinessOwnership,
       }
     };
 
-    res.json({
+    return res.success({
       rules,
       version: '1.0',
       lastUpdated: '2025-01-15',
       documentation: 'https://developers.facebook.com/docs/whatsapp/message-templates/guidelines'
-    });
-  } catch (error) {
-    console.error('Get compliance rules error:', error);
-    res.status(500).json({ 
-      error: 'Failed to fetch compliance rules',
-      details: error.message 
-    });
-  }
-});
+    }, 'Compliance rules retrieved successfully');
+}));
 
 /**
  * Helper: Perform comprehensive compliance check

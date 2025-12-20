@@ -175,7 +175,7 @@ const conversationSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['active', 'archived', 'blocked'],
+    enum: ['active', 'archived', 'closed', 'blocked'],
     default: 'active',
     index: true
   },
@@ -383,8 +383,19 @@ conversationSchema.statics.getPaginated = async function(businessId, options = {
     this.countDocuments(query)
   ]);
   
+  // Transform lastMessage direction for frontend compatibility
+  const transformedConversations = conversations.map(conv => ({
+    ...conv,
+    lastMessage: conv.lastMessage ? {
+      ...conv.lastMessage,
+      direction: conv.lastMessage.direction === 'out' ? 'outgoing' : 
+                 conv.lastMessage.direction === 'in' ? 'incoming' : 
+                 conv.lastMessage.direction
+    } : null
+  }));
+  
   return {
-    conversations,
+    conversations: transformedConversations,
     pagination: {
       page,
       limit,

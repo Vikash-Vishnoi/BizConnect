@@ -8,7 +8,18 @@ const express = require('express');
 const router = express.Router();
 const Contact = require('../../../core/database/models/Contact');
 const Conversation = require('../../../core/database/models/Conversation');
- 
+const logger = require('../../../common/helpers/logger');
+const { ERROR_CODES, HTTP_STATUS } = require('../../../common/constants');
+const { businessContext } = require('../../../core/middlewares/businessContext');
+
+// Apply business context middleware to all routes
+router.use(businessContext);
+
+// Constants for rate limiting
+const RATE_LIMIT_PER_CONTACT = 10; // WhatsApp limit: 10 messages per minute per phone
+const RATE_LIMIT_WINDOW_MS = 60000; // 1 minute window in milliseconds
+const RATE_LIMIT_WINDOW_SECONDS = 60; // 1 minute window in seconds
+
 /**
  * @route   GET /api/contacts/:phoneNumber/rate-limit
  * @desc    Get rate limit status for a specific contact
@@ -16,8 +27,18 @@ const Conversation = require('../../../core/database/models/Conversation');
  * @returns { allowed: boolean, messageCount: number, windowReset: Date, throttledUntil: Date }
  */
 router.get('/:phoneNumber/rate-limit', async (req, res) => {
+  const startTime = Date.now();
+  
   try {
     const { phoneNumber } = req.params;
+
+    // Input validation
+    if (!phoneNumber) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        error: ERROR_CODES.VALIDATION_ERROR,
+        message: 'phoneNumber is required'
+      });
+    }
 
     const contact = await Contact.findOne({
       businessId: req.businessId,
@@ -25,8 +46,8 @@ router.get('/:phoneNumber/rate-limit', async (req, res) => {
     });
 
     if (!contact) {
-      return res.status(404).json({
-        success: false,
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        error: ERROR_CODES.NOT_FOUND,
         message: 'Contact not found'
       });
     }
@@ -43,7 +64,7 @@ router.get('/:phoneNumber/rate-limit', async (req, res) => {
     // Reset window if it's been more than 1 minute
     if (windowStartAt) {
       const windowElapsed = (now - new Date(windowStartAt)) / 1000; // seconds
-      if (windowElapsed >= 60) {
+      if (windowElapsed >= RATE_LIMIT_WINDOW_SECONDS) {
         messageCount = 0;
         windowStartAt = now;
         isThrottled = false;
@@ -61,37 +82,36 @@ router.get('/:phoneNumber/rate-limit', async (req, res) => {
       windowStartAt = now;
     }
 
-    const allowed = !isThrottled && messageCount < 10;
-    const remaining = Math.max(0, 10 - messageCount);
+    const allowed = !isThrottled && messageCount < RATE_LIMIT_PER_CONTACT;
+    const remaining = Math.max(0, RATE_LIMIT_PER_CONTACT - messageCount);
     
     // Calculate when the window will reset
-    const windowResetAt = new Date(new Date(windowStartAt).getTime() + 60000);
+    const windowResetAt = new Date(new Date(windowStartAt).getTime() + RATE_LIMIT_WINDOW_MS);
 
-    res.json({
-      success: true,
+    const processingTime = Date.now() - startTime;
+
+    return res.status(HTTP_STATUS.OK).json({
       phoneNumber,
-      rateLimitStatus: {
-        allowed,
-        messageCount,
-        remaining,
-        limit: 10,
-        windowStartAt,
-        windowResetAt,
-        isThrottled,
-        throttledUntil,
-        message: allowed 
-          ? `${remaining} message(s) remaining in current window`
-          : isThrottled 
-            ? `Throttled until ${new Date(throttledUntil).toISOString()}`
-            : 'Rate limit reached (10 messages/minute)'
-      }
+      allowed,
+      messageCount,
+      remaining,
+      limit: RATE_LIMIT_PER_CONTACT,
+      windowResetAt,
+      isThrottled,
+      throttledUntil,
+      processingTime
     });
   } catch (error) {
-    console.error('Error getting rate limit status:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get rate limit status',
-      error: error.message
+    const processingTime = Date.now() - startTime;
+    logger.error('Get rate limit error', {
+      businessId: req.businessId?.toString(),
+      phoneNumber: req.params.phoneNumber,
+      error: error.message,
+      processingTime
+    });
+    return res.status(HTTP_STATUS.INTERNAL_ERROR).json({
+      error: ERROR_CODES.INTERNAL_ERROR,
+      message: 'Failed to get rate limit status'
     });
   }
 });
@@ -102,69 +122,77 @@ router.get('/:phoneNumber/rate-limit', async (req, res) => {
  * @access  Private
  */
 router.get('/:phoneNumber/message-queue', async (req, res) => {
+  const startTime = Date.now();
+  
   try {
     const { phoneNumber } = req.params;
+
+    // Input validation
+    if (!phoneNumber) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        error: ERROR_CODES.VALIDATION_ERROR,
+        message: 'phoneNumber is required'
+      });
+    }
 
     const contact = await Contact.findOne({
       businessId: req.businessId,
       phoneNumber
     });
 
-    if (!contact) {
-      return res.status(404).json({
-        success: false,
-        message: 'Contact not found'
-      });
-    }
+  if (!contact) {
+    throw new NotFoundError('Contact not found');
+  }
 
-    // Find conversation
-    const conversation = await Conversation.findOne({
-      businessId: req.businessId,
-      phoneNumber
-    });
+  // Find conversation
+  const conversation = await Conversation.findOne({
+    businessId: req.businessId,
+    phoneNumber
+  });
 
-    if (!conversation) {
-      return res.json({
-        success: true,
-        phoneNumber,
-        queuedMessages: [],
-        count: 0
-      });
-    }
-
-    // Filter messages that are queued for rate limiting
-    const queuedMessages = conversation.messages.filter(msg => 
-      msg.queuedForRateLimit === true && 
-      msg.status !== 'sent' &&
-      msg.status !== 'failed'
-    );
-
-    // Sort by scheduled send time
-    queuedMessages.sort((a, b) => 
-      new Date(a.scheduledSendAt) - new Date(b.scheduledSendAt)
-    );
-
-    res.json({
-      success: true,
+  if (!conversation) {
+    return res.success({
       phoneNumber,
-      queuedMessages: queuedMessages.map(msg => ({
-        id: msg._id,
-        type: msg.type,
-        content: msg.content,
-        scheduledSendAt: msg.scheduledSendAt,
-        queuedAt: msg.timestamp,
-        estimatedSendIn: msg.scheduledSendAt 
-          ? Math.max(0, Math.ceil((new Date(msg.scheduledSendAt) - new Date()) / 1000))
-          : null
-      })),
-      count: queuedMessages.length
+      queuedMessages: [],
+      count: 0
     });
+  }
+
+  // Filter messages that are queued for rate limiting
+  const queuedMessages = conversation.messages.filter(msg => 
+    msg.queuedForRateLimit === true && 
+    msg.status !== 'sent' &&
+    msg.status !== 'failed'
+  );
+
+  // Sort by scheduled send time
+  queuedMessages.sort((a, b) => 
+    new Date(a.scheduledSendAt) - new Date(b.scheduledSendAt)
+  );
+
+  return res.success({
+    phoneNumber,
+    queuedMessages: queuedMessages.map(msg => ({
+      id: msg._id,
+      type: msg.type,
+      content: msg.content,
+      scheduledSendAt: msg.scheduledSendAt,
+      queuedAt: msg.timestamp,
+      estimatedSendIn: msg.scheduledSendAt 
+        ? Math.max(0, Math.ceil((new Date(msg.scheduledSendAt) - new Date()) / 1000))
+        : null
+    })),
+    count: queuedMessages.length
+  });
   } catch (error) {
-    console.error('Error getting message queue:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get message queue',
-      error: error.message
+    logger.error('Error getting queued messages', { 
+      error: error.message, 
+      phoneNumber: req.params.phoneNumber,
+      businessId: req.businessId?.toString() 
+    });
+    return res.status(HTTP_STATUS.INTERNAL_ERROR).json({
+      error: ERROR_CODES.INTERNAL_ERROR,
+      message: 'Failed to get queued messages'
     });
   }
 });
@@ -175,8 +203,18 @@ router.get('/:phoneNumber/message-queue', async (req, res) => {
  * @access  Private
  */
 router.post('/:phoneNumber/rate-limit/check', async (req, res) => {
+  const startTime = Date.now();
+  
   try {
     const { phoneNumber } = req.params;
+
+    // Input validation
+    if (!phoneNumber) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        error: ERROR_CODES.VALIDATION_ERROR,
+        message: 'phoneNumber is required'
+      });
+    }
 
     const contact = await Contact.findOne({
       businessId: req.businessId,
@@ -184,8 +222,8 @@ router.post('/:phoneNumber/rate-limit/check', async (req, res) => {
     });
 
     if (!contact) {
-      return res.status(404).json({
-        success: false,
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        error: ERROR_CODES.NOT_FOUND,
         message: 'Contact not found'
       });
     }
@@ -201,7 +239,7 @@ router.post('/:phoneNumber/rate-limit/check', async (req, res) => {
     // Reset window if it's been more than 1 minute
     if (windowStartAt) {
       const windowElapsed = (now - new Date(windowStartAt)) / 1000;
-      if (windowElapsed >= 60) {
+      if (windowElapsed >= RATE_LIMIT_WINDOW_SECONDS) {
         messageCount = 0;
         isThrottled = false;
       }
@@ -213,26 +251,35 @@ router.post('/:phoneNumber/rate-limit/check', async (req, res) => {
       messageCount = 0;
     }
 
-    const allowed = !isThrottled && messageCount < 10;
+    const allowed = !isThrottled && messageCount < RATE_LIMIT_PER_CONTACT;
 
-    res.json({
-      success: true,
+    const processingTime = Date.now() - startTime;
+
+    return res.status(HTTP_STATUS.OK).json({
       phoneNumber,
       allowed,
       messageCount,
+      limit: RATE_LIMIT_PER_CONTACT,
       isThrottled,
+      throttledUntil,
       recommendation: allowed
         ? 'Message can be sent immediately'
         : isThrottled
           ? `Wait until ${new Date(throttledUntil).toISOString()}`
-          : 'Queue message for later delivery (rate limit reached)'
+          : 'Queue message for later delivery (rate limit reached)',
+      processingTime
     });
   } catch (error) {
-    console.error('Error checking rate limit:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to check rate limit',
-      error: error.message
+    const processingTime = Date.now() - startTime;
+    logger.error('Check rate limit error', {
+      businessId: req.businessId?.toString(),
+      phoneNumber: req.params.phoneNumber,
+      error: error.message,
+      processingTime
+    });
+    return res.status(HTTP_STATUS.INTERNAL_ERROR).json({
+      error: ERROR_CODES.INTERNAL_ERROR,
+      message: 'Failed to check rate limit'
     });
   }
 });
@@ -243,8 +290,18 @@ router.post('/:phoneNumber/rate-limit/check', async (req, res) => {
  * @access  Private (Internal use by messaging service)
  */
 router.post('/:phoneNumber/rate-limit/increment', async (req, res) => {
+  const startTime = Date.now();
+  
   try {
     const { phoneNumber } = req.params;
+
+    // Input validation
+    if (!phoneNumber) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        error: ERROR_CODES.VALIDATION_ERROR,
+        message: 'phoneNumber is required'
+      });
+    }
 
     const contact = await Contact.findOne({
       businessId: req.businessId,
@@ -252,8 +309,8 @@ router.post('/:phoneNumber/rate-limit/increment', async (req, res) => {
     });
 
     if (!contact) {
-      return res.status(404).json({
-        success: false,
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        error: ERROR_CODES.NOT_FOUND,
         message: 'Contact not found'
       });
     }
@@ -271,7 +328,7 @@ router.post('/:phoneNumber/rate-limit/increment', async (req, res) => {
     } else {
       // Check if window should reset
       const windowElapsed = (now - new Date(contact.rateLimiting.windowStartAt)) / 1000;
-      if (windowElapsed >= 60) {
+      if (windowElapsed >= RATE_LIMIT_WINDOW_SECONDS) {
         contact.rateLimiting.windowStartAt = now;
         contact.rateLimiting.messageCount = 0;
         contact.rateLimiting.isThrottled = false;
@@ -284,29 +341,37 @@ router.post('/:phoneNumber/rate-limit/increment', async (req, res) => {
     contact.rateLimiting.lastMessageAt = now;
 
     // Check if limit reached
-    if (contact.rateLimiting.messageCount >= 10) {
+    if (contact.rateLimiting.messageCount >= RATE_LIMIT_PER_CONTACT) {
       contact.rateLimiting.isThrottled = true;
       // Throttle until window resets (1 minute from window start)
       contact.rateLimiting.throttledUntil = new Date(
-        new Date(contact.rateLimiting.windowStartAt).getTime() + 60000
+        new Date(contact.rateLimiting.windowStartAt).getTime() + RATE_LIMIT_WINDOW_MS
       );
     }
 
     await contact.save();
 
-    res.json({
-      success: true,
+    const processingTime = Date.now() - startTime;
+
+    return res.status(HTTP_STATUS.OK).json({
       phoneNumber,
       messageCount: contact.rateLimiting.messageCount,
+      limit: RATE_LIMIT_PER_CONTACT,
       isThrottled: contact.rateLimiting.isThrottled,
-      throttledUntil: contact.rateLimiting.throttledUntil
+      throttledUntil: contact.rateLimiting.throttledUntil,
+      processingTime
     });
   } catch (error) {
-    console.error('Error incrementing rate limit:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to increment rate limit',
-      error: error.message
+    const processingTime = Date.now() - startTime;
+    logger.error('Increment rate limit error', {
+      businessId: req.businessId?.toString(),
+      phoneNumber: req.params.phoneNumber,
+      error: error.message,
+      processingTime
+    });
+    return res.status(HTTP_STATUS.INTERNAL_ERROR).json({
+      error: ERROR_CODES.INTERNAL_ERROR,
+      message: 'Failed to increment rate limit'
     });
   }
 });
@@ -317,6 +382,8 @@ router.post('/:phoneNumber/rate-limit/increment', async (req, res) => {
  * @access  Private
  */
 router.get('/rate-limit/throttled', async (req, res) => {
+  const startTime = Date.now();
+  
   try {
     const now = new Date();
 
@@ -326,25 +393,32 @@ router.get('/rate-limit/throttled', async (req, res) => {
       'rateLimiting.throttledUntil': { $gt: now }
     }).select('phoneNumber name rateLimiting');
 
-    res.json({
-      success: true,
+    const processingTime = Date.now() - startTime;
+
+    return res.status(HTTP_STATUS.OK).json({
       throttledContacts: throttledContacts.map(contact => ({
         phoneNumber: contact.phoneNumber,
         name: contact.name,
         messageCount: contact.rateLimiting.messageCount,
+        limit: RATE_LIMIT_PER_CONTACT,
         throttledUntil: contact.rateLimiting.throttledUntil,
         windowResetIn: Math.ceil(
           (new Date(contact.rateLimiting.throttledUntil) - now) / 1000
         )
       })),
-      count: throttledContacts.length
+      count: throttledContacts.length,
+      processingTime
     });
   } catch (error) {
-    console.error('Error getting throttled contacts:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get throttled contacts',
-      error: error.message
+    const processingTime = Date.now() - startTime;
+    logger.error('Get throttled contacts error', {
+      businessId: req.businessId?.toString(),
+      error: error.message,
+      processingTime
+    });
+    return res.status(HTTP_STATUS.INTERNAL_ERROR).json({
+      error: ERROR_CODES.INTERNAL_ERROR,
+      message: 'Failed to get throttled contacts'
     });
   }
 });

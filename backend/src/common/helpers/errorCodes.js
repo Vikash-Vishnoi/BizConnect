@@ -1,6 +1,13 @@
 /**
  * Standardized Error Codes and Messages
  * Provides consistent error handling across the application
+ * 
+ * @deprecated This file is maintained for backward compatibility.
+ * New code should use ERROR_CODES from '../constants/index.js'
+ * which provides simpler, centralized error code constants.
+ * 
+ * This file contains detailed error definitions with specific codes,
+ * messages, and HTTP status codes for legacy support.
  */
  
 const ERROR_CODES = {

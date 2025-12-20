@@ -1,9 +1,52 @@
 const express = require('express');
 const router = express.Router();
-const { auth } = require('../../../core/middlewares/auth');
-const { enforceBusinessIsolation } = require('../../../core/middlewares/businessSecurity');
+const { authenticate: auth } = require('../../../core/middlewares/auth');
+const { requireBusiness } = require('../../../core/middlewares/authorization');
+const { businessContext } = require('../../../core/middlewares/businessContext');
+const { ERROR_CODES, HTTP_STATUS } = require('../../../common/constants');
 const Conversation = require('../../../core/database/models/Conversation');
 const logger = require('../../../common/helpers/logger');
+const { NotFoundError, ValidationError } = require('../../../common/errors');
+
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+// Time Periods
+const DEFAULT_TREND_DAYS = 30;
+const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
+
+// Group By Options
+const GROUP_BY_HOUR = 'hour';
+const GROUP_BY_DAY = 'day';
+const GROUP_BY_WEEK = 'week';
+const GROUP_BY_MONTH = 'month';
+const VALID_GROUP_BY_OPTIONS = [GROUP_BY_HOUR, GROUP_BY_DAY, GROUP_BY_WEEK, GROUP_BY_MONTH];
+
+// Roles
+const ROLE_ADMIN = 'admin';
+
+// Decimal Precision
+const PERCENTAGE_DECIMAL_PLACES = 2;
+
+// ISO String Slices
+const ISO_SLICE_HOUR = 13;
+const ISO_SLICE_DAY = 10;
+const ISO_SLICE_MONTH = 7;
+
+// Error Messages
+const ERROR_CONVERSATION_NOT_FOUND = 'Conversation not found';
+const ERROR_BUSINESS_ID_REQUIRED = 'businessId is required';
+const ERROR_ACCESS_DENIED = 'Access denied';
+const ERROR_INVALID_GROUP_BY = 'groupBy must be one of: hour, day, week, month';
+const ERROR_CONVERSATION_REACTIONS_FAILED = 'Failed to get conversation reactions';
+const ERROR_REACTION_SUMMARY_FAILED = 'Failed to get reaction summary';
+const ERROR_REACTION_TRENDS_FAILED = 'Failed to get reaction trends';
+
+// Success Messages
+const SUCCESS_CONVERSATION_REACTIONS = 'Conversation reactions retrieved successfully';
+const SUCCESS_REACTION_SUMMARY = 'Reaction summary retrieved successfully';
+const SUCCESS_REACTION_TRENDS = 'Reaction trends retrieved successfully';
 
 /**
  * Reaction Analytics Routes
@@ -12,11 +55,17 @@ const logger = require('../../../common/helpers/logger');
  * P1 FIX: Add reaction analytics
  */
 
+// ============================================================================
+// ROUTES
+// ============================================================================
+
 /**
  * GET /api/conversations/:conversationId/reactions
  * Get all reactions for a conversation
  */
 router.get('/:conversationId/reactions', auth, async (req, res) => {
+  const startTime = Date.now();
+  
   try {
     const { conversationId } = req.params;
 
@@ -24,10 +73,8 @@ router.get('/:conversationId/reactions', auth, async (req, res) => {
       .select('messages contactName contactPhone');
 
     if (!conversation) {
-      return res.status(404).json({
-        success: false,
-        message: 'Conversation not found'
-      });
+      const processingTime = Date.now() - startTime;
+      throw new NotFoundError(ERROR_CONVERSATION_NOT_FOUND);
     }
 
     // Extract messages with reactions
@@ -44,7 +91,8 @@ router.get('/:conversationId/reactions', auth, async (req, res) => {
         }
       }));
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    res.status(HTTP_STATUS.OK).json({
       success: true,
       data: {
         conversationId: conversation._id,
@@ -52,18 +100,28 @@ router.get('/:conversationId/reactions', auth, async (req, res) => {
         contactPhone: conversation.contactPhone,
         reactions: reactedMessages,
         totalReactions: reactedMessages.length
-      }
+      },
+      message: SUCCESS_CONVERSATION_REACTIONS,
+      processingTime
     });
 
   } catch (error) {
-    logger.error('Get conversation reactions error', {
+    const processingTime = Date.now() - startTime;
+    logger.error('Route error', {
+      error: error.message,
+      stack: error.stack,
       conversationId: req.params.conversationId,
-      error: error.message
+      processingTime
     });
 
-    res.status(500).json({
+    if (error instanceof NotFoundError) {
+      throw error;
+    }
+
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: error.message
+      message: ERROR_CONVERSATION_REACTIONS_FAILED,
+      processingTime
     });
   }
 });
@@ -72,22 +130,24 @@ router.get('/:conversationId/reactions', auth, async (req, res) => {
  * GET /api/analytics/reactions/summary
  * Get reaction statistics for a business
  */
-router.get('/summary', auth, async (req, res) => {
+router.get('/summary', auth, businessContext, async (req, res) => {
+  const startTime = Date.now();
+  
   try {
     const { businessId, startDate, endDate } = req.query;
 
     if (!businessId) {
-      return res.status(400).json({
-        success: false,
-        message: 'businessId is required'
-      });
+      const processingTime = Date.now() - startTime;
+      throw new ValidationError(ERROR_BUSINESS_ID_REQUIRED);
     }
 
     // Verify business access
-    if (req.user.role !== 'admin' && req.user.businessId.toString() !== businessId) {
-      return res.status(403).json({
+    if (req.user.role !== ROLE_ADMIN && req.user.businessId.toString() !== businessId) {
+      const processingTime = Date.now() - startTime;
+      return res.status(HTTP_STATUS.FORBIDDEN).json({
         success: false,
-        message: 'Access denied'
+        message: ERROR_ACCESS_DENIED,
+        processingTime
       });
     }
 
@@ -139,32 +199,44 @@ router.get('/summary', auth, async (req, res) => {
     // Calculate percentages
     for (const emoji in reactionStats) {
       reactionStats[emoji].percentage = parseFloat(
-        ((reactionStats[emoji].count / totalReactions) * 100).toFixed(2)
+        ((reactionStats[emoji].count / totalReactions) * 100).toFixed(PERCENTAGE_DECIMAL_PLACES)
       );
     }
 
     // Sort by count
     const sortedReactions = Object.values(reactionStats).sort((a, b) => b.count - a.count);
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    res.status(HTTP_STATUS.OK).json({
       success: true,
       data: {
         totalReactions,
         totalMessages,
-        reactionRate: totalMessages > 0 ? parseFloat(((totalReactions / totalMessages) * 100).toFixed(2)) : 0,
+        reactionRate: totalMessages > 0 ? parseFloat(((totalReactions / totalMessages) * 100).toFixed(PERCENTAGE_DECIMAL_PLACES)) : 0,
         reactions: sortedReactions,
         topReaction: sortedReactions[0] || null
-      }
+      },
+      message: SUCCESS_REACTION_SUMMARY,
+      processingTime
     });
 
   } catch (error) {
-    logger.error('Get reaction summary error', {
-      error: error.message
+    const processingTime = Date.now() - startTime;
+    logger.error('Route error', {
+      error: error.message,
+      stack: error.stack,
+      businessId: req.query.businessId,
+      processingTime
     });
 
-    res.status(500).json({
+    if (error instanceof ValidationError) {
+      throw error;
+    }
+
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: error.message
+      message: ERROR_REACTION_SUMMARY_FAILED,
+      processingTime
     });
   }
 });
@@ -173,36 +245,36 @@ router.get('/summary', auth, async (req, res) => {
  * GET /api/analytics/reactions/trends
  * Get reaction trends over time
  */
-router.get('/trends', auth, async (req, res) => {
+router.get('/trends', auth, businessContext, async (req, res) => {
+  const startTime = Date.now();
+  
   try {
-    const { businessId, startDate, endDate, groupBy = 'day' } = req.query;
+    const { businessId, startDate, endDate, groupBy = GROUP_BY_DAY } = req.query;
 
     if (!businessId) {
-      return res.status(400).json({
-        success: false,
-        message: 'businessId is required'
-      });
+      const processingTime = Date.now() - startTime;
+      throw new ValidationError(ERROR_BUSINESS_ID_REQUIRED);
     }
 
     // Verify business access
-    if (req.user.role !== 'admin' && req.user.businessId.toString() !== businessId) {
-      return res.status(403).json({
+    if (req.user.role !== ROLE_ADMIN && req.user.businessId.toString() !== businessId) {
+      const processingTime = Date.now() - startTime;
+      return res.status(HTTP_STATUS.FORBIDDEN).json({
         success: false,
-        message: 'Access denied'
+        message: ERROR_ACCESS_DENIED,
+        processingTime
       });
     }
 
     // Validate groupBy
-    if (!['hour', 'day', 'week', 'month'].includes(groupBy)) {
-      return res.status(400).json({
-        success: false,
-        message: 'groupBy must be one of: hour, day, week, month'
-      });
+    if (!VALID_GROUP_BY_OPTIONS.includes(groupBy)) {
+      const processingTime = Date.now() - startTime;
+      throw new ValidationError(ERROR_INVALID_GROUP_BY);
     }
 
     // Default to last 30 days if no dates specified
     const end = endDate ? new Date(endDate) : new Date();
-    const start = startDate ? new Date(startDate) : new Date(end.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const start = startDate ? new Date(startDate) : new Date(end.getTime() - DEFAULT_TREND_DAYS * MILLISECONDS_PER_DAY);
 
     const conversations = await Conversation.find({
       businessId,
@@ -223,16 +295,16 @@ router.get('/trends', auth, async (req, res) => {
 
           // Create time bucket based on groupBy
           let bucket;
-          if (groupBy === 'hour') {
-            bucket = new Date(reactedAt).toISOString().slice(0, 13) + ':00:00Z';
-          } else if (groupBy === 'day') {
-            bucket = new Date(reactedAt).toISOString().slice(0, 10);
-          } else if (groupBy === 'week') {
+          if (groupBy === GROUP_BY_HOUR) {
+            bucket = new Date(reactedAt).toISOString().slice(0, ISO_SLICE_HOUR) + ':00:00Z';
+          } else if (groupBy === GROUP_BY_DAY) {
+            bucket = new Date(reactedAt).toISOString().slice(0, ISO_SLICE_DAY);
+          } else if (groupBy === GROUP_BY_WEEK) {
             const date = new Date(reactedAt);
             const weekStart = new Date(date.setDate(date.getDate() - date.getDay()));
-            bucket = weekStart.toISOString().slice(0, 10);
-          } else if (groupBy === 'month') {
-            bucket = new Date(reactedAt).toISOString().slice(0, 7);
+            bucket = weekStart.toISOString().slice(0, ISO_SLICE_DAY);
+          } else if (groupBy === GROUP_BY_MONTH) {
+            bucket = new Date(reactedAt).toISOString().slice(0, ISO_SLICE_MONTH);
           }
 
           if (!trends[bucket]) {
@@ -259,7 +331,8 @@ router.get('/trends', auth, async (req, res) => {
       a.period.localeCompare(b.period)
     );
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    res.status(HTTP_STATUS.OK).json({
       success: true,
       data: {
         groupBy,
@@ -267,17 +340,28 @@ router.get('/trends', auth, async (req, res) => {
         endDate: end,
         trends: trendArray,
         totalPeriods: trendArray.length
-      }
+      },
+      message: SUCCESS_REACTION_TRENDS,
+      processingTime
     });
 
   } catch (error) {
-    logger.error('Get reaction trends error', {
-      error: error.message
+    const processingTime = Date.now() - startTime;
+    logger.error('Route error', {
+      error: error.message,
+      stack: error.stack,
+      businessId: req.query.businessId,
+      processingTime
     });
 
-    res.status(500).json({
+    if (error instanceof ValidationError) {
+      throw error;
+    }
+
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: error.message
+      message: ERROR_REACTION_TRENDS_FAILED,
+      processingTime
     });
   }
 });

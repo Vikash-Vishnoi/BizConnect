@@ -1,18 +1,33 @@
 const winston = require('winston');
 const path = require('path');
+const config = require('../../config/server.config');
 
 /**
- * Production-Ready Logger
+ * Production-Ready Logger with Multi-Business Support
  * 
  * Uses Winston for structured logging with different transports
- * based  on environment (development vs production)
+ * based on environment (development vs production)
  * 
  * Log Levels: error, warn, info, http, verbose, debug, silly
  * Production: Only error and warn
  * Development: All levels
  * 
  * GDPR Compliant: Masks PII (phone numbers, emails, names) in logs
+ * Multi-Business: Includes business context in logs
+ * 
+ * @module common/helpers/logger
  */
+
+// Sensitive field patterns for PII detection
+const SENSITIVE_FIELDS = ['phoneNumber', 'phone', 'from', 'to', 'email', 'name', 'contactName'];
+
+// PII masking configuration
+const PII_MASK_CONFIG = {
+  PHONE_VISIBLE_CHARS: 4,
+  PHONE_MASK_LENGTH: 6,
+  NAME_MASK_LENGTH: 6,
+  EMAIL_USERNAME_MASK_LENGTH: 3,
+};
 
 /**
  * Mask PII data for GDPR compliance
@@ -39,10 +54,11 @@ function maskPII(value, type = 'auto') {
   switch (type) {
     case 'phone':
       // Show last 4 digits: +1234567890 -> +******7890
-      if (value.length > 4) {
-        const visiblePart = value.slice(-4);
+      if (value.length > PII_MASK_CONFIG.PHONE_VISIBLE_CHARS) {
+        const visiblePart = value.slice(-PII_MASK_CONFIG.PHONE_VISIBLE_CHARS);
         const prefix = value.startsWith('+') ? '+' : '';
-        return `${prefix}${'*'.repeat(Math.min(6, value.length - 4))}${visiblePart}`;
+        const maskLength = Math.min(PII_MASK_CONFIG.PHONE_MASK_LENGTH, value.length - PII_MASK_CONFIG.PHONE_VISIBLE_CHARS);
+        return `${prefix}${'*'.repeat(maskLength)}${visiblePart}`;
       }
       return '*'.repeat(value.length);
 
@@ -52,7 +68,7 @@ function maskPII(value, type = 'auto') {
       if (parts.length === 2) {
         const username = parts[0];
         const maskedUsername = username.length > 1 
-          ? username[0] + '*'.repeat(Math.min(3, username.length - 1))
+          ? username[0] + '*'.repeat(Math.min(PII_MASK_CONFIG.EMAIL_USERNAME_MASK_LENGTH, username.length - 1))
           : '*';
         return `${maskedUsername}@${parts[1]}`;
       }
@@ -61,7 +77,8 @@ function maskPII(value, type = 'auto') {
     case 'name':
       // Show first and last char: John Doe -> J******e
       if (value.length > 2) {
-        return value[0] + '*'.repeat(Math.min(6, value.length - 2)) + value[value.length - 1];
+        const maskLength = Math.min(PII_MASK_CONFIG.NAME_MASK_LENGTH, value.length - 2);
+        return value[0] + '*'.repeat(maskLength) + value[value.length - 1];
       }
       return '*'.repeat(value.length);
 
@@ -76,7 +93,7 @@ function maskPII(value, type = 'auto') {
  * @param {Array} sensitiveFields - Field names containing PII
  * @returns {*} Object with masked PII
  */
-function maskPIIInObject(obj, sensitiveFields = ['phoneNumber', 'phone', 'from', 'to', 'email', 'name', 'contactName']) {
+function maskPIIInObject(obj, sensitiveFields = SENSITIVE_FIELDS) {
   if (!obj || typeof obj !== 'object') {
     return obj;
   }
@@ -142,17 +159,18 @@ const consoleFormat = winston.format.combine(
 
 // Create logger instance
 const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'error' : 'info'),
+  level: process.env.LOG_LEVEL || (config.isProduction() ? 'error' : 'info'),
   format: logFormat,
   defaultMeta: { 
     service: 'whatsapp-marketing-api',
-    environment: process.env.NODE_ENV || 'development'
+    environment: config.nodeEnv,
+    multiBusinessEnabled: config.multiBusinessEnabled,
   },
-  transports: []
+  transports: [],
 });
 
 // Production transports: File logging
-if (process.env.NODE_ENV === 'production') {
+if (config.isProduction()) {
   const logDir = process.env.LOG_FILE_PATH || path.join(__dirname, '../logs');
   const maxFileSize = parseInt(process.env.LOG_MAX_FILE_SIZE) || 10485760; // Default 10MB
   const maxFiles = parseInt(process.env.LOG_MAX_FILES) || 10;
@@ -190,14 +208,26 @@ if (process.env.NODE_ENV === 'production') {
  * Log API request
  */
 logger.logRequest = (req, res, duration) => {
-  logger.http('API Request', {
+  const logData = {
     method: req.method,
     url: req.originalUrl || req.url,
     status: res.statusCode,
     duration: `${duration}ms`,
     ip: req.ip || req.connection.remoteAddress,
-    userAgent: req.get('user-agent')
-  });
+    userAgent: req.get('user-agent'),
+  };
+
+  // Add business context if available
+  if (req.businessId) {
+    logData.businessId = req.businessId;
+  }
+
+  // Add user context if available
+  if (req.user?.id) {
+    logData.userId = req.user.id;
+  }
+
+  logger.http('API Request', logData);
 };
 
 /**

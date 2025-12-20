@@ -1,8 +1,50 @@
 const Business = require('../../core/database/models/Business');
 const WhatsAppService = require('../../integrations/whatsapp/whatsappService');
+const logger = require('./logger');
+const { ERROR_CODES, TIME_CONSTANTS } = require('../constants');
+
+/**
+ * Business Context Constants
+ */
+const BUSINESS_CACHE_TTL = parseInt(process.env.BUSINESS_CACHE_TTL) || (5 * TIME_CONSTANTS.MINUTE_MS); // 5 minutes
+const BUSINESS_STATUS_ACTIVE = 'active';
+const USER_TYPE_SUPER_ADMIN = 'super_admin';
+const NODE_ENV_DEVELOPMENT = 'development';
 
 /**
  * Business Context Utilities
+ * 
+ * PURPOSE:
+ * Multi-tenant business context management for WhatsApp operations
+ * Ensures proper business isolation and credential security
+ * 
+ * USAGE PATTERNS:
+ * 
+ * 1. GET WHATSAPP SERVICE:
+ *    const service = await getWhatsAppService(businessId);
+ *    await service.sendMessage(...);
+ * 
+ * 2. GET BUSINESS BY PHONE:
+ *    const business = await getBusinessByPhoneNumber(phoneNumberId);
+ *    // Used in webhook routing
+ * 
+ * 3. GET CREDENTIALS ONLY:
+ *    const creds = await getBusinessCredentials(businessId);
+ *    // For direct API calls
+ * 
+ * 4. VALIDATE BUSINESS ACCESS:
+ *    const hasAccess = await validateBusinessAccess(userId, businessId);
+ * 
+ * SECURITY:
+ * - All credentials accessed through secure methods
+ * - Business status validated before operations
+ * - Deleted businesses blocked from access
+ * - Team member access validated
+ * 
+ * PERFORMANCE:
+ * - Business data cached where appropriate
+ * - Credentials retrieved securely without exposure
+ * - Minimal database queries per operation
  * 
  * Helper functions for multi-business WhatsApp operations
  * Ensures proper business context and credentials are used
@@ -17,26 +59,55 @@ const WhatsAppService = require('../../integrations/whatsapp/whatsappService');
  * @throws {Error} If business not found or inactive
  */
 async function getWhatsAppService(businessId) {
+  const startTime = Date.now();
+  
   if (!businessId) {
-    throw new Error('Business ID is required');
+    const error = new Error('Business ID is required');
+    error.code = ERROR_CODES.VALIDATION_ERROR;
+    throw error;
   }
 
   const business = await Business.findById(businessId);
   
   if (!business) {
-    throw new Error(`Business not found: ${businessId}`);
+    logger.error('Business not found', {
+      businessId: businessId.toString(),
+      code: ERROR_CODES.NOT_FOUND
+    });
+    const error = new Error(`Business not found: ${businessId}`);
+    error.code = ERROR_CODES.NOT_FOUND;
+    throw error;
   }
   
-  if (business.status !== 'active') {
-    throw new Error(`Business is not active: ${business.name}`);
+  if (business.status !== BUSINESS_STATUS_ACTIVE) {
+    logger.warn('Business is not active', {
+      businessId: businessId.toString(),
+      status: business.status,
+      code: ERROR_CODES.BUSINESS_ACCESS_DENIED
+    });
+    const error = new Error(`Business is not active: ${business.name}`);
+    error.code = ERROR_CODES.BUSINESS_ACCESS_DENIED;
+    throw error;
   }
   
   if (business.isDeleted) {
-    throw new Error(`Business has been deleted: ${business.name}`);
+    logger.warn('Business has been deleted', {
+      businessId: businessId.toString(),
+      code: ERROR_CODES.BUSINESS_ACCESS_DENIED
+    });
+    const error = new Error(`Business has been deleted: ${business.name}`);
+    error.code = ERROR_CODES.BUSINESS_ACCESS_DENIED;
+    throw error;
   }
   
   // Get credentials securely
   const credentials = await business.getWhatsAppCredentials();
+  
+  logger.info('WhatsApp service created for business', {
+    businessId: businessId.toString(),
+    businessName: business.name,
+    processingTime: `${Date.now() - startTime}ms`
+  });
   
   // Return configured service instance
   return new WhatsAppService(credentials);
@@ -146,17 +217,29 @@ async function getWhatsAppServiceWithFallback(businessId = null) {
     try {
       return await getWhatsAppService(businessId);
     } catch (error) {
-      console.error('Failed to get business credentials:', error.message);
+      logger.error('Failed to get business credentials', {
+        businessId: businessId.toString(),
+        error: error.message,
+        code: error.code || ERROR_CODES.INTERNAL_ERROR
+      });
     }
   }
   
   // Fallback to environment (development only)
-  if (process.env.NODE_ENV === 'development' && process.env.WHATSAPP_ACCESS_TOKEN) {
-    console.warn('⚠️ Using fallback environment credentials (development only)');
+  if (process.env.NODE_ENV === NODE_ENV_DEVELOPMENT && process.env.WHATSAPP_ACCESS_TOKEN) {
+    logger.warn('Using fallback environment credentials (development only)', {
+      businessId: businessId?.toString() || 'none'
+    });
     return new WhatsAppService(); // Uses env credentials
   }
   
-  throw new Error('No valid WhatsApp credentials available');
+  const error = new Error('No valid WhatsApp credentials available');
+  error.code = ERROR_CODES.CONFIGURATION_ERROR;
+  logger.error('No WhatsApp credentials available', {
+    businessId: businessId?.toString() || 'none',
+    code: ERROR_CODES.CONFIGURATION_ERROR
+  });
+  throw error;
 }
 
 /**
@@ -168,11 +251,20 @@ async function getWhatsAppServiceWithFallback(businessId = null) {
  * @returns {Promise<Business>} Business document
  */
 const phoneNumberCache = new Map();
-const CACHE_TTL = parseInt(process.env.BUSINESS_CACHE_TTL) || (5 * 60 * 1000); // Default 5 minutes
 
 async function getBusinessByPhoneNumberCached(phoneNumberId) {
+  if (!phoneNumberId) {
+    const error = new Error('Phone Number ID is required');
+    error.code = ERROR_CODES.VALIDATION_ERROR;
+    throw error;
+  }
+
   const cached = phoneNumberCache.get(phoneNumberId);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+  if (cached && Date.now() - cached.timestamp < BUSINESS_CACHE_TTL) {
+    logger.debug('Using cached business', {
+      phoneNumberId,
+      age: `${Date.now() - cached.timestamp}ms`
+    });
     return cached.business;
   }
   
@@ -181,6 +273,12 @@ async function getBusinessByPhoneNumberCached(phoneNumberId) {
   phoneNumberCache.set(phoneNumberId, {
     business,
     timestamp: Date.now()
+  });
+  
+  logger.info('Business cached', {
+    phoneNumberId,
+    businessId: business._id.toString(),
+    cacheTTL: BUSINESS_CACHE_TTL
   });
   
   return business;

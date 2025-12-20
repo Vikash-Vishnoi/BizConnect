@@ -9,6 +9,53 @@ const Contact = require('../../../core/database/models/Contact');
 const Conversation = require('../../../core/database/models/Conversation');
 const Business = require('../../../core/database/models/Business');
 const logger = require('../../../common/helpers/logger');
+const { ERROR_CODES, TIME_CONSTANTS } = require('../../../common/constants');
+const config = require('../../../config/app.config');
+
+/**
+ * Alert Handler Constants
+ */
+const ALERT_DEDUPLICATION_MINUTES = parseInt(config.alerts?.deduplicationMinutes || process.env.ALERT_DEDUPLICATION_MINUTES || '5');
+
+const ALERT_SEVERITY = {
+  CRITICAL: 'CRITICAL',
+  HIGH: 'HIGH',
+  MEDIUM: 'MEDIUM',
+  LOW: 'LOW'
+};
+
+const QUALITY_RATINGS = {
+  RED: 'RED',
+  YELLOW: 'YELLOW',
+  GREEN: 'GREEN',
+  UNKNOWN: 'UNKNOWN'
+};
+
+const ALERT_TYPES = {
+  PHONE_NUMBER_QUALITY_UPDATE: 'PHONE_NUMBER_QUALITY_UPDATE',
+  QUALITY_RATING_RED: 'QUALITY_RATING_RED',
+  QUALITY_RATING_YELLOW: 'QUALITY_RATING_YELLOW',
+  QUALITY_RATING_GREEN: 'QUALITY_RATING_GREEN',
+  ACCOUNT_REINSTATED: 'ACCOUNT_REINSTATED',
+  ACCOUNT_BANNED: 'ACCOUNT_BANNED',
+  ACCOUNT_RESTRICTED: 'ACCOUNT_RESTRICTED',
+  MESSAGING_LIMIT_REACHED: 'MESSAGING_LIMIT_REACHED',
+  TEMPLATE_PAUSED: 'TEMPLATE_PAUSED',
+  UNKNOWN: 'UNKNOWN'
+};
+
+const WEBHOOK_EVENTS = {
+  FLAGGED: 'FLAGGED',
+  REINSTATED: 'REINSTATED',
+  BANNED: 'BANNED',
+  RESTRICTED: 'RESTRICTED'
+};
+
+const ALERT_STATUS = {
+  UNREAD: 'UNREAD',
+  READ: 'READ',
+  RESOLVED: 'RESOLVED'
+};
  
 /**
  * Handle account quality and status alerts
@@ -19,8 +66,21 @@ const logger = require('../../../common/helpers/logger');
  */
 async function handleAccountAlert(change, value, io, business) {
   const requestId = `alert_${Date.now()}`;
+  const startTime = Date.now();
   
   try {
+    // Validate inputs
+    if (!change || !value || !business) {
+      logger.error('handleAccountAlert called with invalid parameters', {
+        requestId,
+        hasChange: !!change,
+        hasValue: !!value,
+        hasBusiness: !!business,
+        code: ERROR_CODES.VALIDATION_ERROR
+      });
+      return;
+    }
+
     logger.logWhatsAppAPI('POST', 'webhook/account-alert', 200, {
       requestId,
       field: change.field,
@@ -36,14 +96,14 @@ async function handleAccountAlert(change, value, io, business) {
       logger.warn('Unable to parse account alert', {
         requestId,
         field: change.field,
-        event: value.event
+        event: value.event,
+        code: ERROR_CODES.VALIDATION_ERROR
       });
       return;
     }
 
     // Check for duplicate alert (deduplication)
-    const deduplicationMinutes = parseInt(process.env.ALERT_DEDUPLICATION_MINUTES || '5');
-    const deduplicationTime = new Date(Date.now() - deduplicationMinutes * 60 * 1000);
+    const deduplicationTime = new Date(Date.now() - ALERT_DEDUPLICATION_MINUTES * TIME_CONSTANTS.MINUTE_MS);
     const existingAlert = await AlertLog.findOne({
       businessId: business._id,
       alertType: alertData.alertType,
@@ -85,8 +145,8 @@ async function handleAccountAlert(change, value, io, business) {
         reasonCode: value.reason_code,
         rawData: value
       },
-      status: 'UNREAD',
-      requiresAction: alertData.severity === 'CRITICAL' || alertData.severity === 'HIGH',
+      status: ALERT_STATUS.UNREAD,
+      requiresAction: alertData.severity === ALERT_SEVERITY.CRITICAL || alertData.severity === ALERT_SEVERITY.HIGH,
       firstOccurredAt: new Date(),
       lastOccurredAt: new Date(),
       occurrenceCount: 1
@@ -121,12 +181,12 @@ async function handleAccountAlert(change, value, io, business) {
       });
 
       // Emit urgent alert for critical severity
-      if (alertData.severity === 'CRITICAL') {
+      if (alertData.severity === ALERT_SEVERITY.CRITICAL) {
         io.to(`user:${ownerId}`).emit('alert:urgent', {
           title: alertData.title,
           message: alertData.message,
           type: 'account_health',
-          severity: 'CRITICAL',
+          severity: ALERT_SEVERITY.CRITICAL,
           requiresAction: true,
           timestamp: new Date()
         });
@@ -136,15 +196,18 @@ async function handleAccountAlert(change, value, io, business) {
     logger.info('Account alert processing completed', {
       requestId,
       alertId: alert._id.toString(),
-      duration: `${Date.now() - parseInt(requestId.split('_')[1])}ms`
+      processingTime: `${Date.now() - startTime}ms`
     });
 
   } catch (error) {
     logger.error('Error handling account alert', {
       requestId,
+      businessId: business?._id?.toString(),
       error: error.message,
       stack: error.stack,
-      field: change?.field
+      field: change?.field,
+      code: error.code || ERROR_CODES.INTERNAL_ERROR,
+      processingTime: `${Date.now() - startTime}ms`
     });
   }
 }
@@ -153,8 +216,8 @@ async function handleAccountAlert(change, value, io, business) {
  * Parse account alert data with comprehensive categorization
  */
 function parseAccountAlert(field, value, requestId) {
-  let alertType = 'UNKNOWN';
-  let severity = 'MEDIUM';
+  let alertType = ALERT_TYPES.UNKNOWN;
+  let severity = ALERT_SEVERITY.MEDIUM;
   let title = 'WhatsApp Account Alert';
   let message = 'An alert was received from WhatsApp.';
   let affectedFeatures = [];
@@ -162,34 +225,34 @@ function parseAccountAlert(field, value, requestId) {
 
   try {
     if (field === 'phone_number_quality_update') {
-      alertType = 'PHONE_NUMBER_QUALITY_UPDATE';
-      const currentRating = value.current_limit || 'UNKNOWN';
+      alertType = ALERT_TYPES.PHONE_NUMBER_QUALITY_UPDATE;
+      const currentRating = value.current_limit || QUALITY_RATINGS.UNKNOWN;
       const previousRating = value.previous_limit;
       const event = value.event || '';
 
-      if (currentRating === 'RED' || event === 'FLAGGED') {
-        severity = 'CRITICAL';
-        alertType = 'QUALITY_RATING_RED';
+      if (currentRating === QUALITY_RATINGS.RED || event === WEBHOOK_EVENTS.FLAGGED) {
+        severity = ALERT_SEVERITY.CRITICAL;
+        alertType = ALERT_TYPES.QUALITY_RATING_RED;
         title = '🚨 CRITICAL: Account Quality Rating RED';
         message = `Phone number ${value.display_phone_number} has been flagged with RED quality rating. Messaging limits severely restricted. IMMEDIATE ACTION REQUIRED to review messaging practices.`;
         affectedFeatures = ['messaging', 'campaigns', 'templates', 'automation'];
         businessImpact = 'CRITICAL';
-      } else if (currentRating === 'YELLOW') {
-        severity = 'HIGH';
-        alertType = 'QUALITY_RATING_YELLOW';
+      } else if (currentRating === QUALITY_RATINGS.YELLOW) {
+        severity = ALERT_SEVERITY.HIGH;
+        alertType = ALERT_TYPES.QUALITY_RATING_YELLOW;
         title = '⚠️ WARNING: Account Quality Rating YELLOW';
         message = `Phone number ${value.display_phone_number} quality rating decreased to YELLOW. Review messaging practices to prevent further degradation.`;
         affectedFeatures = ['messaging_limits', 'template_approval'];
         businessImpact = 'HIGH';
-      } else if (event === 'REINSTATED') {
-        severity = 'LOW';
-        alertType = 'ACCOUNT_REINSTATED';
+      } else if (event === WEBHOOK_EVENTS.REINSTATED) {
+        severity = ALERT_SEVERITY.LOW;
+        alertType = ALERT_TYPES.ACCOUNT_REINSTATED;
         title = '✅ Account Reinstated';
         message = `Phone number ${value.display_phone_number} has been reinstated. Normal operations resumed.`;
         businessImpact = 'POSITIVE';
-      } else if (currentRating === 'GREEN') {
-        severity = 'LOW';
-        alertType = 'QUALITY_RATING_GREEN';
+      } else if (currentRating === QUALITY_RATINGS.GREEN) {
+        severity = ALERT_SEVERITY.LOW;
+        alertType = ALERT_TYPES.QUALITY_RATING_GREEN;
         title = '✅ Account Quality: GREEN';
         message = `Phone number ${value.display_phone_number} has good quality rating (GREEN).`;
         businessImpact = 'POSITIVE';

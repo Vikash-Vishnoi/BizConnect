@@ -27,8 +27,7 @@ const teamInvitationSchema = new mongoose.Schema({
   },
   token: {
     type: String,
-    required: true,
-    unique: true
+    required: true
   },
   status: {
     type: String,

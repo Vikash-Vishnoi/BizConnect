@@ -1,4 +1,41 @@
 const axios = require('axios');
+const logger = require('../../common/helpers/logger');
+const { ERROR_CODES, HTTP_STATUS, TIME_CONSTANTS } = require('../../common/constants');
+const config = require('../../config/app.config');
+
+/**
+ * WhatsApp Messaging Service Constants
+ */
+const GRAPH_API_TIMEOUT = parseInt(config.whatsapp?.timeout || process.env.WHATSAPP_API_TIMEOUT || '30000');
+const MESSAGING_PRODUCT = 'whatsapp';
+const RECIPIENT_TYPE = 'individual';
+
+const MESSAGE_TYPES = {
+  TEXT: 'text',
+  REACTION: 'reaction',
+  INTERACTIVE: 'interactive',
+  CONTACTS: 'contacts',
+  AUDIO: 'audio',
+  STICKER: 'sticker'
+};
+
+const INTERACTIVE_TYPES = {
+  BUTTON: 'button',
+  LIST: 'list',
+  CTA_URL: 'cta_url'
+};
+
+const CTA_BUTTON_TYPES = {
+  PHONE_NUMBER: 'PHONE_NUMBER',
+  URL: 'URL'
+};
+
+const BUTTON_TITLE_MAX_LENGTH = 20;
+const MAX_CTA_BUTTONS = 2;
+const MAX_REPLY_BUTTONS = 3;
+const MAX_LIST_SECTIONS = 10;
+
+const TOKEN_ERROR_CODE = 190;
 
 /**
  * WhatsApp Messaging Service
@@ -6,22 +43,36 @@ const axios = require('axios');
  */
 class WhatsAppMessagingService {
   constructor(config) {
+    if (!config || !config.phoneNumberId || !config.accessToken) {
+      throw new Error('WhatsApp configuration (phoneNumberId, accessToken) is required');
+    }
     this.phoneNumberId = config.phoneNumberId;
     this.accessToken = config.accessToken;
-    this.apiVersion = config.apiVersion;
+    this.apiVersion = config.apiVersion || 'v22.0';
     this.apiUrl = `https://graph.facebook.com/${this.apiVersion}`;
+    this.timeout = GRAPH_API_TIMEOUT;
   }
 
   /**
    * Send a text message with optional reply context
    */
   async sendTextMessage(to, text, context = null) {
+    const startTime = Date.now();
+    
     try {
+      if (!to || !text) {
+        return {
+          success: false,
+          error: 'Recipient and message text are required',
+          code: ERROR_CODES.VALIDATION_ERROR
+        };
+      }
+
       const payload = {
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
+        messaging_product: MESSAGING_PRODUCT,
+        recipient_type: RECIPIENT_TYPE,
         to: to,
-        type: 'text',
+        type: MESSAGE_TYPES.TEXT,
         text: {
           preview_url: false,
           body: text
@@ -39,15 +90,19 @@ class WhatsAppMessagingService {
           headers: {
             'Authorization': `Bearer ${this.accessToken}`,
             'Content-Type': 'application/json'
-          }
+          },
+          timeout: this.timeout
         }
       );
 
-      const messageId = response.data.messages[0].id?.toString().trim().replace(/\s+/g, '') || '';
+      const messageId = response.data.messages?.[0]?.id?.toString().trim().replace(/\s+/g, '') || '';
       
-      console.log('📤 Text message sent successfully!');
-      console.log('   Raw Message ID:', response.data.messages[0].id);
-      console.log('   Cleaned Message ID:', messageId);
+      logger.info('Text message sent successfully', {
+        phoneNumberId: this.phoneNumberId,
+        to,
+        messageId,
+        processingTime: `${Date.now() - startTime}ms`
+      });
 
       return {
         success: true,
@@ -55,17 +110,25 @@ class WhatsAppMessagingService {
         data: response.data
       };
     } catch (error) {
-      if (error.response?.data?.error?.code === 190 || 
+      if (error.response?.data?.error?.code === TOKEN_ERROR_CODE || 
           error.response?.data?.error?.message?.includes('token') ||
-          error.response?.status === 401) {
-        console.error('❌ WhatsApp Token Error: Access token is invalid or expired!');
-        console.error('   Please update WHATSAPP_ACCESS_TOKEN in .env file');
-        console.error('   Get new token from: https://developers.facebook.com/apps/');
+          error.response?.status === HTTP_STATUS.UNAUTHORIZED) {
+        logger.error('WhatsApp Token Error: Access token is invalid or expired', {
+          message: 'Please update WHATSAPP_ACCESS_TOKEN in .env file',
+          url: 'https://developers.facebook.com/apps/',
+          code: ERROR_CODES.CONFIGURATION_ERROR
+        });
       }
-      console.error('WhatsApp API Error:', error.response?.data || error.message);
+      logger.error('WhatsApp API Error', {
+        error: error.response?.data || error.message,
+        to,
+        code: ERROR_CODES.EXTERNAL_SERVICE_ERROR,
+        processingTime: `${Date.now() - startTime}ms`
+      });
       return {
         success: false,
-        error: error.response?.data?.error || error.message
+        error: error.response?.data?.error?.message || error.message,
+        code: ERROR_CODES.EXTERNAL_SERVICE_ERROR
       };
     }
   }
@@ -96,9 +159,12 @@ class WhatsAppMessagingService {
       );
 
       const reactionMessageId = response.data.messages[0].id?.toString().trim().replace(/\s+/g, '') || '';
-      console.log('😊 Reaction sent successfully!');
-      console.log('   Raw Message ID:', response.data.messages[0].id);
-      console.log('   Cleaned Message ID:', reactionMessageId);
+      logger.info('Reaction sent successfully', {
+        phoneNumberId: this.phoneNumberId,
+        to,
+        messageId: reactionMessageId,
+        emoji
+      });
 
       return {
         success: true,
@@ -106,7 +172,11 @@ class WhatsAppMessagingService {
         data: response.data
       };
     } catch (error) {
-      console.error('Send Reaction Error:', error.response?.data || error.message);
+      logger.error('Send Reaction Error', {
+        error: error.response?.data || error.message,
+        to,
+        emoji
+      });
       return {
         success: false,
         error: error.response?.data?.error || error.message
@@ -151,9 +221,12 @@ class WhatsAppMessagingService {
       );
 
       const messageId = response.data.messages[0].id?.toString().trim().replace(/\s+/g, '') || '';
-      console.log('🔘 Button message sent successfully!');
-      console.log('   Raw Message ID:', response.data.messages[0].id);
-      console.log('   Cleaned Message ID:', messageId);
+      logger.info('Button message sent successfully', {
+        phoneNumberId: this.phoneNumberId,
+        to,
+        messageId,
+        buttonCount: buttons.length
+      });
 
       return {
         success: true,
@@ -161,7 +234,10 @@ class WhatsAppMessagingService {
         data: response.data
       };
     } catch (error) {
-      console.error('Send Button Message Error:', error.response?.data || error.message);
+      logger.error('Send Button Message Error', {
+        error: error.response?.data || error.message,
+        to
+      });
       return {
         success: false,
         error: error.response?.data?.error || error.message
@@ -245,9 +321,12 @@ class WhatsAppMessagingService {
       );
 
       const messageId = response.data.messages[0].id?.toString().trim().replace(/\s+/g, '') || '';
-      console.log('🔗 CTA message sent successfully!');
-      console.log('   Message Type:', ctaButtons.map(b => b.type).join(', '));
-      console.log('   Message ID:', messageId);
+      logger.info('CTA message sent successfully', {
+        phoneNumberId: this.phoneNumberId,
+        to,
+        messageId,
+        messageType: ctaButtons.map(b => b.type).join(', ')
+      });
 
       return {
         success: true,
@@ -255,7 +334,10 @@ class WhatsAppMessagingService {
         data: response.data
       };
     } catch (error) {
-      console.error('Send CTA Message Error:', error.response?.data || error.message);
+      logger.error('Send CTA Message Error', {
+        error: error.response?.data || error.message,
+        to
+      });
       return {
         success: false,
         error: error.response?.data?.error || error.message
@@ -295,9 +377,12 @@ class WhatsAppMessagingService {
       );
 
       const messageId = response.data.messages[0].id?.toString().trim().replace(/\s+/g, '') || '';
-      console.log('📋 List message sent successfully!');
-      console.log('   Raw Message ID:', response.data.messages[0].id);
-      console.log('   Cleaned Message ID:', messageId);
+      logger.info('List message sent successfully', {
+        phoneNumberId: this.phoneNumberId,
+        to,
+        messageId,
+        sectionCount: sections.length
+      });
 
       return {
         success: true,
@@ -305,7 +390,10 @@ class WhatsAppMessagingService {
         data: response.data
       };
     } catch (error) {
-      console.error('Send List Message Error:', error.response?.data || error.message);
+      logger.error('Send List Message Error', {
+        error: error.response?.data || error.message,
+        to
+      });
       return {
         success: false,
         error: error.response?.data?.error || error.message
@@ -336,9 +424,12 @@ class WhatsAppMessagingService {
       );
 
       const messageId = response.data.messages[0].id?.toString().trim().replace(/\s+/g, '') || '';
-      console.log('👤 Contact message sent successfully!');
-      console.log('   Raw Message ID:', response.data.messages[0].id);
-      console.log('   Cleaned Message ID:', messageId);
+      logger.info('Contact message sent successfully', {
+        phoneNumberId: this.phoneNumberId,
+        to,
+        messageId,
+        contactCount: contacts.length
+      });
 
       return {
         success: true,
@@ -346,7 +437,10 @@ class WhatsAppMessagingService {
         data: response.data
       };
     } catch (error) {
-      console.error('Send Contact Error:', error.response?.data || error.message);
+      logger.error('Send Contact Error', {
+        error: error.response?.data || error.message,
+        to
+      });
       return {
         success: false,
         error: error.response?.data?.error || error.message
@@ -399,10 +493,13 @@ class WhatsAppMessagingService {
       );
 
       const messageId = response.data.messages[0].id?.toString().trim().replace(/\s+/g, '') || '';
-      console.log('📊 Poll message sent successfully!');
-      console.log('   Question:', question);
-      console.log('   Options:', options.length);
-      console.log('   Message ID:', messageId);
+      logger.info('Poll message sent successfully', {
+        phoneNumberId: this.phoneNumberId,
+        to,
+        messageId,
+        question,
+        optionsCount: options.length
+      });
 
       return {
         success: true,
@@ -410,7 +507,11 @@ class WhatsAppMessagingService {
         data: response.data
       };
     } catch (error) {
-      console.error('Send Poll Error:', error.response?.data || error.message);
+      logger.error('Send Poll Error', {
+        error: error.response?.data || error.message,
+        to,
+        question
+      });
       return {
         success: false,
         error: error.response?.data?.error || error.message
@@ -443,7 +544,10 @@ class WhatsAppMessagingService {
         data: response.data
       };
     } catch (error) {
-      console.error('Mark as Read Error:', error.response?.data || error.message);
+      logger.error('Mark as Read Error', {
+        error: error.response?.data || error.message,
+        messageId
+      });
       return {
         success: false,
         error: error.response?.data?.error || error.message
@@ -456,9 +560,11 @@ class WhatsAppMessagingService {
    */
   async sendAudioMessage(to, audioUrl, context = null) {
     try {
-      console.log('🎤 Sending audio message...');
-      console.log('   To:', to);
-      console.log('   Audio URL:', audioUrl);
+      logger.info('Sending audio message', {
+        phoneNumberId: this.phoneNumberId,
+        to,
+        audioUrl
+      });
 
       const payload = {
         messaging_product: 'whatsapp',
@@ -488,8 +594,11 @@ class WhatsAppMessagingService {
       );
 
       const messageId = response.data.messages[0].id?.toString().trim().replace(/\s+/g, '') || '';
-      console.log('✅ Audio message sent successfully!');
-      console.log('   Message ID:', messageId);
+      logger.info('Audio message sent successfully', {
+        phoneNumberId: this.phoneNumberId,
+        to,
+        messageId
+      });
 
       return {
         success: true,
@@ -497,7 +606,11 @@ class WhatsAppMessagingService {
         data: response.data
       };
     } catch (error) {
-      console.error('❌ Send Audio Error:', error.response?.data || error.message);
+      logger.error('Send Audio Error', {
+        error: error.response?.data || error.message,
+        to,
+        audioUrl
+      });
       return {
         success: false,
         error: error.response?.data?.error || error.message
@@ -510,9 +623,11 @@ class WhatsAppMessagingService {
    */
   async sendStickerMessage(to, stickerUrl, stickerId = null, context = null) {
     try {
-      console.log('😊 Sending sticker message...');
-      console.log('   To:', to);
-      console.log('   Sticker URL:', stickerUrl);
+      logger.info('Sending sticker message', {
+        phoneNumberId: this.phoneNumberId,
+        to,
+        stickerUrl
+      });
 
       const payload = {
         messaging_product: 'whatsapp',
@@ -540,8 +655,11 @@ class WhatsAppMessagingService {
       );
 
       const messageId = response.data.messages[0].id?.toString().trim().replace(/\s+/g, '') || '';
-      console.log('✅ Sticker message sent successfully!');
-      console.log('   Message ID:', messageId);
+      logger.info('Sticker message sent successfully', {
+        phoneNumberId: this.phoneNumberId,
+        to,
+        messageId
+      });
 
       return {
         success: true,
@@ -549,7 +667,11 @@ class WhatsAppMessagingService {
         data: response.data
       };
     } catch (error) {
-      console.error('❌ Send Sticker Error:', error.response?.data || error.message);
+      logger.error('Send Sticker Error', {
+        error: error.response?.data || error.message,
+        to,
+        stickerUrl
+      });
       return {
         success: false,
         error: error.response?.data?.error || error.message
@@ -595,9 +717,12 @@ class WhatsAppMessagingService {
       );
 
       const messageId = response.data.messages[0].id?.toString().trim().replace(/\s+/g, '') || '';
-      console.log('📤 Media message sent successfully!');
-      console.log('   Raw Message ID:', response.data.messages[0].id);
-      console.log('   Cleaned Message ID:', messageId);
+      logger.info('Media message sent successfully', {
+        phoneNumberId: this.phoneNumberId,
+        to,
+        messageId,
+        mediaType
+      });
 
       return {
         success: true,
@@ -605,7 +730,11 @@ class WhatsAppMessagingService {
         data: response.data
       };
     } catch (error) {
-      console.error('Send Media Error:', error.response?.data || error.message);
+      logger.error('Send Media Error', {
+        error: error.response?.data || error.message,
+        to,
+        mediaType
+      });
       return {
         success: false,
         error: error.response?.data?.error || error.message

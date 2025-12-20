@@ -1,9 +1,31 @@
 const express = require('express');
 const router = express.Router();
 const capabilitiesService = require('../services/capabilitiesService');
-const { auth } = require('../../../core/middlewares/auth');
-const { enforceBusinessIsolation } = require('../../../core/middlewares/businessSecurity');
+const { authenticate: auth } = require('../../../core/middlewares/auth');
+const { requireBusiness } = require('../../../core/middlewares/authorization');
+const { businessContext } = require('../../../core/middlewares/businessContext');
+const { ERROR_CODES, HTTP_STATUS } = require('../../../common/constants');
 const logger = require('../../../common/helpers/logger');
+const { ValidationError, NotFoundError } = require('../../../core/middlewares/errorHandler');
+
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+// Messages
+const MSG_CAPABILITIES_SYNCED = 'Capabilities synced successfully from WhatsApp';
+const MSG_PAYMENT_ENABLED = 'Payment capability enabled successfully';
+const MSG_PAYMENT_DISABLED = 'Payment capability disabled successfully';
+
+// Error Messages
+const ERROR_ENABLE_FIELD_REQUIRED = 'enable field is required and must be a boolean';
+
+// Field Names
+const FIELD_ENABLE = 'enable';
+
+// Action Verbs
+const ACTION_ENABLING = 'Enabling';
+const ACTION_DISABLING = 'Disabling';
 
 /**
  * Business Capabilities Routes
@@ -12,33 +34,38 @@ const logger = require('../../../common/helpers/logger');
  * P0 CRITICAL FIX: Cannot manage payment and advanced features
  */
 
+// ============================================================================
+// ROUTES
+// ============================================================================
+
 /**
  * GET /api/business/:businessId/capabilities
  * Get current capabilities
  */
-router.get('/:businessId/capabilities', auth, enforceBusinessIsolation, async (req, res) => {
+router.get('/:businessId/capabilities', auth, requireBusiness, businessContext, async (req, res) => {
+  const startTime = Date.now();
   try {
     const { businessId } = req.params;
 
-    logger.info(`Getting capabilities for business: ${businessId}`);
+    logger.info('Getting capabilities for business', { businessId: businessId.toString() });
 
     const capabilities = await capabilitiesService.getCapabilities(businessId);
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
       success: true,
-      data: capabilities
+      data: { data: capabilities },
+      processingTime
     });
-
   } catch (error) {
-    logger.error('Get capabilities error', {
+    logger.error('Route error', {
+      error: error.message,
+      stack: error.stack,
       businessId: req.params.businessId,
-      error: error.message
+      processingTime: Date.now() - startTime
     });
-
-    res.status(error.message.includes('not found') ? 404 : 500).json({
-      success: false,
-      message: error.message
-    });
+    if (error instanceof NotFoundError || error instanceof ValidationError) throw error;
+    throw new Error('Failed to process request');
   }
 });
 
@@ -46,31 +73,31 @@ router.get('/:businessId/capabilities', auth, enforceBusinessIsolation, async (r
  * POST /api/business/:businessId/capabilities/sync
  * Sync capabilities from WhatsApp API
  */
-router.post('/:businessId/capabilities/sync', auth, enforceBusinessIsolation, async (req, res) => {
+router.post('/:businessId/capabilities/sync', auth, requireBusiness, businessContext, async (req, res) => {
+  const startTime = Date.now();
   try {
     const { businessId } = req.params;
 
-    logger.info(`Syncing capabilities for business: ${businessId}`);
+    logger.info('Syncing capabilities for business', { businessId: businessId.toString() });
 
     const capabilities = await capabilitiesService.syncCapabilities(businessId);
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
       success: true,
-      data: capabilities,
-      message: 'Capabilities synced successfully from WhatsApp'
+      data: { data: capabilities },
+      message: MSG_CAPABILITIES_SYNCED,
+      processingTime
     });
-
   } catch (error) {
-    logger.error('Sync capabilities error', {
+    logger.error('Route error', {
+      error: error.message,
+      stack: error.stack,
       businessId: req.params.businessId,
-      error: error.message
+      processingTime: Date.now() - startTime
     });
-
-    res.status(error.message.includes('not found') ? 404 : 500).json({
-      success: false,
-      message: error.message,
-      error: error.response?.data || error.message
-    });
+    if (error instanceof NotFoundError || error instanceof ValidationError) throw error;
+    throw new Error('Failed to process request');
   }
 });
 
@@ -78,39 +105,36 @@ router.post('/:businessId/capabilities/sync', auth, enforceBusinessIsolation, as
  * PUT /api/business/:businessId/capabilities/payment
  * Enable/disable payment capability
  */
-router.put('/:businessId/capabilities/payment', auth, enforceBusinessIsolation, async (req, res) => {
+router.put('/:businessId/capabilities/payment', auth, requireBusiness, businessContext, async (req, res) => {
+  const startTime = Date.now();
   try {
     const { businessId } = req.params;
     const { enable } = req.body;
 
     if (typeof enable !== 'boolean') {
-      return res.status(400).json({
-        success: false,
-        message: 'enable field is required and must be a boolean'
-      });
+      throw new ValidationError(ERROR_ENABLE_FIELD_REQUIRED);
     }
 
-    logger.info(`${enable ? 'Enabling' : 'Disabling'} payment for business: ${businessId}`);
+    logger.info(`${enable ? ACTION_ENABLING : ACTION_DISABLING} payment for business`, { businessId: businessId.toString() });
 
     const capabilities = await capabilitiesService.updatePaymentCapability(businessId, enable);
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
       success: true,
-      data: capabilities,
-      message: `Payment capability ${enable ? 'enabled' : 'disabled'} successfully`
+      data: { data: capabilities },
+      message: enable ? MSG_PAYMENT_ENABLED : MSG_PAYMENT_DISABLED,
+      processingTime
     });
-
   } catch (error) {
-    logger.error('Update payment capability error', {
+    logger.error('Route error', {
+      error: error.message,
+      stack: error.stack,
       businessId: req.params.businessId,
-      error: error.message
+      processingTime: Date.now() - startTime
     });
-
-    res.status(error.message.includes('not found') ? 404 : 500).json({
-      success: false,
-      message: error.message,
-      error: error.response?.data || error.message
-    });
+    if (error instanceof NotFoundError || error instanceof ValidationError) throw error;
+    throw new Error('Failed to process request');
   }
 });
 
@@ -118,29 +142,30 @@ router.put('/:businessId/capabilities/payment', auth, enforceBusinessIsolation, 
  * GET /api/business/:businessId/capabilities/payment/config
  * Get payment configuration (requires payment to be enabled)
  */
-router.get('/:businessId/capabilities/payment/config', auth, enforceBusinessIsolation, async (req, res) => {
+router.get('/:businessId/capabilities/payment/config', auth, requireBusiness, businessContext, async (req, res) => {
+  const startTime = Date.now();
   try {
     const { businessId } = req.params;
 
-    logger.info(`Getting payment config for business: ${businessId}`);
+    logger.info('Getting payment config for business', { businessId: businessId.toString() });
 
     const config = await capabilitiesService.getPaymentConfiguration(businessId);
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
       success: true,
-      data: config
+      data: { data: config },
+      processingTime
     });
-
   } catch (error) {
-    logger.error('Get payment config error', {
+    logger.error('Route error', {
+      error: error.message,
+      stack: error.stack,
       businessId: req.params.businessId,
-      error: error.message
+      processingTime: Date.now() - startTime
     });
-
-    res.status(error.message.includes('not found') ? 404 : error.message.includes('not enabled') ? 403 : 500).json({
-      success: false,
-      message: error.message
-    });
+    if (error instanceof NotFoundError || error instanceof ValidationError) throw error;
+    throw new Error('Failed to process request');
   }
 });
 

@@ -4,33 +4,59 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
-const mongoose = require('mongoose');
 const http = require('http');
 const socketIo = require('socket.io');
 const rateLimit = require('express-rate-limit');
 
-// Utilities
-const { validateEnv, validateProductionEnv } = require('./common/helpers/envValidator');
+// Configuration
+const config = require('./config/server.config');
 const logger = require('./common/helpers/logger');
 
-// Validate environment
+// Utilities and validators
+const { validateEnv, validateProductionEnv } = require('./common/helpers/envValidator');
+
+// Database
+const { connectDB, closeDB } = require('./core/database/connection');
+
+// Jobs
+const { initializeJobs, stopJobs } = require('./core/jobs/jobInitializer');
+
+// Middlewares
+const { 
+  errorHandler, 
+  notFoundHandler, 
+  handleUnhandledRejection, 
+  handleUncaughtException 
+} = require('./core/middlewares/errorHandler');
+const responseFormatter = require('./core/middlewares/responseFormatter');
+const { requestLogger, errorLogger, performanceMonitor, requestCounter } = require('./core/middlewares/requestLogger');
+const { auditLogger } = require('./core/middlewares/auditLogger');
+const { extractBusinessContext, validateBusinessAccess } = require('./core/middlewares/businessContext');
+
+// ==================================================
+// ENVIRONMENT VALIDATION
+// ==================================================
+
 try {
   validateEnv();
   validateProductionEnv();
-  console.log('✅ Environment variables validated successfully\n');
+  logger.info('Environment variables validated successfully');
 } catch (error) {
-  console.error('❌ Environment validation failed:', error.message);
+  logger.error('Environment validation failed', { error: error.message });
   process.exit(1);
 }
 
-// Initialize Express app
+// ==================================================
+// APPLICATION INITIALIZATION
+// ==================================================
+
 const app = express();
 const server = http.createServer(app);
 
 // Socket.io configuration
 const io = socketIo(server, {
   cors: {
-    origin: process.env.SOCKET_CORS_ORIGIN || '*',
+    origin: config.socketCorsOrigin,
     methods: ['GET', 'POST']
   }
 });
@@ -41,104 +67,91 @@ app.set('io', io);
 // MIDDLEWARE CONFIGURATION
 // ==================================================
 
-// Security & Parsing
+// Security
 app.use(helmet());
-app.use(cors());
+app.use(cors({
+  origin: config.frontendUrl,
+  credentials: true
+}));
+
+// Body parsing
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Response formatter - Standardize API responses
-const responseFormatter = require('./core/middlewares/responseFormatter');
 app.use(responseFormatter);
 
 // Request logging & monitoring
-const { requestLogger, errorLogger, performanceMonitor, requestCounter } = require('./core/middlewares/requestLogger');
 app.use(requestLogger);
 app.use(performanceMonitor);
 app.use(requestCounter);
 
 // Development logging
-if (process.env.NODE_ENV === 'development') {
+if (config.isDevelopment()) {
   app.use(morgan('dev'));
 }
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
-  message: 'Too many requests from this IP, please try again later.'
+  windowMs: config.rateLimit.windowMs,
+  max: config.rateLimit.maxRequests,
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 app.use('/api/', limiter);
 
-// Audit logging
-const { auditLogger } = require('./core/middlewares/auditLogger');
+// Audit logging (after rate limiting)
 app.use(auditLogger);
 
-// ==================================================
-// START BACKGROUND JOBS
-// ==================================================
-
-const { startScheduledMessageProcessor } = require('./jobs/scheduledMessageProcessor');
-const { startScheduledCampaignProcessor } = require('./jobs/scheduledCampaignProcessor');
-
-startScheduledMessageProcessor();
-startScheduledCampaignProcessor();
+// Business context middleware (for multi-business support)
+if (config.multiBusinessEnabled) {
+  app.use(extractBusinessContext);
+  // Business access validation should be applied after auth middleware
+  // It's added in the routes that require it
+}
 
 // ==================================================
-// DATABASE CONNECTION
+// DATABASE CONNECTION & INITIALIZATION
 // ==================================================
 
-const connectDB = async () => {
-  try {
-    const conn = await mongoose.connect(process.env.MONGODB_URI, {
-      maxPoolSize: 10,
-      minPoolSize: 2,
-      serverSelectionTimeoutMS: 5000,
-      socketTimeoutMS: 45000,
-      connectTimeoutMS: 10000,
-      maxIdleTimeMS: 30000,
-      retryWrites: true,
-      retryReads: true,
+connectDB()
+  .then(() => {
+    logger.info('Database connected - initializing application components');
+    
+    // Initialize background jobs after successful DB connection
+    initializeJobs();
+    
+    logger.info('Application initialization complete');
+  })
+  .catch(error => {
+    logger.error('Failed to initialize application', { 
+      error: error.message,
+      stack: error.stack 
     });
-    
-    logger.info('MongoDB connected', { host: conn.connection.host });
-    
-    mongoose.connection.on('error', (err) => {
-      logger.error('MongoDB connection error', { error: err.message });
-    });
-    
-    mongoose.connection.on('disconnected', () => {
-      logger.warn('MongoDB disconnected. Attempting to reconnect...');
-    });
-    
-    mongoose.connection.on('reconnected', () => {
-      logger.info('MongoDB reconnected');
-    });
-    
-  } catch (error) {
-    logger.error('Error connecting to MongoDB', { error: error.message });
     process.exit(1);
-  }
-};
-
-connectDB();
+  });
 
 // ==================================================
 // API ROUTES
 // ==================================================
 
-// Health check (no versioning)
+// Health check endpoint
 app.get('/health', (req, res) => {
   res.json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    environment: process.env.NODE_ENV || 'development',
-    version: 'v1'
+    success: true,
+    data: {
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      environment: config.nodeEnv,
+      version: config.apiVersion,
+      multiBusinessEnabled: config.multiBusinessEnabled
+    }
   });
 });
 
-// API v1 Routes - Domain-based organization
+// API Routes - Domain-based organization
 const authRoutes = require('./modules/auth/routes');
 const businessRoutes = require('./modules/business/routes');
 const campaignRoutes = require('./modules/campaigns/routes');
@@ -151,101 +164,92 @@ const webhookRoutes = require('./modules/webhooks/routes');
 const mediaRoutes = require('./modules/media/routes');
 const configRoutes = require('./modules/config/routes');
 const automationRoutes = require('./modules/automations/routes');
-const searchRoutes = require('./modules/search/routes');
 
-// Mount routes - NO VERSIONING
-app.use('/api/auth', authRoutes);
-app.use('/api/business', businessRoutes);
-app.use('/api/campaigns', campaignRoutes);
-app.use('/api/scheduled-messages', campaignRoutes);
-app.use('/api/contacts', contactRoutes);
-app.use('/api/messages', messageRoutes);
-app.use('/api/conversations', conversationRoutes);
-app.use('/api/inbox', conversationRoutes); // Legacy route
-app.use('/api/templates', templateRoutes);
-app.use('/api/analytics', analyticsRoutes);
-app.use('/api/webhooks', webhookRoutes);
-app.use('/api/media', mediaRoutes);
-app.use('/api/config', configRoutes);
-app.use('/api/automations', automationRoutes);
-app.use('/api/search', searchRoutes);
+// Mount routes
+app.use(`${config.apiPrefix}/auth`, authRoutes);
+app.use(`${config.apiPrefix}/business`, businessRoutes);
+app.use(`${config.apiPrefix}/campaigns`, campaignRoutes);
+app.use(`${config.apiPrefix}/scheduled-messages`, campaignRoutes);
+app.use(`${config.apiPrefix}/contacts`, contactRoutes);
+app.use(`${config.apiPrefix}/messages`, messageRoutes);
+app.use(`${config.apiPrefix}/conversations`, conversationRoutes);
+app.use(`${config.apiPrefix}/inbox`, conversationRoutes); // Legacy compatibility
+app.use(`${config.apiPrefix}/templates`, templateRoutes);
+app.use(`${config.apiPrefix}/analytics`, analyticsRoutes);
+app.use(`${config.apiPrefix}/webhooks`, webhookRoutes);
+app.use(`${config.apiPrefix}/media`, mediaRoutes);
+app.use(`${config.apiPrefix}/config`, configRoutes);
+app.use(`${config.apiPrefix}/automations`, automationRoutes);
+
+// ==================================================
+// ERROR HANDLING
+// ==================================================
 
 // 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({
-    success: false,
-    message: 'Route not found',
-    path: req.originalUrl
-  });
-});
+app.use(notFoundHandler);
 
-// Global error handler
+// Error logging & handling
 app.use(errorLogger);
-app.use((err, req, res, next) => {
-  logger.error('Unhandled error', {
-    error: err.message,
-    stack: err.stack,
-    path: req.path
+app.use(errorHandler);
+
+// ==================================================
+// SERVER STARTUP
+// ==================================================
+
+server.listen(config.port, () => {
+  logger.info('Server started successfully', {
+    port: config.port,
+    environment: config.nodeEnv,
+    apiPrefix: config.apiPrefix,
+    apiVersion: config.apiVersion,
+    multiBusinessEnabled: config.multiBusinessEnabled,
+    frontendUrl: config.frontendUrl,
+    mongodb: config.mongodb.uri ? 'CONFIGURED' : 'MISSING',
+    cronJobsEnabled: config.cronJobs.enabled
   });
+  logger.info('Socket.io server ready', {
+    corsOrigin: config.socketCorsOrigin
+  });
+});
+
+// ==================================================
+// GRACEFUL SHUTDOWN
+// ==================================================
+
+const gracefulShutdown = async (signal) => {
+  logger.info(`${signal} received. Shutting down gracefully...`);
   
-  res.status(err.status || 500).json({
-    success: false,
-    message: err.message || 'Internal server error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
-  });
-});
-
-// ==================================================
-// START SERVER
-// ==================================================
-
-const PORT = process.env.PORT || 3000;
-
-server.listen(PORT, () => {
-  console.log('\n==================================================');
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📡 Socket.io server ready`);
-  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log('\n📋 Configuration:');
-  console.log(`   MongoDB: ${process.env.MONGODB_URI ? '[CONFIGURED]' : '[MISSING]'}`);
-  console.log(`   JWT: ${process.env.JWT_SECRET ? '[CONFIGURED]' : '[MISSING]'}`);
-  console.log(`   WhatsApp API: ${process.env.WHATSAPP_ACCESS_TOKEN ? '✅ Configured' : '⚠️  Not configured'}`);
-  console.log(`   Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:8081'}`);
-  console.log('==================================================\n');
-});
-
-// Start recurring jobs
-const { startQualityRatingTracker } = require('./jobs/qualityRatingTracker');
-const { startTemplateSync } = require('./jobs/templateStatusSync');
-const { scheduleAnalyticsArchival } = require('./jobs/analyticsArchival');
-const { scheduleLogCleanup } = require('./jobs/logCleanup');
-
-startQualityRatingTracker();
-startTemplateSync();
-scheduleAnalyticsArchival();
-scheduleLogCleanup();
-
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM received. Shutting down gracefully...');
-  server.close(() => {
-    logger.info('Server closed');
-    mongoose.connection.close().then(() => {
-      logger.info('MongoDB connection closed');
-      process.exit(0);
+  try {
+    // Stop accepting new connections
+    server.close(() => {
+      logger.info('HTTP server closed');
     });
-  });
-});
-
-process.on('SIGINT', () => {
-  logger.info('SIGINT received. Shutting down gracefully...');
-  server.close(() => {
-    logger.info('Server closed');
-    mongoose.connection.close().then(() => {
-      logger.info('MongoDB connection closed');
-      process.exit(0);
+    
+    // Stop background jobs
+    stopJobs();
+    
+    // Close database connection
+    await closeDB();
+    
+    logger.info('Graceful shutdown completed');
+    process.exit(0);
+  } catch (error) {
+    logger.error('Error during graceful shutdown', { 
+      error: error.message,
+      stack: error.stack 
     });
-  });
-});
+    process.exit(1);
+  }
+};
+
+// Handle shutdown signals
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+// Handle unhandled promise rejections
+handleUnhandledRejection();
+
+// Handle uncaught exceptions
+handleUncaughtException();
 
 module.exports = app;

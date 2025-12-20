@@ -1,4 +1,16 @@
 const axios = require('axios');
+const logger = require('../../common/helpers/logger');
+const { ERROR_CODES, HTTP_STATUS } = require('../../common/constants');
+const config = require('../../config/app.config');
+
+/**
+ * WhatsApp Media Service Constants
+ */
+const GRAPH_API_TIMEOUT = parseInt(config.whatsapp?.timeout || process.env.WHATSAPP_API_TIMEOUT || '30000');
+const MESSAGING_PRODUCT = 'whatsapp';
+const RECIPIENT_TYPE = 'individual';
+
+const VIEW_ONCE_MEDIA_TYPES = ['image', 'video'];
 
 /**
  * WhatsApp Media Service
@@ -6,10 +18,14 @@ const axios = require('axios');
  */
 class WhatsAppMediaService {
   constructor(config) {
+    if (!config || !config.phoneNumberId || !config.accessToken) {
+      throw new Error('WhatsApp configuration (phoneNumberId, accessToken) is required');
+    }
     this.phoneNumberId = config.phoneNumberId;
     this.accessToken = config.accessToken;
-    this.apiVersion = config.apiVersion;
+    this.apiVersion = config.apiVersion || 'v22.0';
     this.apiUrl = `https://graph.facebook.com/${this.apiVersion}`;
+    this.timeout = GRAPH_API_TIMEOUT;
   }
 
   /**
@@ -17,10 +33,12 @@ class WhatsAppMediaService {
    */
   async uploadMedia(file, mimeType, filename) {
     try {
-      console.log('📤 Uploading media to WhatsApp...');
-      console.log('   File name:', filename);
-      console.log('   MIME type:', mimeType);
-      console.log('   File size:', file.length || 'stream');
+      logger.info('Uploading media to WhatsApp', {
+        phoneNumberId: this.phoneNumberId,
+        filename,
+        mimeType,
+        fileSize: file.length || 'stream'
+      });
 
       const FormData = require('form-data');
       const formData = new FormData();
@@ -45,8 +63,11 @@ class WhatsAppMediaService {
       );
 
       const mediaId = response.data.id;
-      console.log('✅ Media uploaded successfully!');
-      console.log('   Media ID:', mediaId);
+      logger.info('Media uploaded successfully', {
+        phoneNumberId: this.phoneNumberId,
+        mediaId,
+        filename
+      });
 
       return {
         success: true,
@@ -54,7 +75,11 @@ class WhatsAppMediaService {
         data: response.data
       };
     } catch (error) {
-      console.error('❌ Upload Media Error:', error.response?.data || error.message);
+      logger.error('Upload Media Error', {
+        error: error.response?.data || error.message,
+        filename,
+        mimeType
+      });
       return {
         success: false,
         error: error.response?.data?.error || error.message
@@ -67,8 +92,10 @@ class WhatsAppMediaService {
    */
   async getMediaUrl(mediaId) {
     try {
-      console.log('🔍 Retrieving media URL...');
-      console.log('   Media ID:', mediaId);
+      logger.info('Retrieving media URL', {
+        phoneNumberId: this.phoneNumberId,
+        mediaId
+      });
 
       const response = await axios.get(
         `${this.apiUrl}/${mediaId}`,
@@ -79,10 +106,13 @@ class WhatsAppMediaService {
         }
       );
 
-      console.log('✅ Media URL retrieved successfully');
-      console.log('   URL:', response.data.url);
-      console.log('   MIME type:', response.data.mime_type);
-      console.log('   File size:', response.data.file_size);
+      logger.info('Media URL retrieved successfully', {
+        phoneNumberId: this.phoneNumberId,
+        mediaId,
+        url: response.data.url,
+        mimeType: response.data.mime_type,
+        fileSize: response.data.file_size
+      });
 
       return {
         success: true,
@@ -93,7 +123,10 @@ class WhatsAppMediaService {
         data: response.data
       };
     } catch (error) {
-      console.error('❌ Get Media URL Error:', error.response?.data || error.message);
+      logger.error('Get Media URL Error', {
+        error: error.response?.data || error.message,
+        mediaId
+      });
       return {
         success: false,
         error: error.response?.data?.error || error.message
@@ -106,15 +139,17 @@ class WhatsAppMediaService {
    */
   async downloadMedia(mediaId) {
     try {
-      console.log('⬇️  Downloading media...');
-      console.log('   Media ID:', mediaId);
+      logger.info('Downloading media', {
+        phoneNumberId: this.phoneNumberId,
+        mediaId
+      });
 
       const mediaInfo = await this.getMediaUrl(mediaId);
       if (!mediaInfo.success) {
         return mediaInfo;
       }
 
-      console.log('   Downloading from URL...');
+      logger.debug('Downloading from URL', { url: mediaInfo.url });
       const response = await axios.get(mediaInfo.url, {
         headers: {
           'Authorization': `Bearer ${this.accessToken}`
@@ -123,8 +158,11 @@ class WhatsAppMediaService {
       });
 
       const buffer = Buffer.from(response.data);
-      console.log('✅ Media downloaded successfully');
-      console.log('   Size:', buffer.length, 'bytes');
+      logger.info('Media downloaded successfully', {
+        phoneNumberId: this.phoneNumberId,
+        mediaId,
+        size: buffer.length
+      });
 
       return {
         success: true,
@@ -133,7 +171,10 @@ class WhatsAppMediaService {
         fileSize: buffer.length
       };
     } catch (error) {
-      console.error('❌ Download Media Error:', error.response?.data || error.message);
+      logger.error('Download Media Error', {
+        error: error.response?.data || error.message,
+        mediaId
+      });
       return {
         success: false,
         error: error.response?.data?.error || error.message
@@ -146,8 +187,10 @@ class WhatsAppMediaService {
    */
   async deleteMedia(mediaId) {
     try {
-      console.log('🗑️  Deleting media...');
-      console.log('   Media ID:', mediaId);
+      logger.info('Deleting media', {
+        phoneNumberId: this.phoneNumberId,
+        mediaId
+      });
 
       const response = await axios.delete(
         `${this.apiUrl}/${mediaId}`,
@@ -158,7 +201,10 @@ class WhatsAppMediaService {
         }
       );
 
-      console.log('✅ Media deleted successfully');
+      logger.info('Media deleted successfully', {
+        phoneNumberId: this.phoneNumberId,
+        mediaId
+      });
 
       return {
         success: true,
@@ -166,14 +212,17 @@ class WhatsAppMediaService {
       };
     } catch (error) {
       if (error.response?.status === 404) {
-        console.log('ℹ️  Media already deleted or not found');
+        logger.info('Media already deleted or not found', { mediaId });
         return {
           success: true,
           message: 'Media not found (already deleted)'
         };
       }
 
-      console.error('❌ Delete Media Error:', error.response?.data || error.message);
+      logger.error('Delete Media Error', {
+        error: error.response?.data || error.message,
+        mediaId
+      });
       return {
         success: false,
         error: error.response?.data?.error || error.message
@@ -186,7 +235,11 @@ class WhatsAppMediaService {
    */
   async sendViewOnceMedia(phoneNumber, mediaType, mediaId, caption = '') {
     try {
-      console.log('👁️ Sending view-once media...');
+      logger.info('Sending view-once media', {
+        phoneNumberId: this.phoneNumberId,
+        to: phoneNumber,
+        mediaType
+      });
 
       if (!['image', 'video'].includes(mediaType)) {
         throw new Error('Media type must be "image" or "video" for view-once');
@@ -220,7 +273,12 @@ class WhatsAppMediaService {
       );
 
       const messageId = response.data.messages[0]?.id;
-      console.log('✅ View-once media sent successfully:', messageId);
+      logger.info('View-once media sent successfully', {
+        phoneNumberId: this.phoneNumberId,
+        to: phoneNumber,
+        messageId,
+        mediaType
+      });
 
       return {
         success: true,
@@ -230,7 +288,11 @@ class WhatsAppMediaService {
       };
 
     } catch (error) {
-      console.error('❌ Send View-Once Media Error:', error.response?.data || error.message);
+      logger.error('Send View-Once Media Error', {
+        error: error.response?.data || error.message,
+        to: phoneNumber,
+        mediaType
+      });
       return {
         success: false,
         error: error.response?.data?.error?.message || error.message

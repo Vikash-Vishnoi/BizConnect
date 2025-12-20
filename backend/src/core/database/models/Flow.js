@@ -66,10 +66,6 @@ const flowScreenSchema = new mongoose.Schema({
     unavailable_dates: [String],
     on_click_action: {
       name: String,
-      payload: mongoose.Schema.Types.Mixed
-    },
-    on_click_action: {
-      name: String,
       next: {
         type: String,
         name: String

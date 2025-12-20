@@ -1,0 +1,79 @@
+{
+  "env": {
+    "node": true,
+    "es2021": true,
+    "jest": true
+  },
+  "extends": [
+    "eslint:recommended"
+  ],
+  "parserOptions": {
+    "ecmaVersion": "latest",
+    "sourceType": "module"
+  },
+  "rules": {
+    // Error Prevention
+    "no-console": ["warn", { "allow": ["warn", "error"] }],
+    "no-debugger": "error",
+    "no-alert": "error",
+    "no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "no-undef": "error",
+    "no-var": "error",
+    "prefer-const": "error",
+    
+    // Code Quality
+    "eqeqeq": ["error", "always"],
+    "curly": ["error", "all"],
+    "no-eval": "error",
+    "no-implied-eval": "error",
+    "no-with": "error",
+    "no-loop-func": "error",
+    "no-new-func": "error",
+    
+    // Best Practices
+    "consistent-return": "error",
+    "default-case": "warn",
+    "dot-notation": "error",
+    "no-else-return": "warn",
+    "no-empty-function": "warn",
+    "no-eq-null": "error",
+    "no-floating-decimal": "error",
+    "no-multi-spaces": "error",
+    "no-return-assign": "error",
+    "no-return-await": "error",
+    "no-throw-literal": "error",
+    "no-unused-expressions": "error",
+    "require-await": "warn",
+    "yoda": "error",
+    
+    // Styling (can be enforced by Prettier instead)
+    "indent": ["error", 2, { "SwitchCase": 1 }],
+    "quotes": ["error", "single", { "avoidEscape": true }],
+    "semi": ["error", "always"],
+    "comma-dangle": ["error", "always-multiline"],
+    "no-trailing-spaces": "error",
+    "eol-last": ["error", "always"],
+    "object-curly-spacing": ["error", "always"],
+    "array-bracket-spacing": ["error", "never"],
+    "space-before-function-paren": ["error", {
+      "anonymous": "always",
+      "named": "never",
+      "asyncArrow": "always"
+    }],
+    "arrow-spacing": "error",
+    "keyword-spacing": "error",
+    "space-infix-ops": "error",
+    
+    // ES6+
+    "arrow-body-style": ["error", "as-needed"],
+    "prefer-arrow-callback": "error",
+    "prefer-template": "warn",
+    "template-curly-spacing": "error",
+    "no-duplicate-imports": "error",
+    "object-shorthand": "warn",
+    
+    // Node.js specific
+    "handle-callback-err": "error",
+    "no-path-concat": "error"
+  }
+}

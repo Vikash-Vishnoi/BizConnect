@@ -1,4 +1,58 @@
 const axios = require('axios');
+const logger = require('../../common/helpers/logger');
+const { ERROR_CODES, TIME_CONSTANTS } = require('../../common/constants');
+const config = require('../../config/app.config');
+
+/**
+ * WhatsApp Account Service Constants
+ */
+const GRAPH_API_TIMEOUT = parseInt(config.whatsapp?.timeout || process.env.WHATSAPP_API_TIMEOUT || '30000');
+
+const MESSAGING_TIERS = {
+  TIER_NOT_SET: {
+    name: 'TIER_NOT_SET',
+    limit: parseInt(config.whatsapp?.tierLimits?.notSet || process.env.WHATSAPP_TIER_NOT_SET || '50'),
+    displayName: 'Not Set (50)'
+  },
+  TIER_50: {
+    name: 'TIER_50',
+    limit: parseInt(config.whatsapp?.tierLimits?.tier50 || process.env.WHATSAPP_TIER_50 || '250'),
+    displayName: '50'
+  },
+  TIER_250: {
+    name: 'TIER_250',
+    limit: parseInt(config.whatsapp?.tierLimits?.tier250 || process.env.WHATSAPP_TIER_250 || '1000'),
+    displayName: '250'
+  },
+  TIER_1K: {
+    name: 'TIER_1K',
+    limit: parseInt(config.whatsapp?.tierLimits?.tier1k || process.env.WHATSAPP_TIER_1K || '10000'),
+    displayName: '1,000'
+  },
+  TIER_10K: {
+    name: 'TIER_10K',
+    limit: parseInt(config.whatsapp?.tierLimits?.tier10k || process.env.WHATSAPP_TIER_10K || '100000'),
+    displayName: '10,000'
+  },
+  TIER_100K: {
+    name: 'TIER_100K',
+    limit: parseInt(config.whatsapp?.tierLimits?.tier100k || process.env.WHATSAPP_TIER_100K || '1000000'),
+    displayName: '100,000'
+  },
+  TIER_UNLIMITED: {
+    name: 'TIER_UNLIMITED',
+    limit: 1000000000,
+    displayName: 'Unlimited'
+  }
+};
+
+const ACCOUNT_FIELDS = {
+  LIMITS: 'messaging_limit_tier,quality_rating,name_status,code_verification_status',
+  QUALITY: 'quality_rating',
+  HEALTH: 'quality_rating,messaging_limit_tier,verified_name,display_phone_number,code_verification_status,is_pin_enabled,is_official_business_account'
+};
+
+const DEFAULT_TIER = 'TIER_1K';
 
 /**
  * WhatsApp Account Service
@@ -6,18 +60,27 @@ const axios = require('axios');
  */
 class WhatsAppAccountService {
   constructor(config) {
+    if (!config || !config.phoneNumberId || !config.accessToken) {
+      throw new Error('WhatsApp config with phoneNumberId and accessToken is required');
+    }
+
     this.phoneNumberId = config.phoneNumberId;
     this.accessToken = config.accessToken;
-    this.apiVersion = config.apiVersion;
+    this.apiVersion = config.apiVersion || 'v22.0';
     this.apiUrl = `https://graph.facebook.com/${this.apiVersion}`;
+    this.timeout = GRAPH_API_TIMEOUT;
   }
 
   /**
    * Get account limits and tier info
    */
   async getAccountLimits() {
+    const startTime = Date.now();
+    
     try {
-      console.log('📊 Fetching account limits...');
+      logger.info('Fetching account limits', {
+        phoneNumberId: this.phoneNumberId
+      });
 
       const response = await axios.get(
         `${this.apiUrl}/${this.phoneNumberId}`,
@@ -26,33 +89,28 @@ class WhatsAppAccountService {
             'Authorization': `Bearer ${this.accessToken}`
           },
           params: {
-            fields: 'messaging_limit_tier,quality_rating,name_status,code_verification_status'
-          }
+            fields: ACCOUNT_FIELDS.LIMITS
+          },
+          timeout: this.timeout
         }
       );
 
-      console.log('✅ Account limits retrieved successfully');
-      console.log('   Tier:', response.data.messaging_limit_tier);
-      console.log('   Quality Rating:', response.data.quality_rating);
+      logger.info('Account limits retrieved successfully', {
+        phoneNumberId: this.phoneNumberId,
+        tier: response.data.messaging_limit_tier,
+        qualityRating: response.data.quality_rating,
+        processingTime: `${Date.now() - startTime}ms`
+      });
 
-      const tierLimits = {
-        'TIER_NOT_SET': parseInt(process.env.WHATSAPP_TIER_NOT_SET) || 50,
-        'TIER_50': parseInt(process.env.WHATSAPP_TIER_50) || 250,
-        'TIER_250': parseInt(process.env.WHATSAPP_TIER_250) || 1000,
-        'TIER_1K': parseInt(process.env.WHATSAPP_TIER_1K) || 10000,
-        'TIER_10K': parseInt(process.env.WHATSAPP_TIER_10K) || 100000,
-        'TIER_100K': parseInt(process.env.WHATSAPP_TIER_100K) || 1000000,
-        'TIER_UNLIMITED': 1000000000
-      };
-
-      const tier = response.data.messaging_limit_tier || 'TIER_1K';
-      const messagingLimit = tierLimits[tier] || tierLimits['TIER_1K'];
+      const tier = response.data.messaging_limit_tier || DEFAULT_TIER;
+      const tierConfig = MESSAGING_TIERS[tier] || MESSAGING_TIERS[DEFAULT_TIER];
+      const messagingLimit = tierConfig.limit;
 
       return {
         success: true,
         data: {
           tier: tier,
-          tierName: tier.replace('TIER_', '').replace('K', ',000'),
+          tierName: tierConfig.displayName,
           messagingLimit: messagingLimit,
           qualityRating: response.data.quality_rating || 'UNKNOWN',
           nameStatus: response.data.name_status,
@@ -61,14 +119,20 @@ class WhatsAppAccountService {
         }
       };
     } catch (error) {
-      console.error('❌ Get Account Limits Error:', error.response?.data || error.message);
+      logger.error('Get Account Limits Error', {
+        error: error.response?.data || error.message,
+        phoneNumberId: this.phoneNumberId,
+        code: error.code || ERROR_CODES.EXTERNAL_SERVICE_ERROR,
+        processingTime: `${Date.now() - startTime}ms`
+      });
       
+      const defaultTier = MESSAGING_TIERS[DEFAULT_TIER];
       return {
         success: true,
         data: {
-          tier: 'TIER_1K',
-          tierName: '1,000',
-          messagingLimit: 1000,
+          tier: DEFAULT_TIER,
+          tierName: defaultTier.displayName,
+          messagingLimit: defaultTier.limit,
           qualityRating: 'UNKNOWN',
           nameStatus: 'UNKNOWN',
           codeVerificationStatus: 'UNKNOWN',
@@ -83,7 +147,9 @@ class WhatsAppAccountService {
    */
   async getQualityRating() {
     try {
-      console.log('⭐ Fetching quality rating...');
+      logger.info('Fetching quality rating', {
+        phoneNumberId: this.phoneNumberId
+      });
 
       const response = await axios.get(
         `${this.apiUrl}/${this.phoneNumberId}`,
@@ -97,14 +163,20 @@ class WhatsAppAccountService {
         }
       );
 
-      console.log('✅ Quality rating retrieved:', response.data.quality_rating);
+      logger.info('Quality rating retrieved', {
+        phoneNumberId: this.phoneNumberId,
+        rating: response.data.quality_rating
+      });
 
       return {
         success: true,
         rating: response.data.quality_rating || 'UNKNOWN'
       };
     } catch (error) {
-      console.error('❌ Get Quality Rating Error:', error.response?.data || error.message);
+      logger.error('Get Quality Rating Error', {
+        error: error.response?.data || error.message,
+        phoneNumberId: this.phoneNumberId
+      });
       return {
         success: false,
         error: error.response?.data?.error || error.message
@@ -117,7 +189,9 @@ class WhatsAppAccountService {
    */
   async getPhoneNumberHealth() {
     try {
-      console.log('📊 Fetching phone number health...');
+      logger.info('Fetching phone number health', {
+        phoneNumberId: this.phoneNumberId
+      });
 
       const response = await axios.get(
         `${this.apiUrl}/${this.phoneNumberId}`,
@@ -132,10 +206,12 @@ class WhatsAppAccountService {
         }
       );
 
-      console.log('✅ Phone number health retrieved successfully');
-      console.log('   Quality Rating:', response.data.quality_rating);
-      console.log('   Messaging Limit:', response.data.messaging_limit_tier);
-      console.log('   Verified Name:', response.data.verified_name);
+      logger.info('Phone number health retrieved successfully', {
+        phoneNumberId: this.phoneNumberId,
+        qualityRating: response.data.quality_rating,
+        messagingLimitTier: response.data.messaging_limit_tier,
+        verifiedName: response.data.verified_name
+      });
 
       return {
         success: true,
@@ -151,7 +227,10 @@ class WhatsAppAccountService {
         }
       };
     } catch (error) {
-      console.error('❌ Get Phone Number Health Error:', error.response?.data || error.message);
+      logger.error('Get Phone Number Health Error', {
+        error: error.response?.data || error.message,
+        phoneNumberId: this.phoneNumberId
+      });
       return {
         success: false,
         error: error.response?.data?.error || error.message
@@ -164,7 +243,9 @@ class WhatsAppAccountService {
    */
   async getMessagingLimits() {
     try {
-      console.log('📈 Fetching messaging limits...');
+      logger.info('Fetching messaging limits', {
+        phoneNumberId: this.phoneNumberId
+      });
 
       const healthResult = await this.getPhoneNumberHealth();
       
@@ -194,7 +275,10 @@ class WhatsAppAccountService {
         }
       };
     } catch (error) {
-      console.error('❌ Get Messaging Limits Error:', error);
+      logger.error('Get Messaging Limits Error', {
+        error: error.message,
+        phoneNumberId: this.phoneNumberId
+      });
       return {
         success: false,
         error: error.message

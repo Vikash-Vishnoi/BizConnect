@@ -6,19 +6,91 @@
 
 require('dotenv').config();
 const mongoose = require('mongoose');
+const { ERROR_CODES } = require('../common/constants');
+const logger = require('../common/helpers/logger');
 
-if (!process.env.MONGODB_URI) {
-  console.error('❌ MONGODB_URI environment variable is required');
-  process.exit(1);
-}
+// ============================================================================
+// CONSTANTS
+// ============================================================================
 
+// Environment Variables
 const MONGODB_URI = process.env.MONGODB_URI;
 const AUDIT_LOG_TTL_DAYS = parseInt(process.env.AUDIT_LOG_RETENTION_DAYS) || 90;
+
+// Connection Configuration
+const CONNECTION_TIMEOUT_MS = 30000;
+const SOCKET_TIMEOUT_MS = 45000;
+
+// Index Error Codes
+const INDEX_ERROR_CODES = {
+  INDEX_OPTIONS_CONFLICT: 85,
+  INDEX_KEY_SPECS_CONFLICT: 86,
+};
+
+// Index Error Code Names
+const INDEX_ERROR_CODE_NAMES = {
+  INDEX_OPTIONS_CONFLICT: 'IndexOptionsConflict',
+  INDEX_KEY_SPECS_CONFLICT: 'IndexKeySpecsConflict',
+};
+
+// Collection Names
+const COLLECTION_NAMES = {
+  USERS: 'users',
+  BUSINESSES: 'businesses',
+  CONVERSATIONS: 'conversations',
+  CAMPAIGNS: 'campaigns',
+  TEMPLATES: 'templates',
+  FLOWS: 'flows',
+  AUDIT_LOGS: 'auditlogs',
+  ANALYTICS: 'analytics',
+};
+
+// Time Conversion Constants
+const TIME_CONVERSION = {
+  HOURS_PER_DAY: 24,
+  MINUTES_PER_HOUR: 60,
+  SECONDS_PER_MINUTE: 60,
+};
+
+// Script Messages
+const MESSAGES = {
+  SCRIPT_START: 'Database index creation script started',
+  CONNECTING: 'Connecting to MongoDB',
+  CONNECTED: 'Connected to database',
+  PROCESSING_COLLECTION: 'Processing collection',
+  INDEX_CREATED: 'Created index',
+  INDEX_EXISTS: 'Index already exists',
+  INDEX_ERROR: 'Error creating index',
+  VERIFYING_INDEXES: 'Verifying indexes',
+  SCRIPT_COMPLETE: 'Database optimization complete',
+  CONNECTION_CLOSED: 'Database connection closed',
+  SCRIPT_FAILED: 'Script execution failed',
+  ENV_MISSING: 'MONGODB_URI environment variable is required',
+};
+
+// Exit Codes
+const EXIT_CODES = {
+  SUCCESS: 0,
+  ERROR: 1,
+};
+
+// Validation
+if (!MONGODB_URI) {
+  logger.error(MESSAGES.ENV_MISSING);
+  process.exit(EXIT_CODES.ERROR);
+}
+
+// Calculate TTL in seconds for audit logs
+const AUDIT_LOG_TTL_SECONDS = AUDIT_LOG_TTL_DAYS * TIME_CONVERSION.HOURS_PER_DAY * TIME_CONVERSION.MINUTES_PER_HOUR * TIME_CONVERSION.SECONDS_PER_MINUTE;
+
+// ============================================================================
+// INDEX DEFINITIONS
+// ============================================================================
 
 const indexes = [
   // User Model Indexes
   {
-    collection: 'users',
+    collection: COLLECTION_NAMES.USERS,
     indexes: [
       { keys: { email: 1 }, options: { unique: true } },
       { keys: { userType: 1 }, options: {} },
@@ -30,7 +102,7 @@ const indexes = [
   
   // Business Model Indexes
   {
-    collection: 'businesses',
+    collection: COLLECTION_NAMES.BUSINESSES,
     indexes: [
       { keys: { businessPhoneNumberId: 1 }, options: { unique: true, sparse: true } },
       { keys: { status: 1 }, options: {} },
@@ -40,7 +112,7 @@ const indexes = [
   
   // Conversation Model Indexes
   {
-    collection: 'conversations',
+    collection: COLLECTION_NAMES.CONVERSATIONS,
     indexes: [
       { keys: { businessId: 1, lastMessageAt: -1 }, options: {} },
       { keys: { businessId: 1, status: 1, lastMessageAt: -1 }, options: {} },
@@ -52,7 +124,7 @@ const indexes = [
   
   // Campaign Model Indexes
   {
-    collection: 'campaigns',
+    collection: COLLECTION_NAMES.CAMPAIGNS,
     indexes: [
       { keys: { businessId: 1, createdAt: -1 }, options: {} },
       { keys: { businessId: 1, status: 1 }, options: {} },
@@ -63,7 +135,7 @@ const indexes = [
   
   // Template Model Indexes
   {
-    collection: 'templates',
+    collection: COLLECTION_NAMES.TEMPLATES,
     indexes: [
       { keys: { businessId: 1, status: 1 }, options: {} },
       { keys: { businessId: 1, category: 1 }, options: {} },
@@ -74,7 +146,7 @@ const indexes = [
   
   // Flow Model Indexes
   {
-    collection: 'flows',
+    collection: COLLECTION_NAMES.FLOWS,
     indexes: [
       { keys: { businessId: 1, isActive: 1 }, options: {} },
       { keys: { businessId: 1, createdAt: -1 }, options: {} }
@@ -83,18 +155,18 @@ const indexes = [
   
   // AuditLog Model Indexes
   {
-    collection: 'auditlogs',
+    collection: COLLECTION_NAMES.AUDIT_LOGS,
     indexes: [
       { keys: { businessId: 1, timestamp: -1 }, options: {} },
       { keys: { userId: 1, timestamp: -1 }, options: {} },
       { keys: { action: 1, timestamp: -1 }, options: {} },
-      { keys: { timestamp: -1 }, options: { expireAfterSeconds: AUDIT_LOG_TTL_DAYS * 24 * 60 * 60 } }
+      { keys: { timestamp: -1 }, options: { expireAfterSeconds: AUDIT_LOG_TTL_SECONDS } }
     ]
   },
   
   // Analytics Model Indexes
   {
-    collection: 'analytics',
+    collection: COLLECTION_NAMES.ANALYTICS,
     indexes: [
       { keys: { businessId: 1, date: -1 }, options: {} },
       { keys: { businessId: 1, metricType: 1, date: -1 }, options: {} }
@@ -102,65 +174,167 @@ const indexes = [
   }
 ];
 
+// ============================================================================
+// MAIN FUNCTION
+// ============================================================================
+
+/**
+ * Create database indexes for optimal query performance
+ */
 async function createIndexes() {
+  const startTime = Date.now();
+  
   try {
-    console.log('🔌 Connecting to MongoDB...');
-    await mongoose.connect(MONGODB_URI);
-    console.log('✅ Connected to database\n');
+    logger.info(MESSAGES.SCRIPT_START);
+    
+    // Connect to MongoDB
+    logger.info(MESSAGES.CONNECTING);
+    await mongoose.connect(MONGODB_URI, {
+      serverSelectionTimeoutMS: CONNECTION_TIMEOUT_MS,
+      socketTimeoutMS: SOCKET_TIMEOUT_MS,
+    });
+    
+    const connectionTime = Date.now() - startTime;
+    logger.info(MESSAGES.CONNECTED, { connectionTime });
     
     const db = mongoose.connection.db;
     let successCount = 0;
     let errorCount = 0;
+    const collectionResults = [];
     
+    // Process each collection
     for (const { collection, indexes: collectionIndexes } of indexes) {
-      console.log(`📋 Processing collection: ${collection}`);
+      const collectionStartTime = Date.now();
+      logger.info(MESSAGES.PROCESSING_COLLECTION, { collection });
       
       const coll = db.collection(collection);
+      let collectionSuccessCount = 0;
+      let collectionErrorCount = 0;
       
+      // Create indexes for this collection
       for (const { keys, options } of collectionIndexes) {
+        const indexStartTime = Date.now();
+        const indexName = Object.keys(keys).join('_');
+        
         try {
-          const indexName = Object.keys(keys).join('_');
           await coll.createIndex(keys, options);
-          console.log(`  ✅ Created index: ${indexName}`);
+          const indexTime = Date.now() - indexStartTime;
+          
+          logger.info(MESSAGES.INDEX_CREATED, { 
+            collection, 
+            indexName, 
+            keys: JSON.stringify(keys),
+            executionTime: indexTime 
+          });
           successCount++;
+          collectionSuccessCount++;
         } catch (error) {
-          if (error.code === 85 || error.codeName === 'IndexOptionsConflict' || 
-              error.code === 86 || error.codeName === 'IndexKeySpecsConflict') {
-            console.log(`  ℹ️  Index already exists: ${Object.keys(keys).join('_')}`);
+          const indexTime = Date.now() - indexStartTime;
+          
+          // Check if index already exists (not an error)
+          if (error.code === INDEX_ERROR_CODES.INDEX_OPTIONS_CONFLICT || 
+              error.codeName === INDEX_ERROR_CODE_NAMES.INDEX_OPTIONS_CONFLICT || 
+              error.code === INDEX_ERROR_CODES.INDEX_KEY_SPECS_CONFLICT || 
+              error.codeName === INDEX_ERROR_CODE_NAMES.INDEX_KEY_SPECS_CONFLICT) {
+            logger.info(MESSAGES.INDEX_EXISTS, { 
+              collection, 
+              indexName,
+              executionTime: indexTime 
+            });
             successCount++;
+            collectionSuccessCount++;
           } else {
-            console.log(`  ❌ Error creating index: ${error.message}`);
+            logger.error(MESSAGES.INDEX_ERROR, { 
+              collection, 
+              indexName, 
+              error: error.message,
+              errorCode: error.code,
+              executionTime: indexTime
+            });
             errorCount++;
+            collectionErrorCount++;
           }
         }
       }
       
-      console.log('');
+      const collectionTime = Date.now() - collectionStartTime;
+      collectionResults.push({
+        collection,
+        successCount: collectionSuccessCount,
+        errorCount: collectionErrorCount,
+        executionTime: collectionTime,
+      });
     }
     
-    console.log('========================================');
-    console.log(`✅ Indexes created successfully: ${successCount}`);
-    console.log(`❌ Errors encountered: ${errorCount}`);
-    console.log('========================================\n');
+    // Verify indexes
+    logger.info(MESSAGES.VERIFYING_INDEXES);
+    const verificationResults = [];
     
-    // Show existing indexes for verification
-    console.log('📊 Verifying indexes...\n');
     for (const { collection } of indexes) {
       const coll = db.collection(collection);
       const existingIndexes = await coll.indexes();
-      console.log(`${collection}: ${existingIndexes.length} indexes`);
+      verificationResults.push({
+        collection,
+        indexCount: existingIndexes.length,
+      });
+      logger.info('Index verification', { 
+        collection, 
+        indexCount: existingIndexes.length 
+      });
     }
     
-    console.log('\n✅ Database optimization complete!');
+    // Log summary
+    const totalTime = Date.now() - startTime;
+    logger.info(MESSAGES.SCRIPT_COMPLETE, {
+      successCount,
+      errorCount,
+      totalCollections: indexes.length,
+      totalExecutionTime: totalTime,
+      collectionResults,
+      verificationResults,
+    });
+    
+    return {
+      success: errorCount === 0,
+      successCount,
+      errorCount,
+      executionTime: totalTime,
+    };
     
   } catch (error) {
-    console.error('❌ Error:', error);
-    process.exit(1);
+    const executionTime = Date.now() - startTime;
+    logger.error(MESSAGES.SCRIPT_FAILED, { 
+      error: error.message, 
+      stack: error.stack,
+      executionTime,
+    });
+    throw error;
   } finally {
-    await mongoose.connection.close();
-    console.log('\n🔌 Database connection closed');
-    process.exit(0);
+    // Ensure connection is closed
+    if (mongoose.connection.readyState !== 0) {
+      await mongoose.connection.close();
+      logger.info(MESSAGES.CONNECTION_CLOSED);
+    }
   }
 }
 
-createIndexes();
+// ============================================================================
+// SCRIPT EXECUTION
+// ============================================================================
+
+// Execute script if run directly
+if (require.main === module) {
+  createIndexes()
+    .then((result) => {
+      process.exit(result.success ? EXIT_CODES.SUCCESS : EXIT_CODES.ERROR);
+    })
+    .catch((error) => {
+      logger.error('Unhandled error in script execution', { 
+        error: error.message,
+        stack: error.stack,
+      });
+      process.exit(EXIT_CODES.ERROR);
+    });
+}
+
+module.exports = { createIndexes };

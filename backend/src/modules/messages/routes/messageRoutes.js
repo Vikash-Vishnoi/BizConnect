@@ -5,57 +5,87 @@
 
 const express = require('express');
 const router = express.Router();
-const { auth, requireBusiness, requireBusinessPermission } = require('../../../core/middlewares/auth');
+const { authenticate: auth } = require('../../../core/middlewares/auth');
+const { requireBusiness, requirePermission } = require('../../../core/middlewares/authorization');
+const { businessContext } = require('../../../core/middlewares/businessContext');
+const { NotFoundError, ValidationError, ConflictError } = require('../../../core/middlewares/errorHandler');
+const { findByIdSafe } = require('../../../common/utils/dbHelpers');
 const Conversation = require('../../../core/database/models/Conversation');
+const Business = require('../../../core/database/models/Business');
 const WhatsAppService = require('../../../integrations/whatsapp/whatsappService');
+const logger = require('../../../common/helpers/logger');
+const { ERROR_CODES, HTTP_STATUS } = require('../../../common/constants');
+
+// Constants for message operations
+const DEFAULT_MESSAGES_LIMIT = 50; // Default limit for messages per page
+const MAX_MESSAGES_LIMIT = 200; // Maximum limit for messages per page
+const DEFAULT_PAGE = 1; // Default page number
+const CONVERSATION_STATUS_BLOCKED = 'blocked'; // Blocked conversation status
+const CONVERSATION_STATUS_ARCHIVED = 'archived'; // Archived conversation status
+const CONVERSATION_STATUS_CLOSED = 'closed'; // Closed conversation status
+const CONVERSATION_STATUS_ACTIVE = 'active'; // Active conversation status
+const MESSAGE_DIRECTION_OUTGOING = 'out'; // Outgoing message direction (stored as 'out' in DB)
+const MESSAGE_STATUS_SENT = 'sent'; // Sent message status
+const MESSAGE_TYPE_TEXT = 'text'; // Text message type
+const MESSAGE_TYPE_TEMPLATE = 'template'; // Template message type
+const MESSAGE_TYPE_AUDIO = 'audio'; // Audio message type
+const MESSAGE_TYPE_CONTACTS = 'contacts'; // Contacts message type
+const MESSAGE_FROM_SYSTEM = 'system'; // System sender identifier
+const HTTP_STATUS_CREATED = 201; // HTTP 201 Created status
+const CAMPAIGN_MESSAGE_PREFIX = 'campaign_'; // Prefix for campaign message IDs
  
 // GET /:id/messages - Get conversation messages (WhatsApp-style pagination)
-router.get('/:id/messages', async (req, res) => {
+router.get('/:id/messages', auth, businessContext, async (req, res) => {
+  const startTime = Date.now();
+  
   try {
-    const defaultLimit = parseInt(process.env.MESSAGES_DEFAULT_LIMIT || '50');
-    const maxLimit = parseInt(process.env.MESSAGES_MAX_LIMIT || '200');
-    const { page = 1, limit = defaultLimit } = req.query;
+    const { page = DEFAULT_PAGE, limit = DEFAULT_MESSAGES_LIMIT } = req.query;
     const pageNum = parseInt(page);
-    const limitNum = Math.min(parseInt(limit), maxLimit);
+    const limitNum = Math.min(parseInt(limit), MAX_MESSAGES_LIMIT);
     
     // Use lean() for better performance and select only needed fields
     const conversation = await Conversation.findOne({
       _id: req.params.id,
-      businessId: req.businessId,
-      isDeleted: false
+      businessId: req.businessId
     })
     .select('messages campaignId contact.phoneNumber')
     .lean();
 
     if (!conversation) {
-      return res.status(404).json({ error: 'Conversation not found' });
+      throw new NotFoundError('Conversation not found');
     }
 
     // Get regular messages (filter out deleted messages)
     const regularMessages = (conversation.messages || []).filter(msg => !msg.isDeleted);
     let campaignMessages = [];
     
-    // Load campaign message if exists
+    // Load campaign message if exists (skip for performance if too many recipients)
     if (conversation.campaignId) {
       try {
         const Campaign = require('../../../core/database/models/Campaign');
-        const campaign = await Campaign.findById(conversation.campaignId)
-          .select('recipients name')
-          .lean();
+        // Only get the specific recipient instead of all recipients
+        const campaign = await Campaign.findOne(
+          { 
+            _id: conversation.campaignId,
+            'recipients.conversationId': conversation._id
+          },
+          { 
+            'recipients.$': 1,  // Only get the matching recipient
+            name: 1
+          }
+        ).lean();
         
-        if (campaign) {
-          const recipient = campaign.recipients.find(r => 
-            r.conversationId && r.conversationId.toString() === conversation._id.toString()
-          );
-
-          if (recipient && recipient.messageContent) {
+        if (campaign && campaign.recipients && campaign.recipients[0]) {
+          const recipient = campaign.recipients[0];
+          
+          if (recipient.messageContent) {
             campaignMessages.push({
-              _id: `campaign_${campaign._id}_${recipient.phoneNumber}`,
+              _id: `${CAMPAIGN_MESSAGE_PREFIX}${campaign._id}_${recipient.phoneNumber}`,
               whatsappMessageId: recipient.whatsappMessageId,
-              from: 'system',
+              from: MESSAGE_FROM_SYSTEM,
               to: recipient.phoneNumber,
-              direction: 'outgoing',
-              type: recipient.messageContent.templateName ? 'template' : 'text',
+              direction: MESSAGE_DIRECTION_OUTGOING,
+              type: recipient.messageContent.templateName ? MESSAGE_TYPE_TEMPLATE : MESSAGE_TYPE_TEXT,
               content: {
                 text: recipient.messageContent.text,
                 templateName: recipient.messageContent.templateName
@@ -69,7 +99,13 @@ router.get('/:id/messages', async (req, res) => {
           }
         }
       } catch (campaignError) {
-        console.warn('Campaign load error:', campaignError.message);
+        // Just log and continue - don't let campaign errors block message loading
+        logger.warn('Campaign load error for conversation', {
+          conversationId: conversation._id,
+          campaignId: conversation.campaignId,
+          error: campaignError.message,
+          businessId: req.businessId.toString()
+        });
       }
     }
 
@@ -84,74 +120,123 @@ router.get('/:id/messages', async (req, res) => {
     // Page 1 = latest messages, Page 2 = older messages, etc.
     const endIndex = totalMessages - ((pageNum - 1) * limitNum);
     const startIndex = Math.max(0, endIndex - limitNum);
-    const messages = allMessages.slice(startIndex, endIndex);
+    const paginatedMessages = allMessages.slice(startIndex, endIndex);
+
+    // Transform messages for frontend (map 'in'/'out' to 'incoming'/'outgoing')
+    const messages = paginatedMessages.map(msg => ({
+      ...msg,
+      direction: msg.direction === 'out' ? 'outgoing' : 'incoming'
+    }));
 
     // Calculate if there are older messages available
     const hasMore = startIndex > 0;
     const totalPages = Math.ceil(totalMessages / limitNum);
 
-    res.json({
-      messages,
-      pagination: {
-        page: pageNum,
-        limit: limitNum,
-        total: totalMessages,
-        totalPages,
-        hasMore,
-        startIndex,
-        endIndex,
-        // Additional metadata for client
-        oldestMessageTimestamp: messages[0]?.timestamp || null,
-        newestMessageTimestamp: messages[messages.length - 1]?.timestamp || null
+    const processingTime = Date.now() - startTime;
+
+    res.status(HTTP_STATUS.OK).json({
+      success: true,
+      data: {
+        messages,
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total: totalMessages,
+          totalPages,
+          hasMore,
+          startIndex,
+          endIndex,
+          // Additional metadata for client
+          oldestMessageTimestamp: messages[0]?.timestamp || null,
+          newestMessageTimestamp: messages[messages.length - 1]?.timestamp || null
+        },
+        hasCampaignMessages: campaignMessages.length > 0
       },
-      hasCampaignMessages: campaignMessages.length > 0
+      message: 'Messages retrieved successfully',
+      processingTime
     });
   } catch (error) {
-    console.error('Get messages error:', error);
-    res.status(500).json({ error: 'Failed to fetch messages' });
+    const processingTime = Date.now() - startTime;
+    logger.error('Error retrieving messages', {
+      error: error.message,
+      conversationId: req.params.id,
+      businessId: req.businessId?.toString(),
+      processingTime
+    });
+    
+    if (error instanceof NotFoundError || error instanceof ValidationError) {
+      throw error;
+    }
+    
+    res.status(HTTP_STATUS.INTERNAL_ERROR).json({
+      success: false,
+      error: ERROR_CODES.INTERNAL_ERROR,
+      message: error.message,
+      processingTime
+    });
   }
 });
 
 // POST /:id/messages - Send text message
-router.post('/:id/messages', async (req, res) => {
+router.post('/:id/messages', auth, businessContext, async (req, res) => {
+  const startTime = Date.now();
+  
   try {
-    const { text, type = 'text', mediaUrl, caption } = req.body;
+    const { text, type = MESSAGE_TYPE_TEXT, mediaUrl, caption } = req.body;
 
     if (!text && !mediaUrl) {
-      return res.status(400).json({ error: 'Message text or media required' });
+      throw new ValidationError('Message text or media required');
     }
 
     const conversation = await Conversation.findOne({
       _id: req.params.id,
-      businessId: req.businessId,
-      isDeleted: false
+      businessId: req.businessId
     });
 
     if (!conversation) {
-      return res.status(404).json({ error: 'Conversation not found' });
+      throw new NotFoundError('Conversation not found');
     }
 
-    if (conversation.status === 'blocked') {
-      return res.status(403).json({ error: 'Conversation is blocked. Unblock before sending.' });
+    if (conversation.status === CONVERSATION_STATUS_BLOCKED) {
+      throw new ConflictError('Conversation is blocked. Unblock before sending.');
     }
 
-    if (conversation.status === 'archived' || conversation.status === 'closed') {
-      conversation.status = 'active';
+    if (conversation.status === CONVERSATION_STATUS_ARCHIVED || conversation.status === CONVERSATION_STATUS_CLOSED) {
+      conversation.status = CONVERSATION_STATUS_ACTIVE;
       await conversation.save();
       if (req.app.get('io')) {
         req.app.get('io').to(`user:${req.userId}`).emit('conversation:statusChanged', {
           conversationId: conversation._id,
-          status: 'active',
+          status: CONVERSATION_STATUS_ACTIVE,
           previousStatus: req.body.previousStatus || 'unknown'
         });
       }
     }
 
-    const credentials = await req.business.getWhatsAppCredentials();
+    logger.info('Fetching business for message sending', {
+      businessId: req.businessId?.toString(),
+      conversationBusinessId: conversation.businessId?.toString()
+    });
+
+    const business = await Business.findById(req.businessId);
+    if (!business) {
+      logger.error('Business not found', {
+        requestBusinessId: req.businessId?.toString(),
+        conversationBusinessId: conversation.businessId?.toString()
+      });
+      throw new NotFoundError('Business not found');
+    }
+
+    logger.info('Fetching WhatsApp credentials', {
+      businessId: business._id.toString(),
+      hasWhatsAppConfig: !!business.whatsappConfig
+    });
+
+    const credentials = await business.getWhatsAppCredentials();
     const whatsappService = new WhatsAppService(credentials);
     
     let result;
-    if (type === 'text') {
+    if (type === MESSAGE_TYPE_TEXT) {
       result = await whatsappService.sendTextMessage(
         conversation.contact.phoneNumber,
         text
@@ -166,21 +251,21 @@ router.post('/:id/messages', async (req, res) => {
     }
 
     if (!result.success) {
-      return res.status(500).json({ error: result.error });
+      throw new Error(result.error);
     }
 
     const messageData = {
       whatsappMessageId: result.messageId,
-      from: req.business?.whatsappConfig?.phoneNumberId || 'system',
+      from: req.business?.whatsappConfig?.phoneNumberId || MESSAGE_FROM_SYSTEM,
       to: conversation.contact.phoneNumber,
-      direction: 'outgoing',
+      direction: MESSAGE_DIRECTION_OUTGOING,
       type,
       content: {
         text: text || caption,
         mediaUrl,
         caption
       },
-      status: 'sent',
+      status: MESSAGE_STATUS_SENT,
       timestamp: new Date()
     };
 
@@ -193,38 +278,84 @@ router.post('/:id/messages', async (req, res) => {
       });
     }
 
-    res.status(201).json({ message: savedMessage });
+    const processingTime = Date.now() - startTime;
+
+    res.status(HTTP_STATUS_CREATED).json({ 
+      success: true,
+      data: { message: savedMessage },
+      processingTime
+    });
   } catch (error) {
-    console.error('Send message error:', error);
-    res.status(500).json({ error: 'Failed to send message' });
+    const processingTime = Date.now() - startTime;
+    logger.error('Error sending message', {
+      error: error.message,
+      conversationId: req.params.id,
+      businessId: req.businessId?.toString(),
+      processingTime
+    });
+    
+    if (error instanceof NotFoundError) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        success: false,
+        error: ERROR_CODES.NOT_FOUND,
+        message: error.message,
+        processingTime
+      });
+    }
+    
+    if (error instanceof ValidationError) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        success: false,
+        error: ERROR_CODES.VALIDATION_ERROR,
+        message: error.message,
+        processingTime
+      });
+    }
+    
+    if (error instanceof ConflictError) {
+      return res.status(HTTP_STATUS.CONFLICT).json({
+        success: false,
+        error: ERROR_CODES.CONFLICT_ERROR,
+        message: error.message,
+        processingTime
+      });
+    }
+    
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      error: ERROR_CODES.INTERNAL_ERROR,
+      message: error.message,
+      processingTime
+    });
   }
 });
 
 // POST /:id/messages/audio - Send audio message
-router.post('/:id/messages/audio', async (req, res) => {
+router.post('/:id/messages/audio', auth, businessContext, async (req, res) => {
+  const startTime = Date.now();
+  
   try {
     const { audioUrl, replyToMessageId } = req.body;
 
     if (!audioUrl) {
-      return res.status(400).json({ error: 'audioUrl required' });
+      throw new ValidationError('audioUrl required');
     }
 
     const conversation = await Conversation.findOne({
       _id: req.params.id,
-      businessId: req.businessId,
-      isDeleted: false
+      businessId: req.businessId
     });
 
     if (!conversation) {
-      return res.status(404).json({ error: 'Conversation not found' });
+      throw new NotFoundError('Conversation not found');
     }
 
-    if (conversation.status === 'blocked') {
-      return res.status(403).json({ error: 'Conversation is blocked. Unblock before sending.' });
+    if (conversation.status === CONVERSATION_STATUS_BLOCKED) {
+      throw new ConflictError('Conversation is blocked. Unblock before sending.');
     }
 
-    if (conversation.status === 'archived' || conversation.status === 'closed') {
-      conversation.status = 'active';
+    if (conversation.status === CONVERSATION_STATUS_ARCHIVED || conversation.status === CONVERSATION_STATUS_CLOSED) {
+      conversation.status = CONVERSATION_STATUS_ACTIVE;
       await conversation.save();
     }
 
@@ -236,7 +367,12 @@ router.post('/:id/messages/audio', async (req, res) => {
       }
     }
 
-    const credentials = await req.business.getWhatsAppCredentials();
+    const business = await Business.findById(req.businessId);
+    if (!business) {
+      throw new NotFoundError('Business not found');
+    }
+
+    const credentials = await business.getWhatsAppCredentials();
     const whatsappService = new WhatsAppService(credentials);
     
     const result = await whatsappService.sendAudioMessage(
@@ -246,19 +382,19 @@ router.post('/:id/messages/audio', async (req, res) => {
     );
 
     if (!result.success) {
-      return res.status(500).json({ error: result.error });
+      throw new Error(result.error);
     }
 
     const messageData = {
       whatsappMessageId: result.messageId,
-      from: req.business?.whatsappConfig?.phoneNumberId || 'system',
+      from: req.business?.whatsappConfig?.phoneNumberId || MESSAGE_FROM_SYSTEM,
       to: conversation.contact.phoneNumber,
-      direction: 'outgoing',
-      type: 'audio',
+      direction: MESSAGE_DIRECTION_OUTGOING,
+      type: MESSAGE_TYPE_AUDIO,
       content: {
         mediaUrl: audioUrl
       },
-      status: 'sent',
+      status: MESSAGE_STATUS_SENT,
       timestamp: new Date()
     };
 
@@ -277,44 +413,72 @@ router.post('/:id/messages/audio', async (req, res) => {
       });
     }
 
-    res.status(201).json({ message: savedMessage });
+    const processingTime = Date.now() - startTime;
+
+    res.status(HTTP_STATUS_CREATED).json({ 
+      success: true,
+      data: { message: savedMessage },
+      processingTime
+    });
   } catch (error) {
-    console.error('Send audio message error:', error);
-    res.status(500).json({ error: 'Failed to send audio message' });
+    const processingTime = Date.now() - startTime;
+    logger.error('Error sending audio message', {
+      error: error.message,
+      conversationId: req.params.id,
+      businessId: req.businessId?.toString(),
+      processingTime
+    });
+    
+    if (error instanceof NotFoundError || error instanceof ValidationError || error instanceof ConflictError) {
+      throw error;
+    }
+    
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      error: ERROR_CODES.INTERNAL_ERROR,
+      message: error.message,
+      processingTime
+    });
   }
 });
 
 // ❌ REMOVED: POST /:id/messages/sticker - WhatsApp API can RECEIVE stickers but cannot SEND custom ones
 
 // POST /:id/messages/contact - Send contact card message
-router.post('/:id/messages/contact', async (req, res) => {
+router.post('/:id/messages/contact', auth, businessContext, async (req, res) => {
+  const startTime = Date.now();
+  
   try {
     const { contacts } = req.body;
 
     if (!contacts || !Array.isArray(contacts) || contacts.length === 0) {
-      return res.status(400).json({ error: 'contacts array is required' });
+      throw new ValidationError('contacts array is required');
     }
 
     const conversation = await Conversation.findOne({
       _id: req.params.id,
-      businessId: req.businessId,
-      isDeleted: false
+      businessId: req.businessId
     });
 
     if (!conversation) {
-      return res.status(404).json({ error: 'Conversation not found' });
+      throw new NotFoundError('Conversation not found');
     }
 
     for (const contact of contacts) {
       if (!contact.name || !contact.name.formatted_name) {
-        return res.status(400).json({ error: 'Each contact must have name.formatted_name' });
+        throw new ValidationError('Each contact must have name.formatted_name');
       }
       if (!contact.phones || !Array.isArray(contact.phones) || contact.phones.length === 0) {
-        return res.status(400).json({ error: 'Each contact must have at least one phone number' });
+        throw new ValidationError('Each contact must have at least one phone number');
       }
     }
 
-    const credentials = await req.business.getWhatsAppCredentials();
+    const business = await Business.findById(req.businessId);
+    if (!business) {
+      throw new NotFoundError('Business not found');
+    }
+
+    const credentials = await business.getWhatsAppCredentials();
     const whatsappService = new WhatsAppService(credentials);
     
     const result = await whatsappService.sendContactMessage(
@@ -323,19 +487,19 @@ router.post('/:id/messages/contact', async (req, res) => {
     );
 
     if (!result.success) {
-      return res.status(500).json({ error: result.error });
+      throw new Error(result.error);
     }
 
     const messageData = {
       whatsappMessageId: result.messageId,
-      from: req.business?.whatsappConfig?.phoneNumberId || 'system',
+      from: req.business?.whatsappConfig?.phoneNumberId || MESSAGE_FROM_SYSTEM,
       to: conversation.contact.phoneNumber,
-      direction: 'outgoing',
-      type: 'contacts',
+      direction: MESSAGE_DIRECTION_OUTGOING,
+      type: MESSAGE_TYPE_CONTACTS,
       content: {
         contacts: contacts
       },
-      status: 'sent',
+      status: MESSAGE_STATUS_SENT,
       timestamp: new Date()
     };
 
@@ -348,10 +512,32 @@ router.post('/:id/messages/contact', async (req, res) => {
       });
     }
 
-    res.status(201).json({ message: savedMessage });
+    const processingTime = Date.now() - startTime;
+
+    res.status(HTTP_STATUS_CREATED).json({ 
+      success: true,
+      data: { message: savedMessage },
+      processingTime
+    });
   } catch (error) {
-    console.error('Send contact error:', error);
-    res.status(500).json({ error: 'Failed to send contact' });
+    const processingTime = Date.now() - startTime;
+    logger.error('Error sending contact message', {
+      error: error.message,
+      conversationId: req.params.id,
+      businessId: req.businessId?.toString(),
+      processingTime
+    });
+    
+    if (error instanceof NotFoundError || error instanceof ValidationError) {
+      throw error;
+    }
+    
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      error: ERROR_CODES.INTERNAL_ERROR,
+      message: error.message,
+      processingTime
+    });
   }
 });
 

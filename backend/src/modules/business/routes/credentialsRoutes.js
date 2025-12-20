@@ -5,32 +5,106 @@
 
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto');
 const Business = require('../../../core/database/models/Business');
-const { requireBusinessAdmin } = require('../../../core/middlewares/rbac');
+const { requireBusinessAdmin } = require('../../../core/middlewares/authorization');
+const { NotFoundError, AuthorizationError } = require('../../../core/middlewares/errorHandler');
+const { businessContext } = require('../../../core/middlewares/businessContext');
+const { ERROR_CODES, HTTP_STATUS } = require('../../../common/constants');
+const logger = require('../../../common/helpers/logger');
+const { validateBusiness } = require('../../../common/utils/validators');
+
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+// Credential Fields
+const CREDENTIAL_FIELD_ACCESS_TOKEN = 'accessToken';
+const CREDENTIAL_FIELD_SYSTEM_USER_TOKEN = 'systemUserToken';
+const CREDENTIAL_FIELD_APP_SECRET = 'appSecret';
+const CREDENTIAL_FIELD_VERIFY_TOKEN = 'verifyToken';
+const CREDENTIAL_FIELD_API_VERSION = 'apiVersion';
+
+// Status Values
+const STATUS_VERIFIED = 'verified';
+
+// Token Generation
+const TOKEN_BYTE_LENGTH = 32;
+const TOKEN_ENCODING = 'hex';
+const TOKEN_PREVIEW_LENGTH = 8;
+const TOKEN_PREVIEW_SUFFIX = '...';
+const TOKEN_PREVIEW_DEFAULT = 'none';
+
+// Messages
+const MSG_CREDENTIALS_UPDATED = 'Credentials updated successfully';
+const MSG_VERIFY_TOKEN_REGENERATED = 'Verify token regenerated successfully';
+const MSG_USAGE_RETRIEVED = 'Usage data retrieved successfully';
+
+// Error Messages
+const ERROR_BUSINESS_NOT_FOUND = 'Business not found';
+const ERROR_ACCESS_DENIED = 'Access denied';
+const ERROR_OWNER_ONLY = 'Only business owner can update credentials';
+const ERROR_OWNER_REGENERATE_TOKEN = 'Only business owner can regenerate verify token';
+const ERROR_FAILED_USAGE = 'Failed to fetch usage';
+const ERROR_FAILED_REGENERATE_TOKEN = 'Failed to regenerate verify token';
+
+// Audit Actions
+const AUDIT_ACTION_REGENERATE_VERIFY_TOKEN = 'regenerate_verify_token';
+
+// Audit Resources
+const AUDIT_RESOURCE_BUSINESS = 'business';
+
+// Default Values
+const DEFAULT_METRICS_VALUE = 0;
+const USAGE_PERIOD_ALL_TIME = 'all-time';
+
+// Default Reasons
+const DEFAULT_REASON_TOKEN_ROTATION = 'Security token rotation';
+
+// ============================================================================
+// ROUTES
+// ============================================================================
 
 // PUT /:id/credentials - Update WhatsApp credentials
 // RBAC: Business Admin+ only - critical credentials
 router.put('/:id/credentials', requireBusinessAdmin, async (req, res) => {
+  const startTime = Date.now();
   try {
+    logger.info('PUT /credentials starting', {
+      businessId: req.params.id,
+      userId: req.userId?.toString(),
+      hasBody: !!req.body
+    });
+
     const business = await Business.findById(req.params.id)
       .select('+whatsappConfig.accessToken +whatsappConfig.systemUserToken +whatsappConfig.appSecret');
-    
+  
+    logger.info('Business found', {
+      businessId: business?._id?.toString(),
+      hasOwner: !!business?.owner,
+      ownerValue: business?.owner?.toString()
+    });
+
     if (!business) {
-      return res.status(404).json({
-        success: false,
-        error: 'Business not found'
-      });
+      throw new NotFoundError(ERROR_BUSINESS_NOT_FOUND);
     }
-    
+  
     if (business.owner.toString() !== req.userId.toString()) {
-      return res.status(403).json({
-        success: false,
-        error: 'Only business owner can update credentials'
+      logger.warn('Owner mismatch', {
+        businessOwner: business.owner.toString(),
+        requestUserId: req.userId.toString()
       });
+      throw new AuthorizationError(ERROR_OWNER_ONLY);
     }
     
     const { accessToken, systemUserToken, appSecret, verifyToken, apiVersion } = req.body;
     
+    logger.info('Updating credentials', {
+      hasAccessToken: !!accessToken,
+      hasSystemUserToken: !!systemUserToken,
+      hasAppSecret: !!appSecret
+    });
+
     if (accessToken) business.whatsappConfig.accessToken = accessToken;
     if (systemUserToken) business.whatsappConfig.systemUserToken = systemUserToken;
     if (appSecret) business.whatsappConfig.appSecret = appSecret;
@@ -38,39 +112,62 @@ router.put('/:id/credentials', requireBusinessAdmin, async (req, res) => {
     if (apiVersion) business.whatsappConfig.apiVersion = apiVersion;
     
     business.whatsappConfig.tokenLastRefreshedAt = new Date();
-    
+  
+    logger.info('Saving business');
     await business.save();
-    
-    res.json({
+    logger.info('Business saved successfully');
+  
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
       success: true,
-      message: 'Credentials updated successfully'
+      data: null,
+      message: MSG_CREDENTIALS_UPDATED,
+      processingTime
     });
   } catch (error) {
-    console.error('Error updating credentials:', error);
-    res.status(500).json({
+    const processingTime = Date.now() - startTime;
+    logger.error('Route error', {
+      error: error.message,
+      stack: error.stack,
+      businessId: req.params.id,
+      processingTime
+    });
+    
+    if (error instanceof NotFoundError) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        success: false,
+        error: ERROR_CODES.NOT_FOUND,
+        message: error.message,
+        processingTime
+      });
+    }
+    
+    if (error instanceof AuthorizationError) {
+      return res.status(HTTP_STATUS.FORBIDDEN).json({
+        success: false,
+        error: ERROR_CODES.AUTHORIZATION_ERROR,
+        message: error.message,
+        processingTime
+      });
+    }
+    
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
-      error: 'Failed to update credentials'
+      error: ERROR_CODES.INTERNAL_ERROR,
+      message: 'Failed to update credentials',
+      processingTime
     });
   }
 });
 
 // GET /:id/health - Get business health status
 router.get('/:id/health', async (req, res) => {
+  const startTime = Date.now();
   try {
-    const business = await Business.findById(req.params.id);
-    
-    if (!business) {
-      return res.status(404).json({
-        success: false,
-        error: 'Business not found'
-      });
-    }
-    
+    const business = await validateBusiness(req.params.id);
+  
     if (!business.hasUser(req.userId)) {
-      return res.status(403).json({
-        success: false,
-        error: 'Access denied'
-      });
+      throw new AuthorizationError(ERROR_ACCESS_DENIED);
     }
     
     const health = {
@@ -84,55 +181,109 @@ router.get('/:id/health', async (req, res) => {
       lastActivity: business.updatedAt
     };
     
-    res.json({
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
       success: true,
-      data: health
+      data: { health },
+      processingTime
     });
   } catch (error) {
-    console.error('Error fetching business health:', error);
-    res.status(500).json({
+    const processingTime = Date.now() - startTime;
+    logger.error('Route error', {
+      error: error.message,
+      stack: error.stack,
+      businessId: req.params.id,
+      processingTime
+    });
+    
+    if (error instanceof NotFoundError) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        success: false,
+        error: ERROR_CODES.NOT_FOUND,
+        message: error.message,
+        processingTime
+      });
+    }
+    
+    if (error instanceof AuthorizationError) {
+      return res.status(HTTP_STATUS.FORBIDDEN).json({
+        success: false,
+        error: ERROR_CODES.AUTHORIZATION_ERROR,
+        message: error.message,
+        processingTime
+      });
+    }
+    
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
-      error: 'Failed to fetch business health'
+      error: ERROR_CODES.INTERNAL_ERROR,
+      message: 'Failed to get health status',
+      processingTime
     });
   }
 });
 
 // GET /:id/usage - Get usage statistics
 router.get('/:id/usage', async (req, res) => {
+  const startTime = Date.now();
   try {
     const business = await Business.findById(req.params.id);
     
     if (!business) {
-      return res.status(404).json({
-        success: false,
-        error: 'Business not found'
-      });
+      throw new NotFoundError(ERROR_BUSINESS_NOT_FOUND);
     }
     
     if (!business.hasUser(req.userId)) {
-      return res.status(403).json({
-        success: false,
-        error: 'Access denied'
-      });
+      throw new AuthorizationError(ERROR_ACCESS_DENIED);
     }
     
     const usage = {
-      messagesSent: business.metrics?.totalMessages || 0,
-      conversationsActive: business.metrics?.activeConversations || 0,
-      templatesApproved: business.metrics?.templatesApproved || 0,
-      campaignsRun: business.metrics?.campaignsRun || 0,
-      period: 'all-time'
+      messagesSent: business.metrics?.totalMessages || DEFAULT_METRICS_VALUE,
+      conversationsActive: business.metrics?.activeConversations || DEFAULT_METRICS_VALUE,
+      templatesApproved: business.metrics?.templatesApproved || DEFAULT_METRICS_VALUE,
+      campaignsRun: business.metrics?.campaignsRun || DEFAULT_METRICS_VALUE,
+      period: USAGE_PERIOD_ALL_TIME
     };
     
-    res.json({
+    const processingTime = Date.now() - startTime;
+    res.status(HTTP_STATUS.OK).json({
       success: true,
-      data: usage
+      data: usage,
+      message: MSG_USAGE_RETRIEVED,
+      processingTime
     });
   } catch (error) {
-    console.error('Error fetching usage:', error);
-    res.status(500).json({
+    const processingTime = Date.now() - startTime;
+    logger.error('Route error', {
+      error: error.message,
+      stack: error.stack,
+      businessId: req.params.id,
+      processingTime
+    });
+    
+    if (error instanceof NotFoundError) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        success: false,
+        error: ERROR_CODES.NOT_FOUND,
+        message: error.message,
+        processingTime
+      });
+    }
+    
+    if (error instanceof AuthorizationError) {
+      return res.status(HTTP_STATUS.FORBIDDEN).json({
+        success: false,
+        error: ERROR_CODES.AUTHORIZATION_ERROR,
+        message: error.message,
+        processingTime
+      });
+    }
+    
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
-      error: 'Failed to fetch usage'
+      error: ERROR_CODES.INTERNAL_ERROR,
+      message: 'Failed to get usage statistics',
+      processingTime
     });
   }
 });
@@ -140,30 +291,24 @@ router.get('/:id/usage', async (req, res) => {
 // POST /:id/regenerate-verify-token - Regenerate webhook verify token
 // RBAC: Business Admin+ only - security-critical operation
 router.post('/:id/regenerate-verify-token', requireBusinessAdmin, async (req, res) => {
+  const startTime = Date.now();
   try {
     const business = await Business.findById(req.params.id);
     
     if (!business) {
-      return res.status(404).json({
-        success: false,
-        error: 'Business not found'
-      });
+      throw new NotFoundError(ERROR_BUSINESS_NOT_FOUND);
     }
     
     if (business.owner.toString() !== req.userId.toString()) {
-      return res.status(403).json({
-        success: false,
-        error: 'Only business owner can regenerate verify token'
-      });
+      throw new AuthorizationError(ERROR_OWNER_REGENERATE_TOKEN);
     } 
     
     // Generate new verify token
-    const crypto = require('crypto');
-    const newVerifyToken = crypto.randomBytes(32).toString('hex');
+    const newVerifyToken = crypto.randomBytes(TOKEN_BYTE_LENGTH).toString(TOKEN_ENCODING);
     
     // Store old token for audit log
     const oldTokenPreview = business.whatsappConfig.verifyToken ? 
-      business.whatsappConfig.verifyToken.substring(0, 8) + '...' : 'none';
+      business.whatsappConfig.verifyToken.substring(0, TOKEN_PREVIEW_LENGTH) + TOKEN_PREVIEW_SUFFIX : TOKEN_PREVIEW_DEFAULT;
     
     // Update business
     business.whatsappConfig.verifyToken = newVerifyToken;
@@ -177,33 +322,68 @@ router.post('/:id/regenerate-verify-token', requireBusinessAdmin, async (req, re
       await AuditLog.create({
         userId: req.userId,
         businessId: business._id,
-        action: 'regenerate_verify_token',
-        resource: 'business',
+        action: AUDIT_ACTION_REGENERATE_VERIFY_TOKEN,
+        resource: AUDIT_RESOURCE_BUSINESS,
         resourceId: business._id,
         details: {
           oldTokenPreview,
           regeneratedAt: new Date(),
-          reason: req.body.reason || 'Security token rotation'
+          reason: req.body.reason || DEFAULT_REASON_TOKEN_ROTATION
         },
         ipAddress: req.ip,
         userAgent: req.headers['user-agent']
       });
     } catch (auditError) {
-      console.error('Failed to create audit log:', auditError);
+      logger.error('Failed to create audit log', {
+        businessId: business._id?.toString(),
+        error: auditError.message
+      });
       // Don't fail the operation if audit logging fails
     }
     
-    res.json({
+    const processingTime = Date.now() - startTime;
+    res.status(HTTP_STATUS.OK).json({
       success: true,
-      message: 'Verify token regenerated successfully',
-      verifyToken: newVerifyToken,
-      regeneratedAt: business.whatsappConfig.tokenLastRefreshedAt
+      data: {
+        message: MSG_VERIFY_TOKEN_REGENERATED,
+        verifyToken: newVerifyToken,
+        regeneratedAt: business.whatsappConfig.tokenLastRefreshedAt
+      },
+      message: MSG_VERIFY_TOKEN_REGENERATED,
+      processingTime
     });
   } catch (error) {
-    console.error('Error regenerating verify token:', error);
-    res.status(500).json({
+    const processingTime = Date.now() - startTime;
+    logger.error('Route error', {
+      error: error.message,
+      stack: error.stack,
+      businessId: req.params.id,
+      processingTime
+    });
+    
+    if (error instanceof NotFoundError) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        success: false,
+        error: ERROR_CODES.NOT_FOUND,
+        message: error.message,
+        processingTime
+      });
+    }
+    
+    if (error instanceof AuthorizationError) {
+      return res.status(HTTP_STATUS.FORBIDDEN).json({
+        success: false,
+        error: ERROR_CODES.AUTHORIZATION_ERROR,
+        message: error.message,
+        processingTime
+      });
+    }
+    
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
-      error: 'Failed to regenerate verify token'
+      error: ERROR_CODES.INTERNAL_ERROR,
+      message: 'Failed to regenerate verify token',
+      processingTime
     });
   }
 });

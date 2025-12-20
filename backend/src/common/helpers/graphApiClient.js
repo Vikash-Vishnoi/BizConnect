@@ -1,9 +1,40 @@
-const axios = require('axios');
+/**
+ * WhatsApp Graph API Client
+ * Handles requests to WhatsApp Business API with retry logic and error handling
+ * Supports multi-business context
+ * 
+ * @module common/helpers/graphApiClient
+ */
 
+const axios = require('axios');
+const logger = require('./logger');
+const config = require('../../config/server.config');
+
+// Graph API configuration
 const GRAPH_API_VERSION = process.env.WHATSAPP_API_VERSION || 'v22.0';
 const GRAPH_API_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
-const MAX_RETRIES = parseInt(process.env.API_MAX_RETRIES) || 3;
-const RETRY_DELAY = parseInt(process.env.API_RETRY_DELAY) || 1000;
+
+// Retry configuration
+const RETRY_CONFIG = {
+  MAX_RETRIES: parseInt(process.env.API_MAX_RETRIES, 10) || 3,
+  RETRY_DELAY: parseInt(process.env.API_RETRY_DELAY, 10) || 1000,
+  TIMEOUT: parseInt(process.env.GRAPH_API_TIMEOUT, 10) || 30000,
+};
+
+// Graph API error codes
+const GRAPH_ERROR_CODES = {
+  RATE_LIMIT: [4, 17, 32, 613],
+  TEMPORARY: [1, 2],
+  INVALID_TOKEN: [190],
+  PERMISSION_DENIED: [10, 200, 299],
+};
+
+/**
+ * Sleep helper for retry delays
+ * @param {number} ms - Milliseconds to sleep
+ * @returns {Promise<void>}
+ */
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
  
 /**
  * Make a request to WhatsApp Graph API with retry logic
@@ -12,44 +43,91 @@ const RETRY_DELAY = parseInt(process.env.API_RETRY_DELAY) || 1000;
  * @param {string} accessToken - WhatsApp Business API access token
  * @returns {Promise<object>} API response data
  */
-const makeGraphAPIRequest = async (endpoint, params = {}, accessToken) => {
+const makeGraphAPIRequest = async (endpoint, params = {}, accessToken, businessId = null) => {
   if (!accessToken) {
-    throw new Error('Access token is required for Graph API requests');
+    const error = new Error('Access token is required for Graph API requests');
+    logger.error('Graph API request failed: missing access token', { endpoint, businessId });
+    throw error;
   }
 
   const url = `${GRAPH_API_BASE}${endpoint}`;
   let lastError;
 
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+  for (let attempt = 1; attempt <= RETRY_CONFIG.MAX_RETRIES; attempt++) {
     try {
-      console.log(`📡 Graph API Request (Attempt ${attempt}/${MAX_RETRIES}):`, url);
+      logger.debug(`Graph API Request (Attempt ${attempt}/${RETRY_CONFIG.MAX_RETRIES})`, { 
+        url, 
+        endpoint,
+        businessId 
+      });
       
       const response = await axios.get(url, {
         params,
         headers: {
-          'Authorization': `Bearer ${accessToken}`
+          Authorization: `Bearer ${accessToken}`,
         },
-        timeout: parseInt(process.env.GRAPH_API_TIMEOUT) || 30000
+        timeout: RETRY_CONFIG.TIMEOUT,
       });
 
-      console.log('✅ Graph API Request successful');
+      logger.debug('Graph API Request successful', { 
+        endpoint, 
+        status: response.status,
+        businessId 
+      });
       return response.data;
 
     } catch (error) {
       lastError = error;
+      const errorCode = error.response?.data?.error?.code;
+      const errorMessage = error.response?.data?.error?.message;
 
-      // Handle rate limiting (error code 4 or 17)
-      if (error.response?.data?.error?.code === 4 || error.response?.data?.error?.code === 17) {
-        console.warn(`⚠️  Rate limit hit, retrying in ${RETRY_DELAY * attempt}ms...`);
-        await sleep(RETRY_DELAY * attempt);
+      // Handle rate limiting
+      if (GRAPH_ERROR_CODES.RATE_LIMIT.includes(errorCode)) {
+        const retryDelay = RETRY_CONFIG.RETRY_DELAY * attempt;
+        logger.warn(`Rate limit hit, retrying in ${retryDelay}ms`, { 
+          endpoint, 
+          attempt,
+          businessId,
+          errorCode 
+        });
+        await sleep(retryDelay);
         continue;
       }
 
-      // Handle temporary errors (5xx)
-      if (error.response?.status >= 500) {
-        console.warn(`⚠️  Server error (${error.response.status}), retrying...`);
-        await sleep(RETRY_DELAY * attempt);
+      // Handle temporary errors (5xx or specific error codes)
+      if (error.response?.status >= 500 || GRAPH_ERROR_CODES.TEMPORARY.includes(errorCode)) {
+        const retryDelay = RETRY_CONFIG.RETRY_DELAY * attempt;
+        logger.warn('Server error, retrying', { 
+          endpoint, 
+          status: error.response?.status,
+          attempt,
+          businessId,
+          errorCode 
+        });
+        await sleep(retryDelay);
         continue;
+      }
+
+      // Handle authentication errors - don't retry
+      if (GRAPH_ERROR_CODES.INVALID_TOKEN.includes(errorCode)) {
+        logger.error('Graph API authentication failed', { 
+          endpoint, 
+          businessId,
+          errorCode,
+          errorMessage 
+        });
+        throw new Error(`Authentication failed: ${errorMessage || 'Invalid access token'}`);
+      }
+
+      // Handle permission errors - don't retry
+      if (GRAPH_ERROR_CODES.PERMISSION_DENIED.includes(errorCode)) {
+        logger.error('Graph API permission denied', { 
+          endpoint, 
+          businessId,
+          errorCode,
+          errorMessage 
+        });
+        throw new Error(`Permission denied: ${errorMessage || 'Insufficient permissions'}`);
       }
 
       // For other errors, don't retry
@@ -58,7 +136,12 @@ const makeGraphAPIRequest = async (endpoint, params = {}, accessToken) => {
   }
 
   // All retries failed
-  console.error('❌ Graph API Request failed:', lastError.message);
+  logger.error('Graph API Request failed', { 
+    endpoint, 
+    error: lastError.message,
+    attempts: RETRY_CONFIG.MAX_RETRIES,
+    businessId 
+  });
   
   if (lastError.response?.data) {
     throw new Error(lastError.response.data.error?.message || 'Graph API request failed');
@@ -73,13 +156,21 @@ const makeGraphAPIRequest = async (endpoint, params = {}, accessToken) => {
  * @param {object} options - Analytics options
  * @returns {Promise<object>} Conversation analytics data
  */
-const getConversationAnalytics = async (wabaId, options, accessToken) => {
-  const { start, end, granularity, phoneNumbers, conversationTypes, conversationDirections, conversationCategories } = options;
+const getConversationAnalytics = async (wabaId, options, accessToken, businessId = null) => {
+  const { 
+    start, 
+    end, 
+    granularity, 
+    phoneNumbers, 
+    conversationTypes, 
+    conversationDirections, 
+    conversationCategories 
+  } = options;
 
   const params = {
     start,
     end,
-    granularity: granularity || 'DAILY'
+    granularity: granularity || 'DAILY',
   };
 
   if (phoneNumbers && phoneNumbers.length > 0) {
@@ -98,7 +189,7 @@ const getConversationAnalytics = async (wabaId, options, accessToken) => {
     params.conversation_categories = JSON.stringify(conversationCategories);
   }
 
-  return await makeGraphAPIRequest(`/${wabaId}/conversation_analytics`, params, accessToken);
+  return await makeGraphAPIRequest(`/${wabaId}/conversation_analytics`, params, accessToken, businessId);
 };
 
 /**
@@ -107,13 +198,13 @@ const getConversationAnalytics = async (wabaId, options, accessToken) => {
  * @param {object} options - Analytics options
  * @returns {Promise<object>} Message analytics data
  */
-const getMessageAnalytics = async (wabaId, options, accessToken) => {
+const getMessageAnalytics = async (wabaId, options, accessToken, businessId = null) => {
   const { start, end, granularity, phoneNumbers, messageTypes } = options;
 
   const params = {
     start,
     end,
-    granularity: granularity || 'DAILY'
+    granularity: granularity || 'DAILY',
   };
 
   if (phoneNumbers && phoneNumbers.length > 0) {
@@ -124,16 +215,13 @@ const getMessageAnalytics = async (wabaId, options, accessToken) => {
     params.message_types = JSON.stringify(messageTypes);
   }
 
-  return await makeGraphAPIRequest(`/${wabaId}/message_analytics`, params, accessToken);
+  return await makeGraphAPIRequest(`/${wabaId}/message_analytics`, params, accessToken, businessId);
 };
-
-/**
- * Sleep helper for retry delays
- */
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 module.exports = {
   makeGraphAPIRequest,
   getConversationAnalytics,
-  getMessageAnalytics
+  getMessageAnalytics,
+  GRAPH_API_BASE,
+  GRAPH_API_VERSION,
 };

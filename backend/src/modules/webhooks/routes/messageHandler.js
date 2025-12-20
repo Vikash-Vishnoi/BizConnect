@@ -10,12 +10,37 @@ const User = require('../../../core/database/models/User');
 const { sendWelcomeMessage } = require('./welcomeHandler');
 const { buildMessageContent, getMessagePreview } = require('./messageContentBuilder');
 const logger = require('../../../common/helpers/logger');
+const { ERROR_CODES, TIME_CONSTANTS, MESSAGE_TYPES } = require('../../../common/constants');
 const {  
   sanitizeName, 
   sanitizeMessage, 
   sanitizeMessageContent,
   sanitizeWhatsAppMediaUrl 
 } = require('../../../common/helpers/sanitizer');
+
+/**
+ * Message Handler Constants
+ */
+const MESSAGE_DIRECTION = {
+  INCOMING: 'in',
+  OUTGOING: 'out'
+};
+
+const MESSAGE_STATUS = {
+  RECEIVED: 'received',
+  SENT: 'sent',
+  DELIVERED: 'delivered',
+  READ: 'read',
+  FAILED: 'failed'
+};
+
+const CONVERSATION_WINDOW = {
+  DURATION_HOURS: 24,
+  WITHIN: 'WITHIN_24H',
+  EXPIRED: 'EXPIRED'
+};
+
+const OPT_OUT_KEYWORDS = ['stop', 'unsubscribe', 'cancel', 'end', 'quit', 'stopall'];
 
 /**
  * Handle incoming WhatsApp message
@@ -26,12 +51,23 @@ const {
  */
 async function handleIncomingMessage(message, metadata, io, business) {
   const startTime = Date.now();
-  const requestId = `msg_${message.id}`;
+  const requestId = `msg_${message?.id}_${Date.now()}`;
   
   try {
+    // Validate inputs
+    if (!message || !business) {
+      logger.error('handleIncomingMessage called with invalid parameters', {
+        requestId,
+        hasMessage: !!message,
+        hasBusiness: !!business,
+        code: ERROR_CODES.VALIDATION_ERROR
+      });
+      return;
+    }
+
     const from = message.from;
     const messageId = message.id;
-    const timestamp = new Date(parseInt(message.timestamp) * 1000);
+    const timestamp = new Date(parseInt(message.timestamp) * TIME_CONSTANTS.SECOND_MS);
 
     logger.logWhatsAppAPI('POST', 'webhook/message', 200, {
       requestId,
@@ -48,7 +84,8 @@ async function handleIncomingMessage(message, metadata, io, business) {
         requestId,
         businessId: business._id.toString(),
         hasFrom: !!from,
-        hasMessageId: !!messageId
+        hasMessageId: !!messageId,
+        code: ERROR_CODES.VALIDATION_ERROR
       });
       return;
     }
@@ -57,7 +94,7 @@ async function handleIncomingMessage(message, metadata, io, business) {
     const phoneNormalized = Conversation.normalizePhone(from);
 
     // Handle reactions separately (they update existing messages, don't create new ones)
-    if (message.type === 'reaction') {
+    if (message.type === MESSAGE_TYPES.REACTION) {
       await handleReaction(message, phoneNormalized, timestamp, io, business, requestId);
       return;
     }
@@ -74,7 +111,12 @@ async function handleIncomingMessage(message, metadata, io, business) {
     );
 
     if (!conversation) {
-      logger.error('Failed to create/find conversation', { requestId, phoneNumber: phoneNormalized });
+      logger.error('Failed to create/find conversation', {
+        requestId,
+        phoneNumber: phoneNormalized,
+        businessId: business._id.toString(),
+        code: ERROR_CODES.NOT_FOUND
+      });
       return;
     }
 
@@ -101,11 +143,11 @@ async function handleIncomingMessage(message, metadata, io, business) {
       whatsappMessageId: messageId,
       type: type,
       content: content,
-      direction: 'incoming',
-      status: 'received',
+      direction: MESSAGE_DIRECTION.INCOMING,
+      status: MESSAGE_STATUS.RECEIVED,
       timestamp: timestamp,
       requiresTemplate: false,
-      windowStatus: 'WITHIN_24H'
+      windowStatus: CONVERSATION_WINDOW.WITHIN
     };
 
     // Add message to conversation
@@ -134,7 +176,7 @@ async function handleIncomingMessage(message, metadata, io, business) {
     emitMessageEvent(io, conversation, newMessage, requestId);
 
     // Handle opt-out detection for text messages
-    if (type === 'text' && content.text) {
+    if (type === MESSAGE_TYPES.TEXT && content.text) {
       await detectAndHandleOptOut(
         phoneNormalized,
         content.text,
@@ -148,17 +190,15 @@ async function handleIncomingMessage(message, metadata, io, business) {
     // Trigger automation rules
     await processAutomationRules(conversation, newMessage, business, requestId);
 
-    // Increment business usage counters
-    await business.incrementUsage('messages', 1);
-
-    // Log completion time
-    const duration = Date.now() - startTime;
     logger.info('Message processing completed', {
       requestId,
-      duration: `${duration}ms`,
+      messageId,
       conversationId: conversation._id.toString(),
-      messageId: newMessage._id?.toString()
+      processingTime: `${Date.now() - startTime}ms`
     });
+
+    // Increment business usage counters
+    await business.incrementUsage('messages', 1);
 
   } catch (error) {
     logger.error('Error handling incoming message', {
@@ -166,7 +206,9 @@ async function handleIncomingMessage(message, metadata, io, business) {
       error: error.message,
       stack: error.stack,
       messageId: message?.id,
-      businessId: business?._id?.toString()
+      businessId: business?._id?.toString(),
+      code: error.code || ERROR_CODES.INTERNAL_ERROR,
+      processingTime: `${Date.now() - startTime}ms`
     });
     throw error;
   }

@@ -23,11 +23,22 @@ const savedReplySchema = new mongoose.Schema({
     enum: ['greeting', 'support', 'sales', 'closing', 'faq', 'other'],
     default: 'other',
   },
+  usageCount: {
+    type: Number,
+    default: 0,
+  },
+  lastUsedAt: {
+    type: Date,
+  },
+  isActive: {
+    type: Boolean,
+    default: true,
+  },
 }, {
   timestamps: true
 });
 
-savedReplySchema.index({ userId: 1, isActive: 1, category: 1 });
+savedReplySchema.index({ businessId: 1, isActive: 1, category: 1 });
 
 savedReplySchema.methods.incrementUsage = function() {
   this.usageCount += 1;

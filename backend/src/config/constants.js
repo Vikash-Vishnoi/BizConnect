@@ -219,7 +219,7 @@ function validateConfig() {
 try {
   validateConfig();
 } catch (error) {
-  console.error('❌ Configuration validation failed:', error.message);
+  logger.error('Configuration validation failed', { error: error.message });
   if (process.env.NODE_ENV === 'production') {
     process.exit(1);
   }

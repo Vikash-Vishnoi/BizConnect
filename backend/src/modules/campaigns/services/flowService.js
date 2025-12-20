@@ -1,6 +1,24 @@
 const axios = require('axios');
 const logger = require('../../../common/helpers/logger');
 const { getBusinessCredentials } = require('../../../common/helpers/businessContext');
+const { ERROR_CODES } = require('../../../common/constants');
+
+// ============================================
+// CONSTANTS
+// ============================================
+
+const DEFAULT_API_VERSION = 'v22.0';
+const DEFAULT_FLOW_CATEGORY = 'OTHER';
+const ASSET_TYPE_FLOW_JSON = 'FLOW_JSON';
+const ASSET_NAME_FLOW_JSON = 'flow.json';
+const FLOW_MESSAGE_VERSION = '3';
+const FLOW_ACTION_NAVIGATE = 'navigate';
+const DEFAULT_FLOW_CTA = 'Open Form';
+const DEFAULT_INITIAL_SCREEN = 'WELCOME';
+
+// ============================================
+// SERVICE CLASS
+// ============================================
 
 /**
  * WhatsApp Flow Service
@@ -16,11 +34,13 @@ class FlowService {
   
   async getCredentials() {
     if (!this.businessId) {
-      throw new Error('Business ID required for Flow operations');
+      const error = new Error('Business ID required for Flow operations');
+      error.code = ERROR_CODES.BUSINESS_CONTEXT_REQUIRED;
+      throw error;
     }
     const creds = await getBusinessCredentials(this.businessId);
     return {
-      baseURL: `https://graph.facebook.com/${creds.apiVersion || 'v22.0'}`,
+      baseURL: `https://graph.facebook.com/${creds.apiVersion || DEFAULT_API_VERSION}`,
       accessToken: creds.accessToken,
       businessAccountId: creds.wabaId
     };
@@ -30,6 +50,8 @@ class FlowService {
    * Create a new flow in WhatsApp
    */
   async createFlow(flowData) {
+    const startTime = Date.now();
+    
     try {
       const { baseURL, accessToken, businessAccountId } = await this.getCredentials();
       
@@ -37,7 +59,7 @@ class FlowService {
         `${baseURL}/${businessAccountId}/flows`,
         {
           name: flowData.name,
-          categories: flowData.categories || ['OTHER']
+          categories: flowData.categories || [DEFAULT_FLOW_CATEGORY]
         },
         {
           headers: {
@@ -47,15 +69,27 @@ class FlowService {
         }
       );
 
+      const processingTime = Date.now() - startTime;
+      logger.info('Flow created successfully', {
+        businessId: this.businessId.toString(),
+        flowId: response.data.id,
+        flowName: flowData.name,
+        processingTime
+      });
+
       return {
         success: true,
         flowId: response.data.id,
         data: response.data
       };
     } catch (error) {
+      const processingTime = Date.now() - startTime;
       logger.error('Failed to create flow', {
-        businessId: this.businessId,
-        error: error.response?.data || error.message
+        businessId: this.businessId.toString(),
+        flowName: flowData.name,
+        error: error.response?.data || error.message,
+        errorCode: error.code || ERROR_CODES.WHATSAPP_API_ERROR,
+        processingTime
       });
       throw new Error(`Failed to create flow: ${error.response?.data?.error?.message || error.message}`);
     }
@@ -65,14 +99,16 @@ class FlowService {
    * Update flow JSON
    */
   async updateFlowJSON(flowId, flowJSON) {
+    const startTime = Date.now();
+    
     try {
       const { baseURL, accessToken } = await this.getCredentials();
       
       const response = await axios.post(
         `${baseURL}/${flowId}/assets`,
         {
-          name: 'flow.json',
-          asset_type: 'FLOW_JSON',
+          name: ASSET_NAME_FLOW_JSON,
+          asset_type: ASSET_TYPE_FLOW_JSON,
           body: JSON.stringify(flowJSON)
         },
         {
@@ -83,16 +119,27 @@ class FlowService {
         }
       );
 
+      const processingTime = Date.now() - startTime;
+      logger.info('Flow JSON updated successfully', {
+        businessId: this.businessId.toString(),
+        flowId,
+        validationErrors: response.data.validation_errors?.length || 0,
+        processingTime
+      });
+
       return {
         success: true,
         data: response.data,
         validation_errors: response.data.validation_errors || []
       };
     } catch (error) {
+      const processingTime = Date.now() - startTime;
       logger.error('Failed to update flow JSON', {
-        businessId: this.businessId,
+        businessId: this.businessId.toString(),
         flowId,
-        error: error.response?.data || error.message
+        error: error.response?.data || error.message,
+        errorCode: error.code || ERROR_CODES.WHATSAPP_API_ERROR,
+        processingTime
       });
       
       // Return validation errors if available
@@ -113,6 +160,8 @@ class FlowService {
    * Publish a flow
    */
   async publishFlow(flowId) {
+    const startTime = Date.now();
+    
     try {
       const { baseURL, accessToken } = await this.getCredentials();
       
@@ -127,15 +176,25 @@ class FlowService {
         }
       );
 
+      const processingTime = Date.now() - startTime;
+      logger.info('Flow published successfully', {
+        businessId: this.businessId.toString(),
+        flowId,
+        processingTime
+      });
+
       return {
         success: true,
         data: response.data
       };
     } catch (error) {
+      const processingTime = Date.now() - startTime;
       logger.error('Failed to publish flow', {
-        businessId: this.businessId,
+        businessId: this.businessId.toString(),
         flowId,
-        error: error.response?.data || error.message
+        error: error.response?.data || error.message,
+        errorCode: error.code || ERROR_CODES.WHATSAPP_API_ERROR,
+        processingTime
       });
       throw new Error(`Failed to publish flow: ${error.response?.data?.error?.message || error.message}`);
     }
@@ -145,27 +204,41 @@ class FlowService {
    * Deprecate a flow
    */
   async deprecateFlow(flowId) {
+    const startTime = Date.now();
+    
     try {
+      const { baseURL, accessToken } = await this.getCredentials();
+      
       const response = await axios.post(
-        `${this.baseURL}/${flowId}/deprecate`,
+        `${baseURL}/${flowId}/deprecate`,
         {},
         {
           headers: {
-            'Authorization': `Bearer ${this.accessToken}`,
+            'Authorization': `Bearer ${accessToken}`,
             'Content-Type': 'application/json'
           }
         }
       );
+
+      const processingTime = Date.now() - startTime;
+      logger.info('Flow deprecated successfully', {
+        businessId: this.businessId.toString(),
+        flowId,
+        processingTime
+      });
 
       return {
         success: true,
         data: response.data
       };
     } catch (error) {
+      const processingTime = Date.now() - startTime;
       logger.error('Failed to deprecate flow', {
-        businessId: this.businessId,
+        businessId: this.businessId.toString(),
         flowId,
-        error: error.response?.data || error.message
+        error: error.response?.data || error.message,
+        errorCode: error.code || ERROR_CODES.WHATSAPP_API_ERROR,
+        processingTime
       });
       throw new Error(`Failed to deprecate flow: ${error.response?.data?.error?.message || error.message}`);
     }
@@ -175,25 +248,39 @@ class FlowService {
    * Delete a flow
    */
   async deleteFlow(flowId) {
+    const startTime = Date.now();
+    
     try {
+      const { baseURL, accessToken } = await this.getCredentials();
+      
       const response = await axios.delete(
-        `${this.baseURL}/${flowId}`,
+        `${baseURL}/${flowId}`,
         {
           headers: {
-            'Authorization': `Bearer ${this.accessToken}`
+            'Authorization': `Bearer ${accessToken}`
           }
         }
       );
+
+      const processingTime = Date.now() - startTime;
+      logger.info('Flow deleted successfully', {
+        businessId: this.businessId.toString(),
+        flowId,
+        processingTime
+      });
 
       return {
         success: true,
         data: response.data
       };
     } catch (error) {
+      const processingTime = Date.now() - startTime;
       logger.error('Failed to delete flow', {
-        businessId: this.businessId,
+        businessId: this.businessId.toString(),
         flowId,
-        error: error.response?.data || error.message
+        error: error.response?.data || error.message,
+        errorCode: error.code || ERROR_CODES.WHATSAPP_API_ERROR,
+        processingTime
       });
       throw new Error(`Failed to delete flow: ${error.response?.data?.error?.message || error.message}`);
     }
@@ -203,28 +290,43 @@ class FlowService {
    * Get flow details
    */
   async getFlow(flowId) {
+    const startTime = Date.now();
+    
     try {
+      const { baseURL, accessToken } = await this.getCredentials();
+      
       const response = await axios.get(
-        `${this.baseURL}/${flowId}`,
+        `${baseURL}/${flowId}`,
         {
           params: {
             fields: 'id,name,status,categories,validation_errors,json_version,data_api_version,endpoint_uri'
           },
           headers: {
-            'Authorization': `Bearer ${this.accessToken}`
+            'Authorization': `Bearer ${accessToken}`
           }
         }
       );
+
+      const processingTime = Date.now() - startTime;
+      logger.info('Flow details retrieved', {
+        businessId: this.businessId.toString(),
+        flowId,
+        flowName: response.data.name,
+        processingTime
+      });
 
       return {
         success: true,
         data: response.data
       };
     } catch (error) {
+      const processingTime = Date.now() - startTime;
       logger.error('Failed to get flow details', {
-        businessId: this.businessId,
+        businessId: this.businessId.toString(),
         flowId,
-        error: error.response?.data || error.message
+        error: error.response?.data || error.message,
+        errorCode: error.code || ERROR_CODES.WHATSAPP_API_ERROR,
+        processingTime
       });
       throw new Error(`Failed to get flow: ${error.response?.data?.error?.message || error.message}`);
     }
@@ -234,18 +336,29 @@ class FlowService {
    * List all flows
    */
   async listFlows() {
+    const startTime = Date.now();
+    
     try {
+      const { baseURL, accessToken, businessAccountId } = await this.getCredentials();
+      
       const response = await axios.get(
-        `${this.baseURL}/${this.businessAccountId}/flows`,
+        `${baseURL}/${businessAccountId}/flows`,
         {
           params: {
             fields: 'id,name,status,categories,validation_errors'
           },
           headers: {
-            'Authorization': `Bearer ${this.accessToken}`
+            'Authorization': `Bearer ${accessToken}`
           }
         }
       );
+
+      const processingTime = Date.now() - startTime;
+      logger.info('Flows listed successfully', {
+        businessId: this.businessId.toString(),
+        flowCount: response.data.data?.length || 0,
+        processingTime
+      });
 
       return {
         success: true,
@@ -253,9 +366,12 @@ class FlowService {
         paging: response.data.paging
       };
     } catch (error) {
+      const processingTime = Date.now() - startTime;
       logger.error('Failed to list flows', {
-        businessId: this.businessId,
-        error: error.response?.data || error.message
+        businessId: this.businessId.toString(),
+        error: error.response?.data || error.message,
+        errorCode: error.code || ERROR_CODES.WHATSAPP_API_ERROR,
+        processingTime
       });
       throw new Error(`Failed to list flows: ${error.response?.data?.error?.message || error.message}`);
     }
@@ -265,9 +381,13 @@ class FlowService {
    * Send a flow message
    */
   async sendFlowMessage(phoneNumberId, recipientPhone, flowData) {
+    const startTime = Date.now();
+    
     try {
+      const { baseURL, accessToken } = await this.getCredentials();
+      
       const response = await axios.post(
-        `${this.baseURL}/${phoneNumberId}/messages`,
+        `${baseURL}/${phoneNumberId}/messages`,
         {
           messaging_product: 'whatsapp',
           recipient_type: 'individual',
@@ -288,13 +408,13 @@ class FlowService {
             action: {
               name: 'flow',
               parameters: {
-                flow_message_version: '3',
+                flow_message_version: FLOW_MESSAGE_VERSION,
                 flow_token: flowData.flow_token,
                 flow_id: flowData.flow_id,
-                flow_cta: flowData.flow_cta || 'Open Form',
-                flow_action: flowData.flow_action || 'navigate',
+                flow_cta: flowData.flow_cta || DEFAULT_FLOW_CTA,
+                flow_action: flowData.flow_action || FLOW_ACTION_NAVIGATE,
                 flow_action_payload: flowData.flow_action_payload || {
-                  screen: flowData.initial_screen || 'WELCOME'
+                  screen: flowData.initial_screen || DEFAULT_INITIAL_SCREEN
                 }
               }
             }
@@ -302,11 +422,20 @@ class FlowService {
         },
         {
           headers: {
-            'Authorization': `Bearer ${this.accessToken}`,
+            'Authorization': `Bearer ${accessToken}`,
             'Content-Type': 'application/json'
           }
         }
       );
+
+      const processingTime = Date.now() - startTime;
+      logger.info('Flow message sent successfully', {
+        businessId: this.businessId.toString(),
+        recipientPhone,
+        flowId: flowData.flow_id,
+        messageId: response.data.messages[0].id,
+        processingTime
+      });
 
       return {
         success: true,
@@ -314,11 +443,14 @@ class FlowService {
         data: response.data
       };
     } catch (error) {
+      const processingTime = Date.now() - startTime;
       logger.error('Failed to send flow message', {
-        businessId: this.businessId,
+        businessId: this.businessId.toString(),
         recipientPhone,
         flowId: flowData.flow_id,
-        error: error.response?.data || error.message
+        error: error.response?.data || error.message,
+        errorCode: error.code || ERROR_CODES.WHATSAPP_API_ERROR,
+        processingTime
       });
       throw new Error(`Failed to send flow message: ${error.response?.data?.error?.message || error.message}`);
     }
@@ -328,25 +460,38 @@ class FlowService {
    * Get flow analytics
    */
   async getFlowAnalytics(flowId) {
+    const startTime = Date.now();
+    
     try {
+      const { baseURL, accessToken } = await this.getCredentials();
+      
       const response = await axios.get(
-        `${this.baseURL}/${flowId}/metrics`,
+        `${baseURL}/${flowId}/metrics`,
         {
           headers: {
-            'Authorization': `Bearer ${this.accessToken}`
+            'Authorization': `Bearer ${accessToken}`
           }
         }
       );
+
+      const processingTime = Date.now() - startTime;
+      logger.info('Flow analytics retrieved', {
+        businessId: this.businessId.toString(),
+        flowId,
+        processingTime
+      });
 
       return {
         success: true,
         data: response.data
       };
     } catch (error) {
+      const processingTime = Date.now() - startTime;
       logger.warn('Flow analytics not available', {
-        businessId: this.businessId,
+        businessId: this.businessId.toString(),
         flowId,
-        error: error.response?.data || error.message
+        error: error.response?.data || error.message,
+        processingTime
       });
       // Analytics endpoint might not be available for all flows
       return {

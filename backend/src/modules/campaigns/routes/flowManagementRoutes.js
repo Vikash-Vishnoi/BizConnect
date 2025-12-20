@@ -14,16 +14,28 @@ const {
   validateFlowId,
   validatePagination 
 } = require('../../../core/middlewares/validation');
-const { sendError } = require('../../../common/helpers/errorCodes');
-const { successResponse, paginatedResponse, notFoundResponse, createdResponse } = require('../../../common/helpers/responseHelper');
+const { sendError, ERROR_CODES } = require('../../../common/helpers/errorCodes');
+const { HTTP_STATUS } = require('../../../common/constants/httpStatus');
+const { asyncHandler, NotFoundError, ValidationError } = require('../../../core/middlewares/errorHandler');
+const { businessContext } = require('../../../core/middlewares/businessContext');
+const logger = require('../../../common/helpers/logger');
+
+// Constants
+const DEFAULT_FLOWS_LIMIT = 50;
+const MAX_FLOWS_LIMIT = 200;
+const DEFAULT_PAGE = 1;
+const FLOW_STATUS_PUBLISHED = 'PUBLISHED';
+const FLOW_STATUS_DRAFT = 'DRAFT';
+const FLOW_STATUS_DEPRECATED = 'DEPRECATED';
+const FLOW_ROUTING_AUTO = 'AUTO';
+const FLOW_SEND_MODE_PUBLISHED = 'published';
 
 // GET / - Get all flows
-router.get('/', validatePagination, async (req, res) => {
+router.get('/', validatePagination, businessContext, async (req, res) => {
+  const startTime = Date.now();
   try {
-    const defaultLimit = parseInt(process.env.FLOWS_DEFAULT_LIMIT || '50');
-    const maxLimit = parseInt(process.env.FLOWS_MAX_LIMIT || '200');
-    const { status, category, limit = defaultLimit, page = 1 } = req.query;
-    const finalLimit = Math.min(parseInt(limit), maxLimit);
+    const { status, category, limit = DEFAULT_FLOWS_LIMIT, page = DEFAULT_PAGE } = req.query;
+    const finalLimit = Math.min(parseInt(limit), MAX_FLOWS_LIMIT);
 
     const filters = {};
     if (status) filters.status = status;
@@ -35,15 +47,39 @@ router.get('/', validatePagination, async (req, res) => {
     const endIndex = page * finalLimit;
     const paginatedFlows = flows.slice(startIndex, endIndex);
 
-    return paginatedResponse(res, paginatedFlows, parseInt(page), finalLimit, flows.length, 'Flows retrieved successfully');
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
+      success: true,
+      data: paginatedFlows,
+      pagination: {
+        currentPage: parseInt(page),
+        pageSize: finalLimit,
+        totalItems: flows.length,
+        totalPages: Math.ceil(flows.length / finalLimit)
+      },
+      message: 'Flows retrieved successfully',
+      processingTime
+    });
   } catch (error) {
-    console.error('Error getting flows:', error);
-    return sendError(res, 'INTERNAL_SERVER_ERROR', error.message);
+    logger.error('Error retrieving flows:', {
+      error: error.message,
+      stack: error.stack,
+      businessId: req.businessId?.toString(),
+      processingTime: Date.now() - startTime
+    });
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      error: {
+        code: ERROR_CODES.INTERNAL_ERROR,
+        message: 'Failed to retrieve flows'
+      }
+    });
   }
 });
 
 // GET /:id - Get flow by ID
-router.get('/:id', validateFlowId, async (req, res) => {
+router.get('/:id', validateFlowId, businessContext, async (req, res) => {
+  const startTime = Date.now();
   try {
     const flow = await Flow.findOne({
       _id: req.params.id,
@@ -51,18 +87,43 @@ router.get('/:id', validateFlowId, async (req, res) => {
     });
 
     if (!flow) {
-      return sendError(res, 'FLOW_NOT_FOUND');
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        success: false,
+        error: {
+          code: ERROR_CODES.RESOURCE_NOT_FOUND,
+          message: 'Flow not found'
+        }
+      });
     }
 
-    return successResponse(res, flow, 'Flow retrieved successfully');
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
+      success: true,
+      data: flow,
+      message: 'Flow retrieved successfully',
+      processingTime
+    });
   } catch (error) {
-    console.error('Error getting flow:', error);
-    return sendError(res, 'INTERNAL_SERVER_ERROR', error.message);
+    logger.error('Error retrieving flow:', {
+      error: error.message,
+      stack: error.stack,
+      flowId: req.params.id,
+      businessId: req.businessId?.toString(),
+      processingTime: Date.now() - startTime
+    });
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      error: {
+        code: ERROR_CODES.INTERNAL_ERROR,
+        message: 'Failed to retrieve flow'
+      }
+    });
   }
 });
 
 // POST / - Create new flow
-router.post('/', flowLimiter, validateCreateFlow, async (req, res) => {
+router.post('/', flowLimiter, validateCreateFlow, businessContext, async (req, res) => {
+  const startTime = Date.now();
   try {
     const { name, categories, screens, routing, settings } = req.body;
 
@@ -71,19 +132,37 @@ router.post('/', flowLimiter, validateCreateFlow, async (req, res) => {
       name,
       categories: categories || [],
       screens,
-      routing: routing || 'AUTO',
+      routing: routing || FLOW_ROUTING_AUTO,
       settings: settings || {}
     });
 
-    return createdResponse(res, flow, 'Flow created successfully');
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.CREATED).json({
+      success: true,
+      data: flow,
+      message: 'Flow created successfully',
+      processingTime
+    });
   } catch (error) {
-    console.error('Error creating flow:', error);
-    return sendError(res, 'INTERNAL_SERVER_ERROR', error.message);
+    logger.error('Error creating flow:', {
+      error: error.message,
+      stack: error.stack,
+      businessId: req.businessId?.toString(),
+      processingTime: Date.now() - startTime
+    });
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      error: {
+        code: ERROR_CODES.INTERNAL_ERROR,
+        message: 'Failed to create flow'
+      }
+    });
   }
 });
 
 // PUT /:id - Update flow
-router.put('/:id', async (req, res) => {
+router.put('/:id', businessContext, async (req, res) => {
+  const startTime = Date.now();
   try {
     const flow = await Flow.findOne({
       _id: req.params.id,
@@ -91,16 +170,22 @@ router.put('/:id', async (req, res) => {
     });
 
     if (!flow) {
-      return res.status(404).json({
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
         success: false,
-        message: 'Flow not found'
+        error: {
+          code: ERROR_CODES.RESOURCE_NOT_FOUND,
+          message: 'Flow not found'
+        }
       });
     }
 
-    if (flow.status === 'PUBLISHED') {
-      return res.status(400).json({
+    if (flow.status === FLOW_STATUS_PUBLISHED) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
         success: false,
-        message: 'Cannot update published flow. Create a new version or deprecate first.'
+        error: {
+          code: ERROR_CODES.VALIDATION_ERROR,
+          message: 'Cannot update published flow. Create a new version or deprecate first.'
+        }
       });
     }
 
@@ -114,23 +199,34 @@ router.put('/:id', async (req, res) => {
 
     await flow.save();
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
       success: true,
+      data: flow,
       message: 'Flow updated successfully',
-      flow
+      processingTime
     });
   } catch (error) {
-    console.error('Error updating flow:', error);
-    res.status(500).json({
+    logger.error('Error updating flow:', {
+      error: error.message,
+      stack: error.stack,
+      flowId: req.params.id,
+      businessId: req.businessId?.toString(),
+      processingTime: Date.now() - startTime
+    });
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: 'Failed to update flow',
-      error: error.message
+      error: {
+        code: ERROR_CODES.INTERNAL_ERROR,
+        message: 'Failed to update flow'
+      }
     });
   }
 });
 
 // POST /:id/publish - Publish flow
-router.post('/:id/publish', async (req, res) => {
+router.post('/:id/publish', businessContext, async (req, res) => {
+  const startTime = Date.now();
   try {
     const flow = await Flow.findOne({
       _id: req.params.id,
@@ -138,38 +234,55 @@ router.post('/:id/publish', async (req, res) => {
     });
 
     if (!flow) {
-      return res.status(404).json({
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
         success: false,
-        message: 'Flow not found'
+        error: {
+          code: ERROR_CODES.RESOURCE_NOT_FOUND,
+          message: 'Flow not found'
+        }
       });
     }
 
-    if (flow.status === 'PUBLISHED') {
-      return res.status(400).json({
+    if (flow.status === FLOW_STATUS_PUBLISHED) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
         success: false,
-        message: 'Flow is already published'
+        error: {
+          code: ERROR_CODES.VALIDATION_ERROR,
+          message: 'Flow is already published'
+        }
       });
     }
 
     const published = await flowService.publishFlow(flow._id, req.businessId);
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
       success: true,
+      data: published,
       message: 'Flow published successfully',
-      flow: published
+      processingTime
     });
   } catch (error) {
-    console.error('Error publishing flow:', error);
-    res.status(500).json({
+    logger.error('Error publishing flow:', {
+      error: error.message,
+      stack: error.stack,
+      flowId: req.params.id,
+      businessId: req.businessId?.toString(),
+      processingTime: Date.now() - startTime
+    });
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: 'Failed to publish flow',
-      error: error.message
+      error: {
+        code: ERROR_CODES.INTERNAL_ERROR,
+        message: 'Failed to publish flow'
+      }
     });
   }
 });
 
 // POST /:id/deprecate - Deprecate flow
-router.post('/:id/deprecate', async (req, res) => {
+router.post('/:id/deprecate', businessContext, async (req, res) => {
+  const startTime = Date.now();
   try {
     const flow = await Flow.findOne({
       _id: req.params.id,
@@ -177,39 +290,56 @@ router.post('/:id/deprecate', async (req, res) => {
     });
 
     if (!flow) {
-      return res.status(404).json({
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
         success: false,
-        message: 'Flow not found'
+        error: {
+          code: ERROR_CODES.RESOURCE_NOT_FOUND,
+          message: 'Flow not found'
+        }
       });
     }
 
-    flow.status = 'DEPRECATED';
+    flow.status = FLOW_STATUS_DEPRECATED;
     await flow.save();
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
       success: true,
+      data: flow,
       message: 'Flow deprecated successfully',
-      flow
+      processingTime
     });
   } catch (error) {
-    console.error('Error deprecating flow:', error);
-    res.status(500).json({
+    logger.error('Error deprecating flow:', {
+      error: error.message,
+      stack: error.stack,
+      flowId: req.params.id,
+      businessId: req.businessId?.toString(),
+      processingTime: Date.now() - startTime
+    });
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: 'Failed to deprecate flow',
-      error: error.message
+      error: {
+        code: ERROR_CODES.INTERNAL_ERROR,
+        message: 'Failed to deprecate flow'
+      }
     });
   }
 });
 
 // POST /:id/send - Send flow to contact
-router.post('/:id/send', async (req, res) => {
+router.post('/:id/send', businessContext, async (req, res) => {
+  const startTime = Date.now();
   try {
-    const { phoneNumber, mode = 'published' } = req.body;
+    const { phoneNumber, mode = FLOW_SEND_MODE_PUBLISHED } = req.body;
 
     if (!phoneNumber) {
-      return res.status(400).json({
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
         success: false,
-        message: 'Phone number is required'
+        error: {
+          code: ERROR_CODES.VALIDATION_ERROR,
+          message: 'Phone number is required'
+        }
       });
     }
 
@@ -219,9 +349,12 @@ router.post('/:id/send', async (req, res) => {
     });
 
     if (!flow) {
-      return res.status(404).json({
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
         success: false,
-        message: 'Flow not found'
+        error: {
+          code: ERROR_CODES.RESOURCE_NOT_FOUND,
+          message: 'Flow not found'
+        }
       });
     }
 
@@ -232,17 +365,27 @@ router.post('/:id/send', async (req, res) => {
       mode
     );
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
       success: true,
+      data: result,
       message: 'Flow sent successfully',
-      result
+      processingTime
     });
   } catch (error) {
-    console.error('Error sending flow:', error);
-    res.status(500).json({
+    logger.error('Error sending flow:', {
+      error: error.message,
+      stack: error.stack,
+      flowId: req.params.id,
+      businessId: req.businessId?.toString(),
+      processingTime: Date.now() - startTime
+    });
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
-      message: 'Failed to send flow',
-      error: error.message
+      error: {
+        code: ERROR_CODES.INTERNAL_ERROR,
+        message: 'Failed to send flow'
+      }
     });
   }
 });

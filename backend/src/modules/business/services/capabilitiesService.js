@@ -3,6 +3,32 @@ const Business = require('../../../core/database/models/Business');
 const logger = require('../../../common/helpers/logger');
 
 /**
+ * Constants
+ */
+const CAPABILITY_STATES = {
+  ENABLED: 'ENABLED',
+  DISABLED: 'DISABLED'
+};
+
+const CAPABILITY_TYPES = {
+  MESSAGING: 'messaging',
+  PAYMENT: 'payment',
+  BUSINESS_MANAGEMENT: 'businessManagement'
+};
+
+const DEFAULT_API_VERSION = 'v17.0';
+const GRAPH_API_BASE_URL = 'https://graph.facebook.com';
+
+const ERROR_MESSAGES = {
+  BUSINESS_NOT_FOUND: 'Business not found',
+  PAYMENT_NOT_ENABLED: 'Payment capability is not enabled'
+};
+
+const API_FIELDS = {
+  CAPABILITIES: 'capabilities'
+};
+
+/**
  * Business Capabilities Service
  * Manages WhatsApp Business Account capabilities (Payment, Messaging, etc.)
  * 
@@ -16,21 +42,34 @@ class CapabilitiesService {
    * @returns {Promise<Object>} Current capabilities
    */
   async getCapabilities(businessId) {
+    const startTime = Date.now();
     try {
       const business = await Business.findById(businessId);
       if (!business) {
-        throw new Error('Business not found');
+        throw new Error(ERROR_MESSAGES.BUSINESS_NOT_FOUND);
       }
 
-      return {
-        messaging: business.capabilities?.messaging || 'ENABLED',
-        payment: business.capabilities?.payment || 'DISABLED',
-        businessManagement: business.capabilities?.businessManagement || 'DISABLED',
+      const capabilities = {
+        messaging: business.capabilities?.messaging || CAPABILITY_STATES.ENABLED,
+        payment: business.capabilities?.payment || CAPABILITY_STATES.DISABLED,
+        businessManagement: business.capabilities?.businessManagement || CAPABILITY_STATES.DISABLED,
         lastSynced: business.capabilities?.lastSynced || null
       };
 
+      logger.info('Retrieved capabilities', {
+        businessId: businessId.toString(),
+        processingTime: Date.now() - startTime
+      });
+
+      return capabilities;
+
     } catch (error) {
-      logger.error('Get capabilities error', { businessId, error: error.message });
+      logger.error('Get capabilities error', {
+        businessId: businessId.toString(),
+        error: error.message,
+        stack: error.stack,
+        processingTime: Date.now() - startTime
+      });
       throw error;
     }
   }
@@ -41,18 +80,19 @@ class CapabilitiesService {
    * @returns {Promise<Object>} Updated capabilities
    */
   async syncCapabilities(businessId) {
+    const startTime = Date.now();
     try {
       const business = await Business.findById(businessId).select('+whatsappConfig.accessToken');
       if (!business) {
-        throw new Error('Business not found');
+        throw new Error(ERROR_MESSAGES.BUSINESS_NOT_FOUND);
       }
 
       const accessToken = business.whatsappConfig.accessToken;
       const wabaId = business.whatsappConfig.wabaId;
-      const apiVersion = business.whatsappConfig.apiVersion || 'v17.0';
+      const apiVersion = business.whatsappConfig.apiVersion || DEFAULT_API_VERSION;
 
       // Fetch capabilities from WhatsApp
-      const url = `https://graph.facebook.com/${apiVersion}/${wabaId}?fields=capabilities`;
+      const url = `${GRAPH_API_BASE_URL}/${apiVersion}/${wabaId}?fields=${API_FIELDS.CAPABILITIES}`;
       const response = await axios.get(url, {
         headers: {
           'Authorization': `Bearer ${accessToken}`
@@ -63,26 +103,29 @@ class CapabilitiesService {
 
       // Update database
       business.capabilities = {
-        messaging: capabilities.messaging || 'ENABLED',
-        payment: capabilities.payment || 'DISABLED',
-        businessManagement: capabilities.business_management || 'DISABLED',
+        messaging: capabilities.messaging || CAPABILITY_STATES.ENABLED,
+        payment: capabilities.payment || CAPABILITY_STATES.DISABLED,
+        businessManagement: capabilities.business_management || CAPABILITY_STATES.DISABLED,
         lastSynced: new Date()
       };
 
       await business.save();
 
       logger.info('Capabilities synced from WhatsApp', {
-        businessId,
-        capabilities: business.capabilities
+        businessId: businessId.toString(),
+        capabilities: business.capabilities,
+        processingTime: Date.now() - startTime
       });
 
       return business.capabilities;
 
     } catch (error) {
       logger.error('Sync capabilities error', {
-        businessId,
+        businessId: businessId.toString(),
         error: error.message,
-        response: error.response?.data
+        stack: error.stack,
+        response: error.response?.data,
+        processingTime: Date.now() - startTime
       });
       throw error;
     }
@@ -95,23 +138,24 @@ class CapabilitiesService {
    * @returns {Promise<Object>} Updated capabilities
    */
   async updatePaymentCapability(businessId, enable) {
+    const startTime = Date.now();
     try {
       const business = await Business.findById(businessId).select('+whatsappConfig.accessToken');
       if (!business) {
-        throw new Error('Business not found');
+        throw new Error(ERROR_MESSAGES.BUSINESS_NOT_FOUND);
       }
 
       const accessToken = business.whatsappConfig.accessToken;
       const wabaId = business.whatsappConfig.wabaId;
-      const apiVersion = business.whatsappConfig.apiVersion || 'v17.0';
+      const apiVersion = business.whatsappConfig.apiVersion || DEFAULT_API_VERSION;
 
       // Update payment capability on WhatsApp
-      const url = `https://graph.facebook.com/${apiVersion}/${wabaId}`;
+      const url = `${GRAPH_API_BASE_URL}/${apiVersion}/${wabaId}`;
       await axios.post(
         url,
         {
           capabilities: {
-            payment: enable ? 'ENABLED' : 'DISABLED'
+            payment: enable ? CAPABILITY_STATES.ENABLED : CAPABILITY_STATES.DISABLED
           }
         },
         {
@@ -126,20 +170,26 @@ class CapabilitiesService {
       if (!business.capabilities) {
         business.capabilities = {};
       }
-      business.capabilities.payment = enable ? 'ENABLED' : 'DISABLED';
+      business.capabilities.payment = enable ? CAPABILITY_STATES.ENABLED : CAPABILITY_STATES.DISABLED;
       business.capabilities.lastSynced = new Date();
       await business.save();
 
-      logger.info(`Payment capability ${enable ? 'enabled' : 'disabled'}`, { businessId });
+      logger.info(`Payment capability ${enable ? 'enabled' : 'disabled'}`, {
+        businessId: businessId.toString(),
+        enable,
+        processingTime: Date.now() - startTime
+      });
 
       return business.capabilities;
 
     } catch (error) {
       logger.error('Update payment capability error', {
-        businessId,
+        businessId: businessId.toString(),
         enable,
         error: error.message,
-        response: error.response?.data
+        stack: error.stack,
+        response: error.response?.data,
+        processingTime: Date.now() - startTime
       });
       throw error;
     }
@@ -152,17 +202,33 @@ class CapabilitiesService {
    * @returns {Promise<boolean>} True if enabled
    */
   async isCapabilityEnabled(businessId, capability) {
+    const startTime = Date.now();
     try {
       const business = await Business.findById(businessId);
       if (!business) {
-        throw new Error('Business not found');
+        throw new Error(ERROR_MESSAGES.BUSINESS_NOT_FOUND);
       }
 
       const capabilityValue = business.capabilities?.[capability];
-      return capabilityValue === 'ENABLED';
+      const isEnabled = capabilityValue === CAPABILITY_STATES.ENABLED;
+
+      logger.info('Checked capability status', {
+        businessId: businessId.toString(),
+        capability,
+        isEnabled,
+        processingTime: Date.now() - startTime
+      });
+
+      return isEnabled;
 
     } catch (error) {
-      logger.error('Check capability error', { businessId, capability, error: error.message });
+      logger.error('Check capability error', {
+        businessId: businessId.toString(),
+        capability,
+        error: error.message,
+        stack: error.stack,
+        processingTime: Date.now() - startTime
+      });
       throw error;
     }
   }
@@ -173,36 +239,44 @@ class CapabilitiesService {
    * @returns {Promise<Object>} Payment configuration
    */
   async getPaymentConfiguration(businessId) {
+    const startTime = Date.now();
     try {
       const business = await Business.findById(businessId).select('+whatsappConfig.accessToken');
       if (!business) {
-        throw new Error('Business not found');
+        throw new Error(ERROR_MESSAGES.BUSINESS_NOT_FOUND);
       }
 
-      const isPaymentEnabled = await this.isCapabilityEnabled(businessId, 'payment');
+      const isPaymentEnabled = await this.isCapabilityEnabled(businessId, CAPABILITY_TYPES.PAYMENT);
       if (!isPaymentEnabled) {
-        throw new Error('Payment capability is not enabled');
+        throw new Error(ERROR_MESSAGES.PAYMENT_NOT_ENABLED);
       }
 
       const accessToken = business.whatsappConfig.accessToken;
       const wabaId = business.whatsappConfig.wabaId;
-      const apiVersion = business.whatsappConfig.apiVersion || 'v17.0';
+      const apiVersion = business.whatsappConfig.apiVersion || DEFAULT_API_VERSION;
 
       // Get payment settings from WhatsApp
-      const url = `https://graph.facebook.com/${apiVersion}/${wabaId}/payment_settings`;
+      const url = `${GRAPH_API_BASE_URL}/${apiVersion}/${wabaId}/payment_settings`;
       const response = await axios.get(url, {
         headers: {
           'Authorization': `Bearer ${accessToken}`
         }
       });
 
+      logger.info('Retrieved payment configuration', {
+        businessId: businessId.toString(),
+        processingTime: Date.now() - startTime
+      });
+
       return response.data;
 
     } catch (error) {
       logger.error('Get payment configuration error', {
-        businessId,
+        businessId: businessId.toString(),
         error: error.message,
-        response: error.response?.data
+        stack: error.stack,
+        response: error.response?.data,
+        processingTime: Date.now() - startTime
       });
       throw error;
     }

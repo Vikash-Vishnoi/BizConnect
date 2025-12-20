@@ -1,6 +1,15 @@
 const Flow = require('../../../core/database/models/Flow');
 const FlowResponse = require('../../../core/database/models/FlowResponse');
 const logger = require('../../../common/helpers/logger');
+const config = require('../../../config/server.config');
+const { ERROR_CODES, HTTP_STATUS } = require('../../../common/constants');
+
+/**
+ * Flow Data Service Constants
+ */
+const FLOW_API_VERSION = '3.0';
+const DEFAULT_SCREEN = 'ERROR';
+const MAX_DYNAMIC_OPTIONS = 100;
 
 class FlowDataService {
   /**
@@ -8,59 +17,105 @@ class FlowDataService {
    * This endpoint is called by WhatsApp when a flow needs dynamic data
    * @param {String} flowId - Flow ID from WhatsApp
    * @param {Object} requestData - Data sent by WhatsApp
+   * @param {String} businessId - Business ID for context
    * @returns {Promise<Object>} Dynamic data response
    */
-  async handleFlowDataRequest(flowId, requestData) {
+  async handleFlowDataRequest(flowId, requestData, businessId = null) {
+    const startTime = Date.now();
+    
     try {
-      const flow = await Flow.findOne({ flowId });
+      // Validate inputs
+      if (!flowId) {
+        const error = new Error('Flow ID is required');
+        error.code = ERROR_CODES.VALIDATION_ERROR;
+        throw error;
+      }
+
+      // Find flow with business context
+      const query = { flowId };
+      if (businessId) {
+        query.businessId = businessId;
+      }
+
+      const flow = await Flow.findOne(query);
 
       if (!flow) {
-        logger.error('Flow not found for data request:', { flowId });
+        logger.error('Flow not found for data request', { 
+          flowId, 
+          businessId,
+          requestScreen: requestData?.screen 
+        });
         return {
-          version: '3.0',
-          screen: requestData.screen || 'ERROR',
+          version: FLOW_API_VERSION,
+          screen: requestData?.screen || DEFAULT_SCREEN,
           data: {},
-          error_messages: ['Flow not found']
+          error_messages: ['Flow not found or access denied']
         };
       }
 
       // Extract data from request
-      const { screen, data = {}, flow_token } = requestData;
+      const { screen, data = {}, flow_token } = requestData || {};
 
       logger.info('Flow data request received', {
-        flowId,
+        flowId: flow._id,
+        flowName: flow.name,
+        businessId: flow.businessId,
         screen,
         flow_token,
-        dataKeys: Object.keys(data)
+        dataKeys: Object.keys(data),
+        service: 'flow-data'
       });
 
       // Get screen configuration
-      const screenConfig = flow.screens.find(s => s.id === screen);
+      const screenConfig = flow.screens?.find(s => s.id === screen);
 
       if (!screenConfig) {
+        logger.warn('Screen not found in flow', { flowId, screen, businessId });
         return {
-          version: flow.data_api_version || '3.0',
-          screen,
+          version: flow.data_api_version || FLOW_API_VERSION,
+          screen: screen || DEFAULT_SCREEN,
           data: {},
-          error_messages: [`Screen '${screen}' not found`]
+          error_messages: [`Screen '${screen}' not found in flow configuration`]
         };
       }
 
       // Build dynamic data response based on screen components
       const dynamicData = await this.buildDynamicData(flow, screenConfig, data);
 
+      const responseTime = Date.now() - startTime;
+      logger.info('Flow data request completed', {
+        flowId: flow._id,
+        screen,
+        businessId: flow.businessId,
+        responseTime,
+        service: 'flow-data'
+      });
+
       return {
-        version: flow.data_api_version || '3.0',
+        version: flow.data_api_version || FLOW_API_VERSION,
         screen,
         data: dynamicData
       };
     } catch (error) {
-      logger.error('Error handling flow data request:', error);
+      const responseTime = Date.now() - startTime;
+      logger.error('Error handling flow data request', { 
+        error: error.message,
+        stack: error.stack,
+        flowId,
+        businessId,
+        requestData: requestData?.screen,
+        responseTime
+      });
+      
       return {
-        version: '3.0',
-        screen: requestData.screen || 'ERROR',
+        version: FLOW_API_VERSION,
+        screen: requestData?.screen || DEFAULT_SCREEN,
         data: {},
-        error_messages: ['Internal server error processing flow data']
+        error_messages: [
+          config.isProduction() 
+            ? 'Internal server error processing flow data'
+            : error.message
+        ]
       };
     }
   }
@@ -75,26 +130,42 @@ class FlowDataService {
   async buildDynamicData(flow, screenConfig, currentData) {
     const dynamicData = {};
 
-    // Process each form component
-    for (const component of screenConfig.form_components || []) {
-      // Handle dropdown/radio/checkbox data sources
-      if (component.data_source && Array.isArray(component.data_source)) {
-        // Data source already defined in component
-        dynamicData[component.name] = component.data_source;
-      }
-
-      // Handle dynamic data based on component type
-      if (component.type === 'Dropdown' && !component.data_source) {
-        // If no static data source, can inject dynamic options here
-        dynamicData[component.name] = await this.getDynamicOptions(
-          flow,
-          component,
-          currentData
-        );
-      }
+    // Validate inputs
+    if (!screenConfig?.form_components) {
+      return dynamicData;
     }
 
-    return dynamicData;
+    try {
+      // Process each form component
+      for (const component of screenConfig.form_components) {
+        if (!component?.name) continue;
+
+        // Handle static data source
+        if (component.data_source && Array.isArray(component.data_source)) {
+          // Limit options to prevent response size issues
+          dynamicData[component.name] = component.data_source.slice(0, MAX_DYNAMIC_OPTIONS);
+          continue;
+        }
+
+        // Handle dynamic data based on component type
+        if (component.type === 'Dropdown' && !component.data_source) {
+          const options = await this.getDynamicOptions(flow, component, currentData);
+          if (options && Array.isArray(options)) {
+            dynamicData[component.name] = options.slice(0, MAX_DYNAMIC_OPTIONS);
+          }
+        }
+      }
+
+      return dynamicData;
+    } catch (error) {
+      logger.error('Error building dynamic data', {
+        error: error.message,
+        flowId: flow._id,
+        screenId: screenConfig.id,
+        businessId: flow.businessId
+      });
+      return dynamicData;
+    }
   }
 
   /**
@@ -127,21 +198,49 @@ class FlowDataService {
    * @param {String} flowId - Flow ID (database)
    * @param {String} endpointUrl - Data endpoint URL
    * @param {String} userId - User ID making the change
+   * @param {String} businessId - Business ID for context
    * @returns {Promise<Object>} Updated flow
    */
-  async setDataEndpoint(flowId, endpointUrl, userId) {
+  async setDataEndpoint(flowId, endpointUrl, userId, businessId = null) {
     try {
-      const flow = await Flow.findOne({ _id: flowId, user: userId });
+      // Validate inputs
+      if (!flowId) {
+        const error = new Error('Flow ID is required');
+        error.code = ERROR_CODES.VALIDATION_ERROR;
+        throw error;
+      }
+
+      // Find flow with business context
+      const query = { _id: flowId, user: userId };
+      if (businessId) {
+        query.businessId = businessId;
+      }
+
+      const flow = await Flow.findOne(query);
 
       if (!flow) {
-        throw new Error('Flow not found');
+        const error = new Error('Flow not found or access denied');
+        error.code = ERROR_CODES.NOT_FOUND;
+        throw error;
       }
 
-      // Validate URL format
-      if (endpointUrl && !this.isValidUrl(endpointUrl)) {
-        throw new Error('Invalid endpoint URL format');
+      // Validate URL format if provided
+      if (endpointUrl) {
+        if (!this.isValidUrl(endpointUrl)) {
+          const error = new Error('Invalid endpoint URL format. Must be a valid HTTP/HTTPS URL.');
+          error.code = ERROR_CODES.VALIDATION_ERROR;
+          throw error;
+        }
+
+        // Security: Only allow HTTPS in production
+        if (config.isProduction() && !endpointUrl.startsWith('https://')) {
+          const error = new Error('Only HTTPS URLs are allowed in production');
+          error.code = ERROR_CODES.VALIDATION_ERROR;
+          throw error;
+        }
       }
 
+      // Update endpoint
       if (!flow.settings) {
         flow.settings = {};
       }
@@ -153,19 +252,28 @@ class FlowDataService {
 
       logger.info('Flow data endpoint updated', {
         flowId: flow._id,
+        flowName: flow.name,
+        businessId: flow.businessId,
         oldEndpoint,
         newEndpoint: endpointUrl,
-        userId
+        userId,
+        service: 'flow-data'
       });
 
       return {
         flowId: flow._id,
         flowName: flow.name,
+        businessId: flow.businessId,
         dataEndpoint: endpointUrl,
         previousEndpoint: oldEndpoint
       };
     } catch (error) {
-      logger.error('Error setting data endpoint:', error);
+      logger.error('Error setting data endpoint', { 
+        error: error.message,
+        flowId,
+        businessId,
+        userId
+      });
       throw error;
     }
   }
@@ -173,24 +281,43 @@ class FlowDataService {
   /**
    * Get flow data endpoint configuration
    * @param {String} flowId - Flow ID (database)
+   * @param {String} businessId - Business ID for context
    * @returns {Promise<Object>} Data endpoint config
    */
-  async getDataEndpoint(flowId) {
+  async getDataEndpoint(flowId, businessId = null) {
     try {
-      const flow = await Flow.findById(flowId).select('name settings.data_endpoint');
+      if (!flowId) {
+        const error = new Error('Flow ID is required');
+        error.code = ERROR_CODES.VALIDATION_ERROR;
+        throw error;
+      }
+
+      const query = { _id: flowId };
+      if (businessId) {
+        query.businessId = businessId;
+      }
+
+      const flow = await Flow.findOne(query).select('name businessId settings.data_endpoint');
 
       if (!flow) {
-        throw new Error('Flow not found');
+        const error = new Error('Flow not found or access denied');
+        error.code = ERROR_CODES.NOT_FOUND;
+        throw error;
       }
 
       return {
         flowId: flow._id,
         flowName: flow.name,
+        businessId: flow.businessId,
         dataEndpoint: flow.settings?.data_endpoint || null,
         hasDataEndpoint: !!flow.settings?.data_endpoint
       };
     } catch (error) {
-      logger.error('Error getting data endpoint:', error);
+      logger.error('Error getting data endpoint', { 
+        error: error.message,
+        flowId,
+        businessId
+      });
       throw error;
     }
   }

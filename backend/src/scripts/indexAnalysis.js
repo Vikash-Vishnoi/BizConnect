@@ -1,6 +1,36 @@
 const mongoose = require('mongoose');
 const path = require('path');
+const logger = require('../common/helpers/logger');
+const { ERROR_CODES } = require('../common/constants');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
+
+// ========================================
+// CONSTANTS
+// ========================================
+
+// Database Configuration
+const DB_CONNECTION_TIMEOUT_MS = 10000;
+const DB_OPERATION_TIMEOUT_MS = 30000;
+
+// Display Configuration
+const SEPARATOR_LENGTH = 80;
+const SEPARATOR_CHAR = '=';
+const SUBSEPARATOR_CHAR = '-';
+
+// Size Conversion Constants
+const BYTES_TO_KB = 1024;
+const BYTES_TO_MB = 1024 * 1024;
+const SIZE_DECIMAL_PLACES = 2;
+
+// Collection Categories
+const LOG_COLLECTIONS = ['auditlogs', 'alertlogs', 'automationlogs'];
+
+// Script Status
+const EXIT_CODE_SUCCESS = 0;
+const EXIT_CODE_FAILURE = 1;
+
+// Progress Reporting
+const PROGRESS_LOG_INTERVAL = 5; // Log progress every N collections
 
 /**
  * Index Analysis Script
@@ -13,86 +43,115 @@ require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
  */
 
 async function analyzeIndexes() {
+  const startTime = Date.now();
+  
   try {
+    // Validate environment variables
     if (!process.env.MONGODB_URI) {
-      throw new Error('MONGODB_URI environment variable is required');
+      const error = new Error('MONGODB_URI environment variable is required');
+      error.code = ERROR_CODES.CONFIGURATION_ERROR;
+      throw error;
     }
     
-    console.log('🔍 Connecting to MongoDB...\n');
-    await mongoose.connect(process.env.MONGODB_URI);
+    logger.info('Starting index analysis', {
+      timestamp: new Date().toISOString()
+    });
+    
+    logger.info('Connecting to MongoDB...');
+    const connectionStartTime = Date.now();
+    await mongoose.connect(process.env.MONGODB_URI, {
+      serverSelectionTimeoutMS: DB_CONNECTION_TIMEOUT_MS
+    });
+    const connectionTime = Date.now() - connectionStartTime;
+    
+    logger.info('Connected to MongoDB', {
+      connectionTime: `${connectionTime}ms`
+    });
     
     const db = mongoose.connection.db;
     const collections = await db.listCollections().toArray();
     
-    console.log('📊 DATABASE INDEX ANALYSIS REPORT');
-    console.log('='.repeat(80));
-    console.log(`Database: ${db.databaseName}`);
-    console.log(`Collections: ${collections.length}`);
-    console.log('='.repeat(80));
+    logger.info('DATABASE INDEX ANALYSIS REPORT');
+    logger.info(SEPARATOR_CHAR.repeat(SEPARATOR_LENGTH));
+    logger.info(`Database: ${db.databaseName}`);
+    logger.info(`Collections: ${collections.length}`);
+    logger.info(SEPARATOR_CHAR.repeat(SEPARATOR_LENGTH));
     
     const recommendations = [];
+    let collectionsProcessed = 0;
     
     for (const collInfo of collections) {
       const collectionName = collInfo.name;
       const collection = db.collection(collectionName);
+      const collectionStartTime = Date.now();
       
-      console.log(`\n📁 Collection: ${collectionName}`);
-      console.log('-'.repeat(80));
+      logger.info(`\nCollection: ${collectionName}`);
+      logger.info(SUBSEPARATOR_CHAR.repeat(SEPARATOR_LENGTH));
       
       // Get indexes
       const indexes = await collection.indexes();
-      console.log(`   Total Indexes: ${indexes.length}`);
+      logger.info(`   Total Indexes: ${indexes.length}`);
       
       // Get collection stats using MongoDB command
       try {
         const stats = await db.command({ collStats: collectionName });
-        console.log(`   Document Count: ${stats.count}`);
-        console.log(`   Average Document Size: ${(stats.avgObjSize / 1024).toFixed(2)} KB`);
-        console.log(`   Total Size: ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
-        console.log(`   Index Size: ${(stats.totalIndexSize / 1024 / 1024).toFixed(2)} MB`);
+        logger.info(`   Document Count: ${stats.count}`);
+        logger.info(`   Average Document Size: ${(stats.avgObjSize / BYTES_TO_KB).toFixed(SIZE_DECIMAL_PLACES)} KB`);
+        logger.info(`   Total Size: ${(stats.size / BYTES_TO_MB).toFixed(SIZE_DECIMAL_PLACES)} MB`);
+        logger.info(`   Index Size: ${(stats.totalIndexSize / BYTES_TO_MB).toFixed(SIZE_DECIMAL_PLACES)} MB`);
       } catch (err) {
-        console.log(`   Stats: Unable to retrieve (${err.message})`);
+        logger.warn(`   Stats: Unable to retrieve`, { error: err.message });
       }      
-      console.log('\n   Existing Indexes:');
+      logger.info('\n   Existing Indexes:');
       indexes.forEach((index, i) => {
         const keys = Object.keys(index.key).map(k => `${k}: ${index.key[k]}`).join(', ');
         const unique = index.unique ? ' [UNIQUE]' : '';
         const sparse = index.sparse ? ' [SPARSE]' : '';
-        console.log(`      ${i + 1}. ${index.name}${unique}${sparse}`);
-        console.log(`         Keys: { ${keys} }`);
+        logger.info(`      ${i + 1}. ${index.name}${unique}${sparse}`);
+        logger.info(`         Keys: { ${keys} }`);
       });
+      
+      collectionsProcessed++;
+      const collectionTime = Date.now() - collectionStartTime;
+      
+      // Log progress periodically
+      if (collectionsProcessed % PROGRESS_LOG_INTERVAL === 0) {
+        logger.info(`Progress: ${collectionsProcessed}/${collections.length} collections processed`, {
+          executionTime: `${Date.now() - startTime}ms`
+        });
+      }
       
       // Recommendations based on collection name
       const collRecommendations = getRecommendations(collectionName, indexes);
       if (collRecommendations.length > 0) {
-        console.log('\n   ⚠️  Recommendations:');
+        logger.info('\n   ⚠️  Recommendations:');
         collRecommendations.forEach(rec => {
-          console.log(`      - ${rec}`);
+          logger.info(`      - ${rec}`);
           recommendations.push({ collection: collectionName, recommendation: rec });
         });
       } else {
-        console.log('\n   ✅ No additional indexes recommended');
+        logger.info('\n   ✅ No additional indexes recommended');
       }
     }
     
     // Summary
-    console.log('\n' + '='.repeat(80));
-    console.log('📋 SUMMARY OF RECOMMENDATIONS');
-    console.log('='.repeat(80));
+    logger.info('\n' + SEPARATOR_CHAR.repeat(SEPARATOR_LENGTH));
+    logger.info('📋 SUMMARY OF RECOMMENDATIONS');
+    logger.info(SEPARATOR_CHAR.repeat(SEPARATOR_LENGTH));
     
     if (recommendations.length > 0) {
-      console.log(`\nTotal Recommendations: ${recommendations.length}\n`);
+      logger.info(`\nTotal Recommendations: ${recommendations.length}\n`);
       recommendations.forEach((rec, i) => {
-        console.log(`${i + 1}. [${rec.collection}] ${rec.recommendation}`);
+        logger.info(`${i + 1}. [${rec.collection}] ${rec.recommendation}`);
       });
     } else {
-      console.log('\n✅ All collections have optimal indexes!');
+      logger.info('\n✅ All collections have optimal indexes!');
     }
     
-    console.log('\n' + '='.repeat(80));
-    console.log('📚 BEST PRACTICES');
-    console.log('='.repeat(80));
-    console.log(`
+    logger.info('\n' + SEPARATOR_CHAR.repeat(SEPARATOR_LENGTH));
+    logger.info('📚 BEST PRACTICES');
+    logger.info(SEPARATOR_CHAR.repeat(SEPARATOR_LENGTH));
+    logger.info(`
 1. Compound Indexes: Put most selective field first
 2. Sort Performance: Add index on sort fields
 3. Covered Queries: Include all query fields in index
@@ -103,11 +162,33 @@ async function analyzeIndexes() {
 8. Remove Unused: Drop indexes that are never used
     `);
     
+    const totalTime = Date.now() - startTime;
+    logger.info('\nAnalysis Statistics:', {
+      collectionsAnalyzed: collections.length,
+      totalRecommendations: recommendations.length,
+      executionTime: `${totalTime}ms`,
+      averageTimePerCollection: `${Math.round(totalTime / collections.length)}ms`
+    });
+    
   } catch (error) {
-    console.error('❌ Error:', error.message);
+    const executionTime = Date.now() - startTime;
+    logger.error('Index analysis failed', {
+      error: error.message,
+      stack: error.stack,
+      code: error.code || ERROR_CODES.INTERNAL_ERROR,
+      executionTime: `${executionTime}ms`
+    });
+    throw error;
   } finally {
-    await mongoose.connection.close();
-    console.log('\n✅ Analysis complete. Database connection closed.');
+    if (mongoose.connection.readyState === 1) {
+      await mongoose.connection.close();
+      logger.info('Database connection closed');
+    }
+    
+    const totalTime = Date.now() - startTime;
+    logger.info('Analysis complete', {
+      totalExecutionTime: `${totalTime}ms`
+    });
   }
 }
 
@@ -226,10 +307,16 @@ function getRecommendations(collectionName, existingIndexes) {
 // Run analysis
 if (require.main === module) {
   analyzeIndexes()
-    .then(() => process.exit(0))
+    .then(() => {
+      logger.info('Script completed successfully');
+      process.exit(EXIT_CODE_SUCCESS);
+    })
     .catch(error => {
-      console.error(error);
-      process.exit(1);
+      logger.error('Script failed', {
+        error: error.message,
+        stack: error.stack
+      });
+      process.exit(EXIT_CODE_FAILURE);
     });
 }
 

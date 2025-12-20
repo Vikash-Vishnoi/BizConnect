@@ -1,9 +1,27 @@
 const express = require('express');
 const router = express.Router();
 const workingHoursService = require('../services/workingHoursService');
-const { auth } = require('../../../core/middlewares/auth');
-const { enforceBusinessIsolation } = require('../../../core/middlewares/businessSecurity');
+const { authenticate: auth } = require('../../../core/middlewares/auth');
+const { requireBusiness } = require('../../../core/middlewares/authorization');
+const { businessContext } = require('../../../core/middlewares/businessContext');
+const { asyncHandler, NotFoundError, ValidationError, ConflictError } = require('../../../core/middlewares/errorHandler');
 const logger = require('../../../common/helpers/logger');
+const { validateBusiness } = require('../../../common/utils/validators');
+const { ERROR_CODES, HTTP_STATUS } = require('../../../common/constants');
+
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+const DEFAULT_WORKING_HOURS = {
+  enabled: false,
+  schedule: [],
+  templateId: null
+};
+
+const ERROR_MESSAGES = {
+  BUSINESS_NOT_FOUND: 'Business not found'
+};
 
 /**
  * Working Hours Routes
@@ -16,7 +34,8 @@ const logger = require('../../../common/helpers/logger');
  * GET /api/business/:businessId/working-hours
  * Get working hours configuration
  */
-router.get('/:businessId/working-hours', auth, enforceBusinessIsolation, async (req, res) => {
+router.get('/:businessId/working-hours', auth, requireBusiness, businessContext, async (req, res) => {
+  const startTime = Date.now();
   try {
     const { businessId } = req.params;
     const Business = require('../../../core/database/models/Business');
@@ -26,31 +45,28 @@ router.get('/:businessId/working-hours', auth, enforceBusinessIsolation, async (
       .populate('settings.workingHours.templateId', 'name category');
 
     if (!business) {
-      return res.status(404).json({
-        success: false,
-        message: 'Business not found'
-      });
+      throw new NotFoundError(ERROR_MESSAGES.BUSINESS_NOT_FOUND);
     }
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
       success: true,
-      data: business.settings.workingHours || {
-        enabled: false,
-        schedule: [],
-        templateId: null
-      }
+      data: business.settings.workingHours || DEFAULT_WORKING_HOURS,
+      processingTime
     });
-
   } catch (error) {
-    logger.error('Get working hours error', {
+    const processingTime = Date.now() - startTime;
+    
+    if (error instanceof NotFoundError || error instanceof ValidationError || error instanceof ConflictError) {
+      throw error;
+    }
+    
+    logger.error('Error getting working hours', {
+      error: error.message,
       businessId: req.params.businessId,
-      error: error.message
+      processingTime
     });
-
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
+    throw error;
   }
 });
 
@@ -58,12 +74,13 @@ router.get('/:businessId/working-hours', auth, enforceBusinessIsolation, async (
  * PUT /api/business/:businessId/working-hours
  * Update working hours configuration
  */
-router.put('/:businessId/working-hours', auth, enforceBusinessIsolation, async (req, res) => {
+router.put('/:businessId/working-hours', auth, requireBusiness, businessContext, async (req, res) => {
+  const startTime = Date.now();
   try {
     const { businessId } = req.params;
     const { enabled, templateId, schedule } = req.body;
 
-    logger.info(`Updating working hours for business: ${businessId}`);
+    logger.info('Updating working hours for business', { businessId });
 
     const business = await workingHoursService.updateWorkingHours(businessId, {
       enabled,
@@ -71,22 +88,26 @@ router.put('/:businessId/working-hours', auth, enforceBusinessIsolation, async (
       schedule
     });
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
       success: true,
       data: business.settings.workingHours,
-      message: 'Working hours updated successfully'
+      message: 'Working hours updated successfully',
+      processingTime
     });
-
   } catch (error) {
-    logger.error('Update working hours error', {
+    const processingTime = Date.now() - startTime;
+    
+    if (error instanceof NotFoundError || error instanceof ValidationError || error instanceof ConflictError) {
+      throw error;
+    }
+    
+    logger.error('Error updating working hours', {
+      error: error.message,
       businessId: req.params.businessId,
-      error: error.message
+      processingTime
     });
-
-    res.status(error.message.includes('not found') ? 404 : 400).json({
-      success: false,
-      message: error.message
-    });
+    throw error;
   }
 });
 
@@ -94,40 +115,37 @@ router.put('/:businessId/working-hours', auth, enforceBusinessIsolation, async (
  * GET /api/business/:businessId/working-hours/status
  * Check if currently within working hours
  */
-router.get('/:businessId/working-hours/status', auth, enforceBusinessIsolation, async (req, res) => {
+router.get('/:businessId/working-hours/status', auth, requireBusiness, businessContext, async (req, res) => {
+  const startTime = Date.now();
   try {
     const { businessId } = req.params;
-    const Business = require('../../../core/database/models/Business');
-    
-    const business = await Business.findById(businessId);
-    if (!business) {
-      return res.status(404).json({
-        success: false,
-        message: 'Business not found'
-      });
-    }
+    const business = await validateBusiness(businessId);
 
     const isOpen = workingHoursService.isWithinWorkingHours(business);
     const nextAvailableMessage = isOpen ? null : workingHoursService.getNextAvailableMessage(business);
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
       success: true,
       data: {
         isOpen,
         message: nextAvailableMessage
-      }
+      },
+      processingTime
     });
-
   } catch (error) {
-    logger.error('Check working hours status error', {
+    const processingTime = Date.now() - startTime;
+    
+    if (error instanceof NotFoundError || error instanceof ValidationError || error instanceof ConflictError) {
+      throw error;
+    }
+    
+    logger.error('Error checking working hours status', {
+      error: error.message,
       businessId: req.params.businessId,
-      error: error.message
+      processingTime
     });
-
-    res.status(500).json({
-      success: false,
-      message: error.message
-    });
+    throw error;
   }
 });
 

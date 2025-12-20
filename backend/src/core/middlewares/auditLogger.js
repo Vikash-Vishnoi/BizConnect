@@ -1,6 +1,37 @@
 /**
  * ✅ FEATURE 36: Audit Logging Middleware
  * Automatically logs all API requests for compliance and security
+ * 
+ * PURPOSE:
+ * - Compliance tracking (GDPR, HIPAA, SOC2)
+ * - Security monitoring and threat detection
+ * - User activity auditing
+ * - Regulatory requirement fulfillment
+ * 
+ * WHAT IS LOGGED:
+ * - Authentication events (login, logout, password changes)
+ * - Resource modifications (create, update, delete)
+ * - Permission changes and role assignments
+ * - Sensitive operations (exports, API changes)
+ * - Failed authorization attempts
+ * 
+ * MIDDLEWARE POSITIONING:
+ * Should be placed AFTER rate limiting to capture rate limit violations:
+ * 1. requestLogger - Request tracking
+ * 2. rateLimiter - Rate limiting
+ * 3. auditLogger \u2190 HERE (captures rate limit hits)
+ * 4. authentication
+ * 5. authorization
+ * 
+ * PERFORMANCE:
+ * - Async logging (non-blocking)
+ * - Skips GET requests for performance
+ * - Skips webhook endpoints (high volume)
+ * - Database writes are batched where possible
+ * 
+ * USAGE:
+ * Automatically applied - no manual intervention needed
+ * All POST/PUT/PATCH/DELETE requests are audited
  */
 
 const AuditLog = require('../database/models/AuditLog');
@@ -63,8 +94,7 @@ const auditLogger = async (req, res, next) => {
     '/api/webhooks',
     '/api/health',
     '/api/analytics',
-    '/api/conversations',
-    '/api/search'
+    '/api/conversations'
   ];
 
   const shouldSkip = skipRoutes.some(route => req.path.startsWith(route));
@@ -86,6 +116,8 @@ const auditLogger = async (req, res, next) => {
 
   // Continue to next middleware
   res.on('finish', async () => {
+    const processingTime = Date.now() - startTime;
+    
     try {
       // Determine action and resource type
       let action = null;
@@ -152,23 +184,20 @@ const auditLogger = async (req, res, next) => {
       }
 
       // Determine status
-      const status = res.statusCode >= 200 && res.statusCode < 300 
-        ? 'SUCCESS' 
-        : res.statusCode >= 400 
-        ? 'FAILURE' 
-        : 'PENDING';
-
-      // Calculate duration
-      const duration = Date.now() - startTime;
+      const status = res.statusCode >= HTTP_STATUS.OK && res.statusCode < HTTP_STATUS.BAD_REQUEST
+        ? AUDIT_STATUS_SUCCESS
+        : res.statusCode >= HTTP_STATUS.BAD_REQUEST
+        ? AUDIT_STATUS_FAILURE
+        : AUDIT_STATUS_PENDING;
 
       // Get IP address
       const ipAddress = req.ip || req.connection.remoteAddress;
 
       // Sanitize request body (remove sensitive data)
       const sanitizedBody = { ...req.body };
-      if (sanitizedBody.password) sanitizedBody.password = '[REDACTED]';
-      if (sanitizedBody.token) sanitizedBody.token = '[REDACTED]';
-      if (sanitizedBody.apiKey) sanitizedBody.apiKey = '[REDACTED]';
+      if (sanitizedBody.password) sanitizedBody.password = SENSITIVE_FIELD_REDACTED;
+      if (sanitizedBody.token) sanitizedBody.token = SENSITIVE_FIELD_REDACTED;
+      if (sanitizedBody.apiKey) sanitizedBody.apiKey = SENSITIVE_FIELD_REDACTED;
 
       // Log the action
       await AuditLog.logAction({
@@ -181,7 +210,7 @@ const auditLogger = async (req, res, next) => {
         description,
         status,
         errorMessage: res.auditData?.error || null,
-        errorCode: res.statusCode >= 400 ? res.statusCode.toString() : null,
+        errorCode: res.statusCode >= HTTP_STATUS.BAD_REQUEST ? res.statusCode.toString() : null,
         requestData: {
           method: req.method,
           endpoint: req.path,
@@ -191,19 +220,36 @@ const auditLogger = async (req, res, next) => {
         },
         responseData: {
           statusCode: res.statusCode,
-          data: status === 'SUCCESS' ? { success: true } : null,
-          duration
+          data: status === AUDIT_STATUS_SUCCESS ? { success: true } : null,
+          duration: processingTime
         },
         ipAddress,
         userAgent: req.get('user-agent'),
         impact: {
           level: determineImpactLevel(action, status),
-          affectedUsers: 1
+          affectedUsers: AFFECTED_USERS_DEFAULT
         }
       });
 
+      logger.info('Audit log entry created', {
+        userId: req.user?._id?.toString(),
+        businessId: req.businessId?.toString(),
+        action,
+        resourceType,
+        status,
+        processingTime
+      });
+
     } catch (error) {
-      console.error('❌ Audit logging error:', error);
+      logger.error('Audit logging error', {
+        error: error.message,
+        errorCode: error.code || ERROR_CODES.INTERNAL_ERROR,
+        userId: req.user?._id?.toString(),
+        businessId: req.businessId?.toString(),
+        path: req.path,
+        method: req.method,
+        processingTime
+      });
       // Don't fail the request if audit logging fails
     }
   });
@@ -215,16 +261,16 @@ const auditLogger = async (req, res, next) => {
  * Determine impact level of an action
  */
 function determineImpactLevel(action, status) {
-  if (status !== 'SUCCESS') return 'NONE';
+  if (status !== AUDIT_STATUS_SUCCESS) return IMPACT_LEVEL_NONE;
 
   const criticalActions = ['USER_DELETE', 'DATA_DELETE', 'ROLE_DELETE'];
   const highActions = ['PERMISSION_REVOKE', 'SETTINGS_UPDATE', 'CAMPAIGN_START'];
   const mediumActions = ['TEMPLATE_CREATE', 'CAMPAIGN_CREATE', 'FLOW_PUBLISH'];
 
-  if (criticalActions.includes(action)) return 'CRITICAL';
-  if (highActions.includes(action)) return 'HIGH';
-  if (mediumActions.includes(action)) return 'MEDIUM';
-  return 'LOW';
+  if (criticalActions.includes(action)) return IMPACT_LEVEL_CRITICAL;
+  if (highActions.includes(action)) return IMPACT_LEVEL_HIGH;
+  if (mediumActions.includes(action)) return IMPACT_LEVEL_MEDIUM;
+  return IMPACT_LEVEL_LOW;
 }
 
 /**
@@ -232,10 +278,27 @@ function determineImpactLevel(action, status) {
  * Use this in routes for specific audit requirements
  */
 async function logManualAction(data) {
+  const startTime = Date.now();
+  
   try {
     await AuditLog.logAction(data);
+    
+    const processingTime = Date.now() - startTime;
+    logger.info('Manual audit log entry created', {
+      userId: data.userId?.toString(),
+      action: data.action,
+      resourceType: data.resourceType,
+      processingTime
+    });
   } catch (error) {
-    console.error('❌ Manual audit logging error:', error);
+    const processingTime = Date.now() - startTime;
+    logger.error('Manual audit logging error', {
+      error: error.message,
+      errorCode: error.code || ERROR_CODES.INTERNAL_ERROR,
+      action: data.action,
+      resourceType: data.resourceType,
+      processingTime
+    });
   }
 }
 

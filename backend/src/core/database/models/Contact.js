@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const { phoneNumberValidator } = require('../../../common/helpers/phoneValidator');
+const { sanitizePhoneNumber, validatePhoneNumber } = require('../../../common/utils/validators');
 
 const contactSchema = new mongoose.Schema({
   businessId: {
@@ -12,7 +12,11 @@ const contactSchema = new mongoose.Schema({
     type: String,
     required: true,
     trim: true,
-    validate: phoneNumberValidator
+    validate: {
+      validator: validatePhoneNumber,
+      message: 'Invalid phone number format. Use E.164 format (e.g., +919876543210)'
+    },
+    set: sanitizePhoneNumber
   },
   name: {
     type: String,

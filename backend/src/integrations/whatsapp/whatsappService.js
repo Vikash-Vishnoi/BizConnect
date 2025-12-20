@@ -1,4 +1,6 @@
 const axios = require('axios');
+const logger = require('../../common/helpers/logger');
+const { ERROR_CODES } = require('../../common/constants');
 const rateLimitService = require('../notifications/rateLimitService');
 const WhatsAppMessagingService = require('./whatsappMessagingService');
 const WhatsAppMediaService = require('./whatsappMediaService');
@@ -8,6 +10,15 @@ const WhatsAppBusinessService = require('./whatsappBusinessService');
 const WhatsAppAccountService = require('./whatsappAccountService');
 const WhatsAppStatusService = require('./whatsappStatusService');
 const WhatsAppGroupService = require('./whatsappGroupService');
+
+/**
+ * WhatsApp Service Constants
+ */
+const DEFAULT_API_VERSION = 'v22.0';
+const NODE_ENV_PRODUCTION = 'production';
+const INDIA_COUNTRY_CODE = '91';
+const INDIAN_PHONE_LENGTH = 10;
+const INDIAN_PHONE_WITH_CODE_LENGTH = 12;
 
 /**
  * Core WhatsApp Service - Orchestrates all WhatsApp API operations
@@ -21,7 +32,7 @@ class WhatsAppService {
    * @param {string} credentials.phoneNumberId - WhatsApp Phone Number ID
    * @param {string} credentials.accessToken - WhatsApp Access Token
    * @param {string} credentials.wabaId - WhatsApp Business Account ID
-   * @param {string} credentials.apiVersion - API version (defaults to v18.0)
+   * @param {string} credentials.apiVersion - API version (defaults to v22.0)
    */
   constructor(credentials = null) {
     // Multi-business support: Accept credentials or fallback to env variables
@@ -29,25 +40,29 @@ class WhatsAppService {
       this.phoneNumberId = credentials.phoneNumberId;
       this.accessToken = credentials.accessToken;
       this.businessAccountId = credentials.wabaId;
-      this.apiVersion = credentials.apiVersion || 'v18.0';
+      this.apiVersion = credentials.apiVersion || DEFAULT_API_VERSION;
       this.apiUrl = `https://graph.facebook.com/${this.apiVersion}`;
-      console.log(`✅ WhatsAppService initialized for business phone: ${this.phoneNumberId}`);
+      logger.info('WhatsAppService initialized for business', {
+        phoneNumberId: this.phoneNumberId,
+        apiVersion: this.apiVersion
+      });
     } else {
       // Fallback to environment variables (DEVELOPMENT ONLY)
-      this.apiUrl = process.env.WHATSAPP_API_URL || 'https://graph.facebook.com/v18.0';
+      this.apiVersion = DEFAULT_API_VERSION;
+      this.apiUrl = process.env.WHATSAPP_API_URL || `https://graph.facebook.com/${this.apiVersion}`;
       this.phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
       this.accessToken = process.env.WHATSAPP_ACCESS_TOKEN;
       this.businessAccountId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
-      this.apiVersion = 'v18.0';
       
       // Warn about multi-business architecture
-      if (process.env.NODE_ENV === 'production') {
-        console.error('🚨 CRITICAL: WhatsAppService initialized without credentials in PRODUCTION!');
-        console.error('🚨 This is a multi-business platform. You MUST pass business credentials.');
-        console.error('🚨 Example: new WhatsAppService(await business.getWhatsAppCredentials())');
+      if (process.env.NODE_ENV === NODE_ENV_PRODUCTION) {
+        logger.error('CRITICAL: WhatsAppService initialized without credentials in PRODUCTION', {
+          message: 'This is a multi-business platform. You MUST pass business credentials.',
+          example: 'new WhatsAppService(await business.getWhatsAppCredentials())',
+          code: ERROR_CODES.CONFIGURATION_ERROR
+        });
       } else if (this.accessToken) {
-        console.warn('⚠️  DEV MODE: Using env credentials as fallback');
-        console.warn('⚠️  For production, always pass business credentials to constructor');
+        logger.warn('DEV MODE: Using env credentials as fallback. For production, always pass business credentials to constructor');
       }
     }
 
@@ -78,7 +93,7 @@ class WhatsAppService {
           const endpoint = response.config?.url || '';
           await rateLimitService.record(headers, endpoint);
         } catch (err) {
-          console.error('Failed to record rate limit headers:', err);
+          logger.error('Failed to record rate limit headers', { error: err.message });
         }
         return response;
       },
@@ -88,7 +103,7 @@ class WhatsAppService {
           const endpoint = error.config?.url || '';
           await rateLimitService.record(headers, endpoint);
         } catch (err) {
-          console.error('Failed to record rate limit headers (error response):', err);
+          logger.error('Failed to record rate limit headers (error response)', { error: err.message });
         }
         return Promise.reject(error);
       }
@@ -100,7 +115,7 @@ class WhatsAppService {
     const crypto = require('crypto');
     const secret = appSecret || process.env.WHATSAPP_APP_SECRET || process.env.APP_SECRET;
     if (!secret) {
-      console.warn('⚠️  WHATSAPP_APP_SECRET not configured');
+      logger.warn('WHATSAPP_APP_SECRET not configured');
       return false;
     }
     const expectedSignature = crypto
@@ -112,17 +127,25 @@ class WhatsAppService {
   }
 
   formatPhoneNumber(phoneNumber) {
+    if (!phoneNumber) {
+      const error = new Error('Phone number is required');
+      error.code = ERROR_CODES.VALIDATION_ERROR;
+      throw error;
+    }
+
     let formatted = phoneNumber.replace(/\D/g, '');
     
-    if (formatted.startsWith('91') && formatted.length === 12) {
+    if (formatted.startsWith(INDIA_COUNTRY_CODE) && formatted.length === INDIAN_PHONE_WITH_CODE_LENGTH) {
       return formatted;
     }
     
-    if (formatted.length === 10) {
-      return '91' + formatted;
+    if (formatted.length === INDIAN_PHONE_LENGTH) {
+      return INDIA_COUNTRY_CODE + formatted;
     }
     
-    throw new Error(`Invalid phone number: ${phoneNumber}. Expected 10 digits, will add 91 prefix automatically.`);
+    const error = new Error(`Invalid phone number: ${phoneNumber}. Expected ${INDIAN_PHONE_LENGTH} digits, will add ${INDIA_COUNTRY_CODE} prefix automatically.`);
+    error.code = ERROR_CODES.VALIDATION_ERROR;
+    throw error;
   }
 
   // Messaging methods

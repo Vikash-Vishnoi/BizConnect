@@ -1,0 +1,174 @@
+/**
+ * Image Lightbox Styles
+ * WhatsApp-style full-screen image viewer
+ */
+
+.image-lightbox-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 0;
+  cursor: zoom-out;
+  animation: lightboxFadeIn 0.2s ease;
+}
+
+@keyframes lightboxFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.image-lightbox-content {
+  position: relative;
+  max-width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  cursor: default;
+}
+
+.image-lightbox-header {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--spacing-md);
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.7), transparent);
+  z-index: 10;
+}
+
+.image-lightbox-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: white;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(10px);
+}
+
+.image-lightbox-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
+}
+
+.image-lightbox-btn:active {
+  transform: scale(0.95);
+}
+
+.image-lightbox-close {
+  background: rgba(255, 59, 48, 0.8);
+}
+
+.image-lightbox-close:hover {
+  background: rgba(255, 59, 48, 1);
+}
+
+.image-lightbox-image-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 90vw;
+  max-height: 90vh;
+  position: relative;
+}
+
+.image-lightbox-image {
+  max-width: 100%;
+  max-height: 85vh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  cursor: default;
+  animation: imageZoomIn 0.2s ease;
+}
+
+@keyframes imageZoomIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.image-lightbox-caption {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+  padding: var(--spacing-xl) var(--spacing-md) var(--spacing-md);
+  color: white;
+}
+
+.image-lightbox-caption p {
+  margin: 0;
+  font-size: var(--font-size-base);
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+  .image-lightbox-content {
+    max-width: 100vw;
+    max-height: 100vh;
+  }
+
+  .image-lightbox-image {
+    max-height: 90vh;
+    border-radius: 0;
+  }
+
+  .image-lightbox-header {
+    padding: var(--spacing-sm);
+  }
+
+  .image-lightbox-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  .image-lightbox-caption {
+    padding: var(--spacing-lg) var(--spacing-sm) var(--spacing-sm);
+  }
+
+  .image-lightbox-caption p {
+    font-size: var(--font-size-sm);
+  }
+}
+
+/* Touch device optimizations */
+@media (hover: none) and (pointer: coarse) {
+  .image-lightbox-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: none;
+  }
+
+  .image-lightbox-close:hover {
+    background: rgba(255, 59, 48, 0.8);
+  }
+}

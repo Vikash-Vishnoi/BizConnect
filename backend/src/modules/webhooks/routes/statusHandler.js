@@ -11,6 +11,24 @@ const Template = require('../../../core/database/models/Template');
 const AlertLog = require('../../../core/database/models/AlertLog');
 const campaignService = require('../../campaigns/services/campaignService');
 const logger = require('../../../common/helpers/logger');
+const { ERROR_CODES, TIME_CONSTANTS } = require('../../../common/constants');
+
+/**
+ * Message Status Constants
+ */
+const MESSAGE_STATUS = {
+  SENT: 'sent',
+  DELIVERED: 'delivered',
+  READ: 'read',
+  FAILED: 'failed'
+};
+
+const ERROR_SEVERITY = {
+  CRITICAL: 'CRITICAL',
+  HIGH: 'HIGH',
+  MEDIUM: 'MEDIUM',
+  LOW: 'LOW'
+};
  
 /**
  * Handle message status updates (sent, delivered, read, failed)
@@ -20,13 +38,24 @@ const logger = require('../../../common/helpers/logger');
  */
 async function handleMessageStatus(status, io, business) {
   const startTime = Date.now();
-  const requestId = `status_${status.id}_${Date.now()}`;
+  const requestId = `status_${status?.id}_${Date.now()}`;
   
   try {
+    // Validate inputs
+    if (!status || !business) {
+      logger.error('handleMessageStatus called with invalid parameters', {
+        requestId,
+        hasStatus: !!status,
+        hasBusiness: !!business,
+        code: ERROR_CODES.VALIDATION_ERROR
+      });
+      return;
+    }
+
     const messageId = status.id;
     const recipientId = status.recipient_id;
     const statusType = status.status;
-    const timestamp = new Date(parseInt(status.timestamp) * 1000);
+    const timestamp = new Date(parseInt(status.timestamp) * TIME_CONSTANTS.SECOND_MS);
 
     logger.logWhatsAppAPI('POST', 'webhook/status', 200, {
       requestId,
@@ -44,7 +73,8 @@ async function handleMessageStatus(status, io, business) {
         businessId: business._id.toString(),
         hasMessageId: !!messageId,
         hasRecipientId: !!recipientId,
-        hasStatus: !!statusType
+        hasStatus: !!statusType,
+        code: ERROR_CODES.VALIDATION_ERROR
       });
       return;
     }
@@ -90,18 +120,18 @@ async function handleMessageStatus(status, io, business) {
     );
 
     // Handle failed status
-    if (statusType === 'failed') {
+    if (statusType === MESSAGE_STATUS.FAILED) {
       await handleMessageError(status, io, business, requestId);
       await updatePhoneHealthOnError(status, business, requestId);
     }
 
     // Log completion time
-    const duration = Date.now() - startTime;
+    const processingTime = Date.now() - startTime;
     logger.info('Status update processed', {
       requestId,
       messageId,
       status: statusType,
-      duration: `${duration}ms`
+      processingTime: `${processingTime}ms`
     });
 
   } catch (error) {
@@ -110,7 +140,9 @@ async function handleMessageStatus(status, io, business) {
       error: error.message,
       stack: error.stack,
       messageId: status?.id,
-      businessId: business?._id?.toString()
+      businessId: business?._id?.toString(),
+      code: error.code || ERROR_CODES.INTERNAL_ERROR,
+      processingTime: `${Date.now() - startTime}ms`
     });
     throw error;
   }
@@ -172,7 +204,7 @@ async function updateConversationMessageStatus(
         break;
       case 'read':
         message.readAt = timestamp;
-        if (message.direction === 'outgoing' && !message.wasRead) {
+        if (message.direction === 'out' && !message.wasRead) {
           message.wasRead = true;
         }
         break;

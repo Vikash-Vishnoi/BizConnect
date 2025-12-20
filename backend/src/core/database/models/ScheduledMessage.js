@@ -99,6 +99,14 @@ const scheduledMessageSchema = new mongoose.Schema({
     default: 0,
     max: 3
   },
+  maxRetries: {
+    type: Number,
+    default: 3
+  },
+  nextRetryAt: {
+    type: Date,
+    default: null
+  },
   cancelledBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -242,7 +250,7 @@ scheduledMessageSchema.statics.getUserScheduled = async function(userId, options
  */
 scheduledMessageSchema.statics.getStatusCounts = async function(userId) {
   const counts = await this.aggregate([
-    { $match: { userId: mongoose.Types.ObjectId(userId) } },
+    { $match: { userId: new mongoose.Types.ObjectId(userId) } },
     { $group: { _id: '$status', count: { $sum: 1 } } }
   ]);
   

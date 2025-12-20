@@ -8,12 +8,25 @@
  */
 
 const axios = require('axios');
+const logger = require('../../common/helpers/logger');
+const { ERROR_CODES, TIME_CONSTANTS } = require('../../common/constants');
 const Conversation = require('../../core/database/models/Conversation');
 const { getBusinessCredentials } = require('../../common/helpers/businessContext');
+const config = require('../../config/app.config');
+
+/**
+ * Reaction Service Constants
+ */
+const GRAPH_API_TIMEOUT = parseInt(config.whatsapp?.timeout || process.env.WHATSAPP_API_TIMEOUT || '30000');
+
+const MESSAGING_PRODUCT = 'whatsapp';
+const RECIPIENT_TYPE = 'individual';
+const MESSAGE_TYPE_REACTION = 'reaction';
 
 class MessageReactionsService {
   constructor(businessId = null) {
     this.businessId = businessId;
+    this.timeout = GRAPH_API_TIMEOUT;
     // ✅ MULTI-BUSINESS: Credentials loaded per-request
   }
   
@@ -38,16 +51,30 @@ class MessageReactionsService {
    * @returns {Promise<Object>} - Reaction result
    */
   async sendReaction(whatsappMessageId, emoji) {
+    const startTime = Date.now();
+    
     try {
+      if (!whatsappMessageId) {
+        return {
+          success: false,
+          error: 'WhatsApp message ID is required',
+          code: ERROR_CODES.VALIDATION_ERROR
+        };
+      }
+
       const { baseURL, accessToken } = await this.getCredentials();
       
-      console.log(`😊 Sending reaction to message ${whatsappMessageId}: ${emoji || '(remove)'}`);
+      logger.info('Sending reaction to message', {
+        whatsappMessageId,
+        emoji: emoji || '(remove)',
+        businessId: this.businessId?.toString()
+      });
 
       const payload = {
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
+        messaging_product: MESSAGING_PRODUCT,
+        recipient_type: RECIPIENT_TYPE,
         to: '', // Will be set by caller or extracted from conversation
-        type: 'reaction',
+        type: MESSAGE_TYPE_REACTION,
         reaction: {
           message_id: whatsappMessageId,
           emoji: emoji // Empty string removes the reaction
@@ -58,11 +85,15 @@ class MessageReactionsService {
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json'
-        }
+        },
+        timeout: this.timeout
       });
 
-      console.log('✅ Reaction sent successfully');
-      console.log('   WhatsApp Message ID:', response.data.messages?.[0]?.id);
+      logger.info('Reaction sent successfully', {
+        whatsappMessageId: response.data.messages?.[0]?.id,
+        businessId: this.businessId?.toString(),
+        processingTime: `${Date.now() - startTime}ms`
+      });
 
       return {
         success: true,
@@ -70,10 +101,17 @@ class MessageReactionsService {
         data: response.data
       };
     } catch (error) {
-      console.error('❌ Error sending reaction:', error.response?.data || error.message);
+      logger.error('Error sending reaction', {
+        error: error.response?.data || error.message,
+        whatsappMessageId,
+        businessId: this.businessId?.toString(),
+        code: error.code || ERROR_CODES.EXTERNAL_SERVICE_ERROR,
+        processingTime: `${Date.now() - startTime}ms`
+      });
       return {
         success: false,
         error: error.response?.data?.error?.message || error.message,
+        code: ERROR_CODES.EXTERNAL_SERVICE_ERROR,
         details: error.response?.data
       };
     }
@@ -88,29 +126,63 @@ class MessageReactionsService {
    * @returns {Promise<Object>} - Updated conversation
    */
   async addReactionToMessage(conversationId, messageId, emoji, userId) {
+    const startTime = Date.now();
+    
     try {
+      if (!conversationId || !messageId || !userId) {
+        return {
+          success: false,
+          error: 'Missing required parameters',
+          code: ERROR_CODES.VALIDATION_ERROR
+        };
+      }
+
       const conversation = await Conversation.findOne({
         _id: conversationId,
         userId: userId
       });
 
       if (!conversation) {
-        throw new Error('Conversation not found');
+        logger.warn('Conversation not found for reaction', {
+          conversationId: conversationId.toString(),
+          userId: userId.toString(),
+          code: ERROR_CODES.NOT_FOUND
+        });
+        return {
+          success: false,
+          error: 'Conversation not found',
+          code: ERROR_CODES.NOT_FOUND
+        };
       }
 
       const message = conversation.messages.id(messageId);
       if (!message) {
-        throw new Error('Message not found');
+        logger.warn('Message not found for reaction', {
+          conversationId: conversationId.toString(),
+          messageId: messageId.toString(),
+          code: ERROR_CODES.NOT_FOUND
+        });
+        return {
+          success: false,
+          error: 'Message not found',
+          code: ERROR_CODES.NOT_FOUND
+        };
       }
 
       // Get the phone number from conversation
-      const toPhoneNumber = conversation.contact.phoneNumber;
+      const toPhoneNumber = conversation.contact?.phoneNumber;
 
       // Send reaction via WhatsApp API
       const reactionResult = await this.sendReaction(message.whatsappMessageId, emoji);
 
       if (!reactionResult.success) {
-        throw new Error(reactionResult.error);
+        logger.error('Failed to send reaction via WhatsApp API', {
+          conversationId: conversationId.toString(),
+          messageId: messageId.toString(),
+          error: reactionResult.error,
+          code: reactionResult.code || ERROR_CODES.EXTERNAL_SERVICE_ERROR
+        });
+        return reactionResult;
       }
 
       // Add reaction to message
@@ -144,6 +216,14 @@ class MessageReactionsService {
 
       await conversation.save();
 
+      logger.info('Reaction processed successfully', {
+        conversationId: conversationId.toString(),
+        messageId: messageId.toString(),
+        emoji: emoji || '(removed)',
+        businessId: this.businessId?.toString(),
+        processingTime: `${Date.now() - startTime}ms`
+      });
+
       return {
         success: true,
         conversation,
@@ -151,8 +231,19 @@ class MessageReactionsService {
         whatsappMessageId: reactionResult.messageId
       };
     } catch (error) {
-      console.error('❌ Error adding reaction:', error);
-      throw error;
+      logger.error('Error adding reaction', {
+        error: error.message,
+        conversationId: conversationId?.toString(),
+        messageId: messageId?.toString(),
+        businessId: this.businessId?.toString(),
+        code: ERROR_CODES.INTERNAL_ERROR,
+        processingTime: `${Date.now() - startTime}ms`
+      });
+      return {
+        success: false,
+        error: error.message,
+        code: ERROR_CODES.INTERNAL_ERROR
+      };
     }
   }
 
@@ -164,7 +255,39 @@ class MessageReactionsService {
    * @returns {Promise<Object>} - Updated conversation
    */
   async removeReaction(conversationId, messageId, userId) {
-    return await this.addReactionToMessage(conversationId, messageId, '', userId);
+    const startTime = Date.now();
+    
+    try {
+      logger.info('Removing reaction', {
+        conversationId: conversationId.toString(),
+        messageId: messageId.toString(),
+        userId: userId.toString()
+      });
+      
+      const result = await this.addReactionToMessage(conversationId, messageId, '', userId);
+      
+      logger.info('Reaction removed', {
+        conversationId: conversationId.toString(),
+        messageId: messageId.toString(),
+        success: result.success,
+        processingTime: `${Date.now() - startTime}ms`
+      });
+      
+      return result;
+    } catch (error) {
+      logger.error('Error removing reaction', {
+        error: error.message,
+        conversationId: conversationId?.toString(),
+        messageId: messageId?.toString(),
+        code: ERROR_CODES.INTERNAL_ERROR,
+        processingTime: `${Date.now() - startTime}ms`
+      });
+      return {
+        success: false,
+        error: error.message,
+        code: ERROR_CODES.INTERNAL_ERROR
+      };
+    }
   }
 
   /**
@@ -175,30 +298,75 @@ class MessageReactionsService {
    * @returns {Promise<Array>} - Array of reactions
    */
   async getMessageReactions(conversationId, messageId, userId) {
+    const startTime = Date.now();
+    
     try {
+      if (!conversationId || !messageId || !userId) {
+        return {
+          success: false,
+          error: 'Missing required parameters',
+          code: ERROR_CODES.VALIDATION_ERROR
+        };
+      }
+
       const conversation = await Conversation.findOne({
         _id: conversationId,
         userId: userId
       });
 
       if (!conversation) {
-        throw new Error('Conversation not found');
+        logger.warn('Conversation not found for reactions', {
+          conversationId: conversationId.toString(),
+          userId: userId.toString(),
+          code: ERROR_CODES.NOT_FOUND
+        });
+        return {
+          success: false,
+          error: 'Conversation not found',
+          code: ERROR_CODES.NOT_FOUND
+        };
       }
 
       const message = conversation.messages.id(messageId);
       if (!message) {
-        throw new Error('Message not found');
+        logger.warn('Message not found for reactions', {
+          conversationId: conversationId.toString(),
+          messageId: messageId.toString(),
+          code: ERROR_CODES.NOT_FOUND
+        });
+        return {
+          success: false,
+          error: 'Message not found',
+          code: ERROR_CODES.NOT_FOUND
+        };
       }
+
+      logger.info('Retrieved message reactions', {
+        conversationId: conversationId.toString(),
+        messageId: messageId.toString(),
+        reactionCount: message.reactions?.length || 0,
+        processingTime: `${Date.now() - startTime}ms`
+      });
 
       return {
         success: true,
         reactions: message.reactions || [],
-        messageId: messageId,
+        messageId: messageId.toString(),
         totalReactions: message.reactions?.length || 0
       };
     } catch (error) {
-      console.error('❌ Error getting reactions:', error);
-      throw error;
+      logger.error('Error getting reactions', {
+        error: error.message,
+        conversationId: conversationId?.toString(),
+        messageId: messageId?.toString(),
+        code: ERROR_CODES.INTERNAL_ERROR,
+        processingTime: `${Date.now() - startTime}ms`
+      });
+      return {
+        success: false,
+        error: error.message,
+        code: ERROR_CODES.INTERNAL_ERROR
+      };
     }
   }
 
@@ -209,14 +377,33 @@ class MessageReactionsService {
    * @returns {Promise<Object>} - Reaction statistics
    */
   async getConversationReactionStats(conversationId, userId) {
+    const startTime = Date.now();
+    
     try {
+      if (!conversationId || !userId) {
+        return {
+          success: false,
+          error: 'Missing required parameters',
+          code: ERROR_CODES.VALIDATION_ERROR
+        };
+      }
+
       const conversation = await Conversation.findOne({
         _id: conversationId,
         userId: userId
       });
 
       if (!conversation) {
-        throw new Error('Conversation not found');
+        logger.warn('Conversation not found for stats', {
+          conversationId: conversationId.toString(),
+          userId: userId.toString(),
+          code: ERROR_CODES.NOT_FOUND
+        });
+        return {
+          success: false,
+          error: 'Conversation not found',
+          code: ERROR_CODES.NOT_FOUND
+        };
       }
 
       const stats = {
@@ -246,14 +433,29 @@ class MessageReactionsService {
         .slice(0, 10)
         .map(([emoji, count]) => ({ emoji, count }));
 
+      logger.info('Calculated reaction stats', {
+        conversationId: conversationId.toString(),
+        totalReactions: stats.totalReactions,
+        processingTime: `${Date.now() - startTime}ms`
+      });
+
       return {
         success: true,
-        conversationId,
+        conversationId: conversationId.toString(),
         stats
       };
     } catch (error) {
-      console.error('❌ Error getting reaction stats:', error);
-      throw error;
+      logger.error('Error getting reaction stats', {
+        error: error.message,
+        conversationId: conversationId?.toString(),
+        code: ERROR_CODES.INTERNAL_ERROR,
+        processingTime: `${Date.now() - startTime}ms`
+      });
+      return {
+        success: false,
+        error: error.message,
+        code: ERROR_CODES.INTERNAL_ERROR
+      };
     }
   }
 
@@ -264,7 +466,19 @@ class MessageReactionsService {
    * @returns {Promise<Array>} - Recent reactions
    */
   async getRecentReactions(userId, limit = 20) {
+    const startTime = Date.now();
+    
     try {
+      if (!userId) {
+        return {
+          success: false,
+          error: 'User ID is required',
+          code: ERROR_CODES.VALIDATION_ERROR
+        };
+      }
+
+      const safeLimit = Math.min(Math.max(parseInt(limit) || 20, 1), 100); // Max 100 reactions
+
       const conversations = await Conversation.find({
         userId: userId,
         'messages.reactions.0': { $exists: true } // Has at least one reaction
@@ -276,14 +490,16 @@ class MessageReactionsService {
       const recentReactions = [];
 
       conversations.forEach(conversation => {
+        if (!conversation.messages) return;
+        
         conversation.messages.forEach(message => {
           if (message.reactions && message.reactions.length > 0) {
             message.reactions.forEach(reaction => {
               recentReactions.push({
                 conversationId: conversation._id,
                 messageId: message._id,
-                contactName: conversation.contact.name,
-                contactPhone: conversation.contact.phoneNumber,
+                contactName: conversation.contact?.name,
+                contactPhone: conversation.contact?.phoneNumber,
                 messageText: message.content?.text || `[${message.type}]`,
                 messageType: message.type,
                 reaction: {
@@ -302,14 +518,30 @@ class MessageReactionsService {
         new Date(b.reaction.timestamp) - new Date(a.reaction.timestamp)
       );
 
+      logger.info('Retrieved recent reactions', {
+        userId: userId.toString(),
+        totalFound: recentReactions.length,
+        returned: Math.min(recentReactions.length, safeLimit),
+        processingTime: `${Date.now() - startTime}ms`
+      });
+
       return {
         success: true,
-        reactions: recentReactions.slice(0, limit),
+        reactions: recentReactions.slice(0, safeLimit),
         total: recentReactions.length
       };
     } catch (error) {
-      console.error('❌ Error getting recent reactions:', error);
-      throw error;
+      logger.error('Error getting recent reactions', {
+        error: error.message,
+        userId: userId?.toString(),
+        code: ERROR_CODES.INTERNAL_ERROR,
+        processingTime: `${Date.now() - startTime}ms`
+      });
+      return {
+        success: false,
+        error: error.message,
+        code: ERROR_CODES.INTERNAL_ERROR
+      };
     }
   }
 

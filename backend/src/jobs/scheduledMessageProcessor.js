@@ -1,7 +1,27 @@
 const cron = require('node-cron');
+const logger = require('../common/helpers/logger');
 const ScheduledMessage = require('../core/database/models/ScheduledMessage');
 const Conversation = require('../core/database/models/Conversation');
 const axios = require('axios');
+
+// Constants for scheduled message processing
+const CRON_SCHEDULE_EVERY_MINUTE = '* * * * *'; // Run every minute
+const CRON_TIMEZONE = 'UTC'; // Timezone for cron jobs
+const MESSAGE_STATUS_PENDING = 'pending'; // Pending message status
+const MESSAGE_STATUS_SENT = 'sent'; // Sent message status
+const MESSAGE_STATUS_FAILED = 'failed'; // Failed message status
+const MESSAGE_TYPE_TEXT = 'text'; // Text message type
+const MESSAGE_TYPE_TEMPLATE = 'template'; // Template message type
+const MESSAGE_DIRECTION_OUTGOING = 'out'; // Outgoing message direction
+const DEFAULT_MESSAGE_BATCH_SIZE = 100; // Default batch size for processing messages
+const BUSINESS_STATUS_ACTIVE = 'active'; // Active business status
+const RECURRENCE_FREQUENCY_DAILY = 'daily'; // Daily recurrence
+const RECURRENCE_FREQUENCY_WEEKLY = 'weekly'; // Weekly recurrence
+const RECURRENCE_FREQUENCY_MONTHLY = 'monthly'; // Monthly recurrence
+const DAYS_IN_WEEK = 7; // Days in a week
+const MESSAGING_PRODUCT_WHATSAPP = 'whatsapp'; // WhatsApp messaging product
+const RECIPIENT_TYPE_INDIVIDUAL = 'individual'; // Individual recipient type
+const DEFAULT_TEMPLATE_LANGUAGE = 'en'; // Default template language
 
 let isProcessing = false;
 
@@ -12,32 +32,33 @@ let isProcessing = false;
 const processScheduledMessages = async () => {
   // Prevent concurrent processing
   if (isProcessing) { 
-    console.log('⏳ Scheduled message processor already running, skipping...');
+    logger.debug('Scheduled message processor already running, skipping');
     return;
   }
 
   isProcessing = true;
+  const startTime = Date.now();
 
   try {
     const now = new Date();
-    console.log(`🕐 [${now.toISOString()}] Processing scheduled messages...`);
+    logger.info('Processing scheduled messages', { timestamp: now.toISOString() });
 
     // Find pending messages that are due
     const messages = await ScheduledMessage.find({
-      status: 'pending',
+      status: MESSAGE_STATUS_PENDING,
       scheduledTime: { $lte: now }
     })
       .populate('conversationId')
       .populate('templateId')
-      .limit(100); // Process 100 messages at a time
+      .limit(DEFAULT_MESSAGE_BATCH_SIZE);
 
     if (messages.length === 0) {
-      console.log('✅ No scheduled messages to process');
+      logger.debug('No scheduled messages to process');
       isProcessing = false;
       return;
     }
 
-    console.log(`📨 Found ${messages.length} scheduled messages to send`);
+    logger.info('Found scheduled messages to send', { count: messages.length });
 
     let successCount = 0;
     let failCount = 0;
@@ -49,7 +70,7 @@ const processScheduledMessages = async () => {
         await sendScheduledMessage(scheduledMsg);
 
         // Update status to sent
-        scheduledMsg.status = 'sent';
+        scheduledMsg.status = MESSAGE_STATUS_SENT;
         scheduledMsg.sentAt = new Date();
         await scheduledMsg.save();
 
@@ -61,10 +82,14 @@ const processScheduledMessages = async () => {
         }
 
       } catch (error) {
-        console.error(`❌ Failed to send scheduled message ${scheduledMsg._id}:`, error.message);
+        logger.error('Failed to send scheduled message', {
+          messageId: scheduledMsg._id,
+          businessId: scheduledMsg.businessId?.toString(),
+          error: error.message
+        });
 
         // Update status to failed
-        scheduledMsg.status = 'failed';
+        scheduledMsg.status = MESSAGE_STATUS_FAILED;
         scheduledMsg.failureReason = error.message;
         scheduledMsg.failedAt = new Date();
         await scheduledMsg.save();
@@ -73,10 +98,21 @@ const processScheduledMessages = async () => {
       }
     }
 
-    console.log(`✅ Processed ${messages.length} messages: ${successCount} sent, ${failCount} failed`);
+    const processingTime = Date.now() - startTime;
+
+    logger.info('Processed scheduled messages', {
+      total: messages.length,
+      sent: successCount,
+      failed: failCount,
+      processingTime: processingTime + 'ms'
+    });
 
   } catch (error) {
-    console.error('❌ Error in scheduled message processor:', error);
+    const processingTime = Date.now() - startTime;
+    logger.error('Error in scheduled message processor', { 
+      error: error.message,
+      processingTime: processingTime + 'ms'
+    });
   } finally {
     isProcessing = false;
   }
@@ -94,26 +130,26 @@ const sendScheduledMessage = async (scheduledMsg) => {
 
   // Build message payload
   const messagePayload = {
-    messaging_product: 'whatsapp',
-    recipient_type: 'individual',
+    messaging_product: MESSAGING_PRODUCT_WHATSAPP,
+    recipient_type: RECIPIENT_TYPE_INDIVIDUAL,
     to: conversation.contact.phoneNumber
   };
 
   // Handle different message types
   switch (scheduledMsg.messageType) {
-    case 'text':
-      messagePayload.type = 'text';
+    case MESSAGE_TYPE_TEXT:
+      messagePayload.type = MESSAGE_TYPE_TEXT;
       messagePayload.text = {
         body: scheduledMsg.content.text?.body || scheduledMsg.content.body
       };
       break;
 
-    case 'template':
-      messagePayload.type = 'template';
+    case MESSAGE_TYPE_TEMPLATE:
+      messagePayload.type = MESSAGE_TYPE_TEMPLATE;
       messagePayload.template = {
         name: scheduledMsg.templateId?.name || scheduledMsg.content.template?.name,
         language: {
-          code: scheduledMsg.templateId?.language || scheduledMsg.content.template?.language || 'en'
+          code: scheduledMsg.templateId?.language || scheduledMsg.content.template?.language || DEFAULT_TEMPLATE_LANGUAGE
         }
       };
       if (scheduledMsg.content.template?.components) {
@@ -134,7 +170,7 @@ const sendScheduledMessage = async (scheduledMsg) => {
   
   // Verify business exists and is active
   const Business = require('../core/database/models/Business');
-  const business = await Business.findOne({ _id: businessId, status: 'active' });
+  const business = await Business.findOne({ _id: businessId, status: BUSINESS_STATUS_ACTIVE });
   
   if (!business) {
     throw new Error('Business not found or inactive');
@@ -160,11 +196,11 @@ const sendScheduledMessage = async (scheduledMsg) => {
     whatsappMessageId: response.data.messages[0].id,
     from: whatsappService.phoneNumberId,
     to: conversation.contact.phoneNumber,
-    direction: 'outgoing',
+    direction: MESSAGE_DIRECTION_OUTGOING,
     type: scheduledMsg.messageType,
     content: scheduledMsg.content,
     timestamp: new Date(),
-    status: 'sent',
+    status: MESSAGE_STATUS_SENT,
     scheduledMessageId: scheduledMsg._id
   };
 
@@ -172,15 +208,19 @@ const sendScheduledMessage = async (scheduledMsg) => {
   conversation.lastMessage = {
     text: scheduledMsg.content.text?.body || `[${scheduledMsg.messageType}]`,
     type: scheduledMsg.messageType,
-    direction: 'outgoing',
+    direction: MESSAGE_DIRECTION_OUTGOING,
     timestamp: new Date(),
-    status: 'sent'
+    status: MESSAGE_STATUS_SENT
   };
   conversation.lastMessageAt = new Date();
 
   await conversation.save();
 
-  console.log(`✅ Sent scheduled message ${scheduledMsg._id} to ${conversation.contact.phoneNumber}`);
+  logger.info('Sent scheduled message', {
+    messageId: scheduledMsg._id,
+    phoneNumber: conversation.contact.phoneNumber,
+    businessId: businessId.toString()
+  });
 };
 
 /**
@@ -197,23 +237,25 @@ const createNextOccurrence = async (scheduledMsg) => {
   const nextScheduledTime = new Date(scheduledMsg.scheduledTime);
 
   switch (frequency) {
-    case 'daily':
+    case RECURRENCE_FREQUENCY_DAILY:
       nextScheduledTime.setDate(nextScheduledTime.getDate() + interval);
       break;
-    case 'weekly':
-      nextScheduledTime.setDate(nextScheduledTime.getDate() + (7 * interval));
+    case RECURRENCE_FREQUENCY_WEEKLY:
+      nextScheduledTime.setDate(nextScheduledTime.getDate() + (DAYS_IN_WEEK * interval));
       break;
-    case 'monthly':
+    case RECURRENCE_FREQUENCY_MONTHLY:
       nextScheduledTime.setMonth(nextScheduledTime.getMonth() + interval);
       break;
     default:
-      console.warn(`Unknown recurrence frequency: ${frequency}`);
+      logger.warn('Unknown recurrence frequency', { frequency });
       return;
   }
 
   // Check if we should create next occurrence
   if (endDate && nextScheduledTime > new Date(endDate)) {
-    console.log(`⏹️ Recurrence ended for scheduled message ${scheduledMsg._id}`);
+    logger.info('Recurrence ended for scheduled message', {
+      messageId: scheduledMsg._id
+    });
     return;
   }
 
@@ -227,26 +269,34 @@ const createNextOccurrence = async (scheduledMsg) => {
     content: scheduledMsg.content,
     templateId: scheduledMsg.templateId,
     recurrence: scheduledMsg.recurrence,
-    status: 'pending'
+    status: MESSAGE_STATUS_PENDING
   });
 
   await nextMessage.save();
 
-  console.log(`🔁 Created next occurrence: ${nextMessage._id} scheduled for ${nextScheduledTime.toISOString()}`);
+  logger.info('Created next occurrence', {
+    messageId: nextMessage._id,
+    scheduledTime: nextScheduledTime.toISOString()
+  });
 };
 
 /**
  * Start the cron job
  */
 const startScheduledMessageProcessor = () => {
-  console.log('🚀 Starting scheduled message processor (runs every minute)...');
-
-  // Run every minute: '* * * * *'
-  cron.schedule('* * * * *', () => {
-    processScheduledMessages();
+  logger.info('Starting scheduled message processor', {
+    schedule: CRON_SCHEDULE_EVERY_MINUTE,
+    timezone: CRON_TIMEZONE
   });
 
-  console.log('✅ Scheduled message processor started');
+  // Run every minute
+  cron.schedule(CRON_SCHEDULE_EVERY_MINUTE, () => {
+    processScheduledMessages();
+  }, {
+    timezone: CRON_TIMEZONE
+  });
+
+  logger.info('Scheduled message processor started successfully');
 };
 
 module.exports = {

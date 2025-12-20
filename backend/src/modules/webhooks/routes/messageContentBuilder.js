@@ -4,6 +4,29 @@
  */
 
 const logger = require('../../../common/helpers/logger');
+const { ERROR_CODES, MESSAGE_TYPES } = require('../../../common/constants');
+
+/**
+ * Message Content Builder Constants
+ */
+const MESSAGE_PREVIEW_MAX_LENGTH = 100;
+const MESSAGE_TYPE_ICONS = {
+  text: '💬',
+  image: '📷',
+  video: '🎥',
+  audio: '🎤',
+  document: '📄',
+  sticker: '😊',
+  location: '📍',
+  contacts: '👤',
+  button_reply: '🔘',
+  list_reply: '📋',
+  flow: '🔄',
+  reaction: '❤️',
+  order: '🛒',
+  system: 'ℹ️',
+  unsupported: '❌'
+};
 
 /**
  * Build structured message content from webhook data
@@ -12,6 +35,15 @@ const logger = require('../../../common/helpers/logger');
  * @returns {Object} Structured content object
  */ 
 function buildMessageContent(messageData, message = {}) {
+  // Validate inputs
+  if (!messageData) {
+    logger.warn('buildMessageContent called with null/undefined messageData');
+    return {
+      text: '[Invalid message data]',
+      error: 'Message data is required'
+    };
+  }
+
   const content = {
     text: messageData.text?.body || ''
   };
@@ -29,7 +61,7 @@ function buildMessageContent(messageData, message = {}) {
         content.mimeType = messageData.image?.mime_type;
         content.sha256 = messageData.image?.sha256;
         content.caption = messageData.image?.caption || '';
-        content.text = content.caption || '📷 Image';
+        content.text = content.caption || `${MESSAGE_TYPE_ICONS.image} Image`;
         break;
 
       case 'video':
@@ -39,7 +71,7 @@ function buildMessageContent(messageData, message = {}) {
         content.mimeType = messageData.video?.mime_type;
         content.sha256 = messageData.video?.sha256;
         content.caption = messageData.video?.caption || '';
-        content.text = content.caption || '🎥 Video';
+        content.text = content.caption || `${MESSAGE_TYPE_ICONS.video} Video`;
         break;
 
       case 'audio':
@@ -49,7 +81,7 @@ function buildMessageContent(messageData, message = {}) {
         content.mimeType = messageData.audio?.mime_type;
         content.sha256 = messageData.audio?.sha256;
         content.voice = messageData.audio?.voice || false;
-        content.text = '🎤 Audio message';
+        content.text = `${MESSAGE_TYPE_ICONS.audio} Audio message`;
         break;
 
       case 'document':
@@ -60,7 +92,7 @@ function buildMessageContent(messageData, message = {}) {
         content.sha256 = messageData.document?.sha256;
         content.filename = messageData.document?.filename || 'document';
         content.caption = messageData.document?.caption || '';
-        content.text = `📄 ${content.filename}`;
+        content.text = `${MESSAGE_TYPE_ICONS.document} ${content.filename}`;
         break;
 
       case 'sticker':
@@ -70,7 +102,7 @@ function buildMessageContent(messageData, message = {}) {
         content.mimeType = messageData.sticker?.mime_type;
         content.sha256 = messageData.sticker?.sha256;
         content.animated = messageData.sticker?.animated || false;
-        content.text = '😊 Sticker';
+        content.text = `${MESSAGE_TYPE_ICONS.sticker} Sticker`;
         break;
 
       case 'location':
@@ -81,7 +113,7 @@ function buildMessageContent(messageData, message = {}) {
           address: messageData.location?.address || '',
           url: messageData.location?.url
         };
-        content.text = `📍 ${messageData.location?.name || 'Location'}`;
+        content.text = `${MESSAGE_TYPE_ICONS.location} ${messageData.location?.name || 'Location'}`;
         break;
 
       case 'contacts':
@@ -123,7 +155,7 @@ function buildMessageContent(messageData, message = {}) {
           birthday: c.birthday
         }));
         const firstContact = content.contacts[0];
-        content.text = `👤 ${firstContact?.name?.formattedName || 'Contact'}`;
+        content.text = `${MESSAGE_TYPE_ICONS.contacts} ${firstContact?.name?.formattedName || 'Contact'}`;
         break;
 
       case 'button':
@@ -135,7 +167,7 @@ function buildMessageContent(messageData, message = {}) {
             title: messageData.button?.text || message.button?.text
           }
         };
-        content.text = content.interactive.buttonReply.title || '[Button Reply]';
+        content.text = `${MESSAGE_TYPE_ICONS.button_reply} ${content.interactive.buttonReply.title || 'Button Reply'}`;
         break;
 
       case 'interactive':
@@ -147,7 +179,7 @@ function buildMessageContent(messageData, message = {}) {
               title: messageData.interactive.button_reply?.title
             }
           };
-          content.text = messageData.interactive.button_reply?.title || '[Button Reply]';
+          content.text = `${MESSAGE_TYPE_ICONS.button_reply} ${messageData.interactive.button_reply?.title || 'Button Reply'}`;
         } else if (messageData.interactive?.type === 'list_reply') {
           content.interactive = {
             type: 'list',
@@ -157,7 +189,7 @@ function buildMessageContent(messageData, message = {}) {
               description: messageData.interactive.list_reply?.description || ''
             }
           };
-          content.text = messageData.interactive.list_reply?.title || '[List Reply]';
+          content.text = `${MESSAGE_TYPE_ICONS.list_reply} ${messageData.interactive.list_reply?.title || 'List Reply'}`;
         } else if (messageData.interactive?.type === 'nfm_reply') {
           // Flow (NFM = Native Flow Message)
           content.interactive = {
@@ -168,7 +200,7 @@ function buildMessageContent(messageData, message = {}) {
               responseJson: messageData.interactive.nfm_reply?.response_json
             }
           };
-          content.text = `🔄 Flow: ${messageData.interactive.nfm_reply?.name || 'Response'}`;
+          content.text = `${MESSAGE_TYPE_ICONS.flow} Flow: ${messageData.interactive.nfm_reply?.name || 'Response'}`;
         }
         break;
 
@@ -177,7 +209,7 @@ function buildMessageContent(messageData, message = {}) {
           messageId: messageData.reaction?.message_id,
           emoji: messageData.reaction?.emoji
         };
-        content.text = `${messageData.reaction?.emoji || '❤️'} Reacted`;
+        content.text = `${messageData.reaction?.emoji || MESSAGE_TYPE_ICONS.reaction} Reacted`;
         break;
 
       case 'order':
@@ -191,7 +223,7 @@ function buildMessageContent(messageData, message = {}) {
           })),
           text: messageData.order?.text || ''
         };
-        content.text = `🛒 Order (${content.order.productItems.length} items)`;
+        content.text = `${MESSAGE_TYPE_ICONS.order} Order (${content.order.productItems.length} items)`;
         break;
 
       case 'system':
@@ -203,11 +235,11 @@ function buildMessageContent(messageData, message = {}) {
           waId: messageData.system?.wa_id,
           newWaId: messageData.system?.new_wa_id
         };
-        content.text = `ℹ️ ${content.system.body || 'System message'}`;
+        content.text = `${MESSAGE_TYPE_ICONS.system} ${content.system.body || 'System message'}`;
         break;
 
       case 'unsupported':
-        content.text = '❌ Unsupported message type';
+        content.text = `${MESSAGE_TYPE_ICONS.unsupported} Unsupported message type`;
         content.error = messageData.errors?.[0] || 'Message type not supported';
         break;
 
@@ -266,14 +298,17 @@ function buildMessageContent(messageData, message = {}) {
  * @returns {string} Preview text
  */
 function getMessagePreview(message) {
-  const maxLength = 100;
+  // Validate input
+  if (!message || !message.type) {
+    return '[Message]';
+  }
 
   try {
     switch (message.type) {
       case 'text':
         const text = message.content?.text || '';
-        return text.length > maxLength 
-          ? text.substring(0, maxLength) + '...' 
+        return text.length > MESSAGE_PREVIEW_MAX_LENGTH
+          ? text.substring(0, MESSAGE_PREVIEW_MAX_LENGTH) + '...'
           : text;
 
       case 'image':

@@ -1,0 +1,21 @@
+# Ignore build artifacts
+dist/
+build/
+coverage/
+
+# Ignore node_modules
+node_modules/
+
+# Ignore logs
+logs/
+*.log
+
+# Ignore uploads and temp files
+uploads/
+temp/
+tmp/
+
+# Ignore package files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml

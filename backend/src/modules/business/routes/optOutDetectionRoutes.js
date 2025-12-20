@@ -8,7 +8,15 @@ const express = require('express');
 const router = express.Router();
 const Business = require('../../../core/database/models/Business');
 const Contact = require('../../../core/database/models/Contact');
- 
+// const OptInConsent = require('../../../core/database/models/OptInConsent'); // TODO: Create OptInConsent model
+const { businessContext } = require('../../../core/middlewares/businessContext');
+const { NotFoundError, ValidationError } = require('../../../core/middlewares/errorHandler');
+const { ERROR_CODES, HTTP_STATUS } = require('../../../common/constants');
+const logger = require('../../../common/helpers/logger');
+const { validateBusiness } = require('../../../common/utils/validators');
+
+// ==================== CONSTANTS ====================
+
 // Default opt-out keywords (case-insensitive)
 const DEFAULT_OPT_OUT_KEYWORDS = [
   'STOP',
@@ -21,18 +29,88 @@ const DEFAULT_OPT_OUT_KEYWORDS = [
   'QUIT'
 ];
 
+// Validation Limits
+const VALIDATION_LIMITS = {
+  MAX_KEYWORDS: 20,
+  MAX_KEYWORD_LENGTH: 50,
+  DEFAULT_PAGE: 1,
+  DEFAULT_LIMIT: 50
+};
+
+// Opt-Out Sources
+const OPT_OUT_SOURCE = {
+  WHATSAPP_KEYWORD: 'whatsapp_keyword',
+  USER_REQUEST: 'user_request',
+  MANUAL_RESUBSCRIBE: 'manual_resubscribe'
+};
+
+// Consent Actions
+const CONSENT_ACTION = {
+  OPTED_OUT: 'opted_out',
+  OPTED_IN: 'opted_in'
+};
+
+// Contact Tags
+const CONTACT_TAGS = {
+  OPTED_OUT: 'opted-out'
+};
+
+// Consent Channels
+const CONSENT_CHANNELS = {
+  ALL: 'all',
+  MARKETING: 'marketing'
+};
+
+// Error Messages
+const ERROR_MESSAGES = {
+  PHONE_MESSAGE_REQUIRED: 'Phone number and message are required',
+  BUSINESS_NOT_FOUND: 'Business not found',
+  DETECT_OPT_OUT_FAILED: 'Failed to detect opt-out',
+  PHONE_NUMBER_REQUIRED: 'Phone number is required',
+  CONSENT_NOT_FOUND: 'Consent record not found',
+  NOT_OPTED_OUT: 'Contact is not opted out',
+  KEYWORDS_REQUIRED: 'Keywords must be a non-empty array',
+  MAX_KEYWORDS_EXCEEDED: `Maximum ${VALIDATION_LIMITS.MAX_KEYWORDS} keywords allowed`,
+  INVALID_KEYWORDS: 'Invalid keywords detected. Each keyword must be a non-empty string (max 50 characters)',
+  UPDATE_PATTERNS_FAILED: 'Failed to update opt-out patterns'
+};
+
+// Success Messages
+const SUCCESS_MESSAGES = {
+  NO_OPT_OUT_DETECTED: 'No opt-out keyword detected',
+  OPT_OUT_DETECTED_AND_PROCESSED: 'Opt-out detected and processed',
+  OPT_OUT_DETECTED: 'Opt-out detected',
+  OPT_OUT_PROCESSED: 'Opt-out detected and processed. Contact has been unsubscribed.',
+  OPT_OUT_MANUAL_ACTION: 'Opt-out detected but auto-handling is disabled. Manual action required.',
+  PATTERNS_UPDATED: 'Opt-out patterns updated successfully',
+  CONTACT_RESUBSCRIBED: 'Contact resubscribed successfully'
+};
+
+// Log Messages
+const LOG_MESSAGES = {
+  OPT_OUT_DETECTED: 'Opt-out detected',
+  ERROR_DETECTING_OPT_OUT: 'Error detecting opt-out',
+  ERROR_IN_DETECT_OPT_OUT: 'Error in detectOptOut',
+  ERROR_UPDATING_PATTERNS: 'Error updating opt-out patterns'
+};
+
+
 /**
  * POST /detect-optout - Detect if message contains opt-out keywords
  * This is typically called automatically by the webhook handler
  */
 router.post('/detect-optout', async (req, res) => {
+  const startTime = Date.now();
+  
   try {
     const { phoneNumber, message, businessId } = req.body;
 
     if (!phoneNumber || !message) {
-      return res.status(400).json({
+      const processingTime = Date.now() - startTime;
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
         success: false,
-        message: 'Phone number and message are required'
+        message: ERROR_MESSAGES.PHONE_MESSAGE_REQUIRED,
+        processingTime
       });
     }
 
@@ -40,9 +118,11 @@ router.post('/detect-optout', async (req, res) => {
     const business = await Business.findById(businessId || req.businessId);
     
     if (!business) {
-      return res.status(404).json({
+      const processingTime = Date.now() - startTime;
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
         success: false,
-        message: 'Business not found'
+        message: ERROR_MESSAGES.BUSINESS_NOT_FOUND,
+        processingTime
       });
     }
 
@@ -64,15 +144,24 @@ router.post('/detect-optout', async (req, res) => {
     });
 
     if (!detectedKeyword) {
-      return res.json({
+      const processingTime = Date.now() - startTime;
+      return res.status(HTTP_STATUS.OK).json({
         success: true,
-        isOptOut: false,
-        message: 'No opt-out keyword detected'
+        data: {
+          isOptOut: false,
+          message: SUCCESS_MESSAGES.NO_OPT_OUT_DETECTED
+        },
+        message: SUCCESS_MESSAGES.NO_OPT_OUT_DETECTED,
+        processingTime
       });
     }
 
     // Opt-out keyword detected!
-    console.log(`🚫 Opt-out detected: "${detectedKeyword}" from ${phoneNumber}`);
+    logger.info(LOG_MESSAGES.OPT_OUT_DETECTED, { 
+      keyword: detectedKeyword, 
+      phoneNumber, 
+      businessId: business._id.toString()
+    });
 
     let autoRevokedOptIn = false;
 
@@ -92,10 +181,10 @@ router.post('/detect-optout', async (req, res) => {
           name: phoneNumber, // Default name
           isOptedIn: false,
           optedOutAt: new Date(),
-          optedOutReason: 'user_request',
-          tags: ['opted-out'],
+          optedOutReason: OPT_OUT_SOURCE.USER_REQUEST,
+          tags: [CONTACT_TAGS.OPTED_OUT],
           metadata: {
-            optOutSource: 'whatsapp_keyword',
+            optOutSource: OPT_OUT_SOURCE.WHATSAPP_KEYWORD,
             optOutDetected: true,
             optOutKeyword: detectedKeyword,
             optOutDetectedAt: new Date(),
@@ -108,11 +197,11 @@ router.post('/detect-optout', async (req, res) => {
         // Revoke opt-in consent
         contact.isOptedIn = false;
         contact.optedOutAt = new Date();
-        contact.optedOutReason = 'user_request';
+        contact.optedOutReason = OPT_OUT_SOURCE.USER_REQUEST;
         
         // Update metadata
         contact.metadata = contact.metadata || {};
-        contact.metadata.optOutSource = 'whatsapp_keyword';
+        contact.metadata.optOutSource = OPT_OUT_SOURCE.WHATSAPP_KEYWORD;
         contact.metadata.optOutDetected = true;
         contact.metadata.optOutKeyword = detectedKeyword;
         contact.metadata.optOutDetectedAt = new Date();
@@ -120,8 +209,8 @@ router.post('/detect-optout', async (req, res) => {
 
         // Add opted-out tag
         contact.tags = contact.tags || [];
-        if (!contact.tags.includes('opted-out')) {
-          contact.tags.push('opted-out');
+        if (!contact.tags.includes(CONTACT_TAGS.OPTED_OUT)) {
+          contact.tags.push(CONTACT_TAGS.OPTED_OUT);
         }
 
         await contact.save();
@@ -129,24 +218,37 @@ router.post('/detect-optout', async (req, res) => {
       }
     }
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    res.status(HTTP_STATUS.OK).json({
       success: true,
-      isOptOut: true,
-      keyword: detectedKeyword,
-      autoRevokedOptIn,
-      autoHandled: autoHandle,
-      message: autoHandle 
-        ? `Opt-out detected and processed. Contact has been unsubscribed.`
-        : `Opt-out detected but auto-handling is disabled. Manual action required.`
+      data: {
+        isOptOut: true,
+        keyword: detectedKeyword,
+        autoRevokedOptIn,
+        autoHandled: autoHandle,
+        message: autoHandle 
+          ? SUCCESS_MESSAGES.OPT_OUT_PROCESSED
+          : SUCCESS_MESSAGES.OPT_OUT_MANUAL_ACTION
+      },
+      message: autoHandle ? SUCCESS_MESSAGES.OPT_OUT_DETECTED_AND_PROCESSED : SUCCESS_MESSAGES.OPT_OUT_DETECTED,
+      processingTime
     });
 
   } catch (error) {
-    console.error('Error detecting opt-out:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to detect opt-out',
-      error: error.message
+    const processingTime = Date.now() - startTime;
+    logger.error(LOG_MESSAGES.ERROR_DETECTING_OPT_OUT, { 
+      phoneNumber: req.body.phoneNumber, 
+      businessId: req.body.businessId?.toString(), 
+      error: error.message,
+      stack: error.stack,
+      processingTime
     });
+    
+    if (error instanceof NotFoundError || error instanceof ValidationError) {
+      throw error;
+    }
+    
+    throw new Error(ERROR_MESSAGES.DETECT_OPT_OUT_FAILED);
   }
 });
 
@@ -155,33 +257,39 @@ router.post('/detect-optout', async (req, res) => {
  * Returns the configured opt-out patterns for the business
  */
 router.get('/opt-out-patterns', async (req, res) => {
+  const startTime = Date.now();
+  
   try {
-    const business = await Business.findById(req.businessId);
-
-    if (!business) {
-      return res.status(404).json({
-        success: false,
-        message: 'Business not found'
-      });
-    }
+    const business = await validateBusiness(req.businessId);
 
     const keywords = business.whatsappConfig?.optOutKeywords || DEFAULT_OPT_OUT_KEYWORDS;
     const autoHandle = business.whatsappConfig?.autoHandleOptOut !== false;
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
       success: true,
-      keywords,
-      autoHandle,
-      defaultKeywords: DEFAULT_OPT_OUT_KEYWORDS,
-      customized: Boolean(business.whatsappConfig?.optOutKeywords?.length)
+      data: {
+        keywords,
+        autoHandle,
+        defaultKeywords: DEFAULT_OPT_OUT_KEYWORDS,
+        customized: Boolean(business.whatsappConfig?.optOutKeywords?.length)
+      },
+      processingTime
     });
   } catch (error) {
-    console.error('Error getting opt-out patterns:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get opt-out patterns',
-      error: error.message
+    const processingTime = Date.now() - startTime;
+    logger.error('Get opt-out patterns error', {
+      businessId: req.businessId?.toString(),
+      error: error.message,
+      stack: error.stack,
+      processingTime
     });
+    
+    if (error instanceof NotFoundError || error instanceof ValidationError) {
+      throw error;
+    }
+    
+    throw new Error('Failed to fetch opt-out patterns');
   }
 });
 
@@ -190,38 +298,48 @@ router.get('/opt-out-patterns', async (req, res) => {
  * Allows customizing the opt-out keyword patterns
  */
 router.put('/opt-out-patterns', async (req, res) => {
+  const startTime = Date.now();
+  
   try {
     const { keywords, autoHandle } = req.body;
 
     if (!Array.isArray(keywords) || keywords.length === 0) {
-      return res.status(400).json({
+      const processingTime = Date.now() - startTime;
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
         success: false,
-        message: 'Keywords must be a non-empty array'
+        message: ERROR_MESSAGES.KEYWORDS_REQUIRED,
+        processingTime
       });
     }
 
     // Validate keywords (max 20, each max 50 chars)
-    if (keywords.length > 20) {
-      return res.status(400).json({
+    if (keywords.length > VALIDATION_LIMITS.MAX_KEYWORDS) {
+      const processingTime = Date.now() - startTime;
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
         success: false,
-        message: 'Maximum 20 keywords allowed'
+        message: ERROR_MESSAGES.MAX_KEYWORDS_EXCEEDED,
+        processingTime
       });
     }
 
-    const invalidKeywords = keywords.filter(k => !k || typeof k !== 'string' || k.length > 50);
+    const invalidKeywords = keywords.filter(k => !k || typeof k !== 'string' || k.length > VALIDATION_LIMITS.MAX_KEYWORD_LENGTH);
     if (invalidKeywords.length > 0) {
-      return res.status(400).json({
+      const processingTime = Date.now() - startTime;
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
         success: false,
-        message: 'Invalid keywords detected. Each keyword must be a non-empty string (max 50 characters)'
+        message: ERROR_MESSAGES.INVALID_KEYWORDS,
+        processingTime
       });
     }
 
     const business = await Business.findById(req.businessId);
 
     if (!business) {
-      return res.status(404).json({
+      const processingTime = Date.now() - startTime;
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
         success: false,
-        message: 'Business not found'
+        message: ERROR_MESSAGES.BUSINESS_NOT_FOUND,
+        processingTime
       });
     }
 
@@ -238,19 +356,31 @@ router.put('/opt-out-patterns', async (req, res) => {
 
     await business.save();
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    res.status(HTTP_STATUS.OK).json({
       success: true,
-      message: 'Opt-out patterns updated successfully',
-      keywords: business.whatsappConfig.optOutKeywords,
-      autoHandle: business.whatsappConfig.autoHandleOptOut
+      data: {
+        message: SUCCESS_MESSAGES.PATTERNS_UPDATED,
+        keywords: business.whatsappConfig.optOutKeywords,
+        autoHandle: business.whatsappConfig.autoHandleOptOut
+      },
+      message: SUCCESS_MESSAGES.PATTERNS_UPDATED,
+      processingTime
     });
   } catch (error) {
-    console.error('Error updating opt-out patterns:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to update opt-out patterns',
-      error: error.message
+    const processingTime = Date.now() - startTime;
+    logger.error(LOG_MESSAGES.ERROR_UPDATING_PATTERNS, {
+      businessId: req.businessId?.toString(),
+      error: error.message,
+      stack: error.stack,
+      processingTime
     });
+    
+    if (error instanceof NotFoundError || error instanceof ValidationError) {
+      throw error;
+    }
+    
+    throw new Error(ERROR_MESSAGES.UPDATE_PATTERNS_FAILED);
   }
 });
 
@@ -259,8 +389,14 @@ router.put('/opt-out-patterns', async (req, res) => {
  * Returns contacts who have opted out (with pagination)
  */
 router.get('/opted-out', async (req, res) => {
+  const startTime = Date.now();
+  
   try {
-    const { page = 1, limit = 50, keyword } = req.query;
+    const { 
+      page = VALIDATION_LIMITS.DEFAULT_PAGE, 
+      limit = VALIDATION_LIMITS.DEFAULT_LIMIT, 
+      keyword 
+    } = req.query;
 
     const query = {
       businessId: req.businessId,
@@ -288,25 +424,36 @@ router.get('/opted-out', async (req, res) => {
       { $sort: { count: -1 } }
     ]);
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
       success: true,
-      count: consents.length,
-      total,
-      page: parseInt(page),
-      pages: Math.ceil(total / limit),
-      consents,
-      keywordStats: keywordStats.map(stat => ({
-        keyword: stat._id,
-        count: stat.count
-      }))
+      data: {
+        count: consents.length,
+        total,
+        page: parseInt(page),
+        pages: Math.ceil(total / limit),
+        consents,
+        keywordStats: keywordStats.map(stat => ({
+          keyword: stat._id,
+          count: stat.count
+        }))
+      },
+      processingTime
     });
   } catch (error) {
-    console.error('Error getting opted-out contacts:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get opted-out contacts',
-      error: error.message
+    const processingTime = Date.now() - startTime;
+    logger.error('Get opted-out contacts error', {
+      businessId: req.businessId?.toString(),
+      error: error.message,
+      stack: error.stack,
+      processingTime
     });
+    
+    if (error instanceof NotFoundError || error instanceof ValidationError) {
+      throw error;
+    }
+    
+    throw new Error('Failed to fetch opted-out contacts');
   }
 });
 
@@ -315,14 +462,13 @@ router.get('/opted-out', async (req, res) => {
  * Allows admin to manually resubscribe a contact
  */
 router.post('/resubscribe', async (req, res) => {
+  const startTime = Date.now();
+  
   try {
-    const { phoneNumber, channels = ['marketing'] } = req.body;
+    const { phoneNumber, channels = [CONSENT_CHANNELS.MARKETING] } = req.body;
 
     if (!phoneNumber) {
-      return res.status(400).json({
-        success: false,
-        message: 'Phone number is required'
-      });
+      throw new ValidationError(ERROR_MESSAGES.PHONE_NUMBER_REQUIRED);
     }
 
     const consent = await OptInConsent.findOne({
@@ -331,21 +477,15 @@ router.post('/resubscribe', async (req, res) => {
     });
 
     if (!consent) {
-      return res.status(404).json({
-        success: false,
-        message: 'Consent record not found'
-      });
+      throw new NotFoundError(ERROR_MESSAGES.CONSENT_NOT_FOUND);
     }
 
     if (!consent.optedOut) {
-      return res.status(400).json({
-        success: false,
-        message: 'Contact is not opted out'
-      });
+      throw new ValidationError(ERROR_MESSAGES.NOT_OPTED_OUT);
     }
 
     // Resubscribe using the built-in method
-    await consent.optBackIn(channels, 'manual_resubscribe');
+    await consent.optBackIn(channels, OPT_OUT_SOURCE.MANUAL_RESUBSCRIBE);
 
     // Update contact if exists
     const contact = await Contact.findOne({
@@ -357,22 +497,34 @@ router.post('/resubscribe', async (req, res) => {
       contact.optedOut = false;
       contact.optedOutAt = null;
       contact.optedOutReason = null;
-      contact.tags = contact.tags.filter(tag => tag !== 'opted-out');
+      contact.tags = contact.tags.filter(tag => tag !== CONTACT_TAGS.OPTED_OUT);
       await contact.save();
     }
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
       success: true,
-      message: 'Contact resubscribed successfully',
-      consent: consent.getSummary()
+      data: {
+        consent: consent.getSummary()
+      },
+      message: SUCCESS_MESSAGES.CONTACT_RESUBSCRIBED,
+      processingTime
     });
   } catch (error) {
-    console.error('Error resubscribing contact:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to resubscribe contact',
-      error: error.message
+    const processingTime = Date.now() - startTime;
+    logger.error('Resubscribe contact error', {
+      businessId: req.businessId?.toString(),
+      phoneNumber: req.body.phoneNumber,
+      error: error.message,
+      stack: error.stack,
+      processingTime
     });
+    
+    if (error instanceof NotFoundError || error instanceof ValidationError) {
+      throw error;
+    }
+    
+    throw new Error('Failed to resubscribe contact');
   }
 });
 
@@ -409,7 +561,11 @@ async function detectOptOut(phoneNumber, message, business) {
       };
     }
 
-    console.log(`🚫 Opt-out detected: "${detectedKeyword}" from ${phoneNumber}`);
+    logger.info(LOG_MESSAGES.OPT_OUT_DETECTED, { 
+      keyword: detectedKeyword, 
+      phoneNumber, 
+      businessId: business._id.toString()
+    });
 
     let autoRevokedOptIn = false;
 
@@ -429,17 +585,17 @@ async function detectOptOut(phoneNumber, message, business) {
           phoneNumber,
           optedOut: true,
           optedOutAt: new Date(),
-          optedOutReason: 'user_request',
-          optOutSource: 'whatsapp_keyword',
+          optedOutReason: OPT_OUT_SOURCE.USER_REQUEST,
+          optOutSource: OPT_OUT_SOURCE.WHATSAPP_KEYWORD,
           optOutDetected: true,
           optOutKeyword: detectedKeyword,
           optOutDetectedAt: new Date(),
           autoRevoked: true,
           consentHistory: [{
-            action: 'opted_out',
-            channel: 'all',
+            action: CONSENT_ACTION.OPTED_OUT,
+            channel: CONSENT_CHANNELS.ALL,
             timestamp: new Date(),
-            source: 'whatsapp_keyword',
+            source: OPT_OUT_SOURCE.WHATSAPP_KEYWORD,
             notes: `Auto-detected opt-out keyword: "${detectedKeyword}"`
           }]
         });
@@ -449,8 +605,8 @@ async function detectOptOut(phoneNumber, message, business) {
         // Revoke consent for all channels
         consent.optedOut = true;
         consent.optedOutAt = new Date();
-        consent.optedOutReason = 'user_request';
-        consent.optOutSource = 'whatsapp_keyword';
+        consent.optedOutReason = OPT_OUT_SOURCE.USER_REQUEST;
+        consent.optOutSource = OPT_OUT_SOURCE.WHATSAPP_KEYWORD;
         consent.optOutDetected = true;
         consent.optOutKeyword = detectedKeyword;
         consent.optOutDetectedAt = new Date();
@@ -463,10 +619,10 @@ async function detectOptOut(phoneNumber, message, business) {
 
         // Add to history
         consent.consentHistory.push({
-          action: 'opted_out',
-          channel: 'all',
+          action: CONSENT_ACTION.OPTED_OUT,
+          channel: CONSENT_CHANNELS.ALL,
           timestamp: new Date(),
-          source: 'whatsapp_keyword',
+          source: OPT_OUT_SOURCE.WHATSAPP_KEYWORD,
           notes: `Auto-detected opt-out keyword: "${detectedKeyword}"`
         });
 
@@ -483,10 +639,10 @@ async function detectOptOut(phoneNumber, message, business) {
       if (contact) {
         contact.optedOut = true;
         contact.optedOutAt = new Date();
-        contact.optedOutReason = 'user_request';
+        contact.optedOutReason = OPT_OUT_SOURCE.USER_REQUEST;
         contact.tags = contact.tags || [];
-        if (!contact.tags.includes('opted-out')) {
-          contact.tags.push('opted-out');
+        if (!contact.tags.includes(CONTACT_TAGS.OPTED_OUT)) {
+          contact.tags.push(CONTACT_TAGS.OPTED_OUT);
         }
         await contact.save();
       }
@@ -499,7 +655,12 @@ async function detectOptOut(phoneNumber, message, business) {
       autoHandled: autoHandle
     };
   } catch (error) {
-    console.error('Error in detectOptOut:', error);
+    logger.error(LOG_MESSAGES.ERROR_IN_DETECT_OPT_OUT, { 
+      phoneNumber,
+      businessId: business._id?.toString(),
+      error: error.message,
+      stack: error.stack
+    });
     return {
       isOptOut: false,
       error: error.message

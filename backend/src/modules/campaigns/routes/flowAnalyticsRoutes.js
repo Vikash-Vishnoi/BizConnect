@@ -6,14 +6,28 @@
 const express = require('express');
 const router = express.Router();
 const { Flow, FlowResponse } = require('../../../core/database/models');
+const { NotFoundError } = require('../../../core/middlewares/errorHandler');
+const { businessContext } = require('../../../core/middlewares/businessContext');
+const { ERROR_CODES, HTTP_STATUS } = require('../../../common/constants/httpConstants');
+const logger = require('../../../common/helpers/logger');
+
+// Constants
+const DEFAULT_FLOW_RESPONSES_LIMIT = 50;
+const MAX_FLOW_RESPONSES_LIMIT = 200;
+const DEFAULT_PAGE = 1;
+const FLOW_RESPONSE_STATUS_COMPLETED = 'COMPLETED';
+const FLOW_RESPONSE_STATUS_ABANDONED = 'ABANDONED';
+const FLOW_RESPONSE_STATUS_IN_PROGRESS = 'IN_PROGRESS';
+const FLOW_STATUS_PUBLISHED = 'PUBLISHED';
+const FLOW_STATUS_DRAFT = 'DRAFT';
+const PERCENTAGE_MULTIPLIER = 100;
 
 // GET /:id/responses - Get flow responses
-router.get('/:id/responses', async (req, res) => {
-  try { 
-    const defaultLimit = parseInt(process.env.FLOW_RESPONSES_DEFAULT_LIMIT || '50');
-    const maxLimit = parseInt(process.env.FLOW_RESPONSES_MAX_LIMIT || '200');
-    const { limit = defaultLimit, page = 1, status } = req.query;
-    const finalLimit = Math.min(parseInt(limit), maxLimit);
+router.get('/:id/responses', businessContext, async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const { limit = DEFAULT_FLOW_RESPONSES_LIMIT, page = DEFAULT_PAGE, status } = req.query;
+    const finalLimit = Math.min(parseInt(limit), MAX_FLOW_RESPONSES_LIMIT);
 
     const flow = await Flow.findOne({
       _id: req.params.id,
@@ -21,10 +35,7 @@ router.get('/:id/responses', async (req, res) => {
     });
 
     if (!flow) {
-      return res.status(404).json({
-        success: false,
-        message: 'Flow not found'
-      });
+      throw new NotFoundError('Flow not found');
     }
 
     const query = { flowId: flow._id };
@@ -33,30 +44,37 @@ router.get('/:id/responses', async (req, res) => {
     const responses = await FlowResponse.find(query)
       .sort({ submittedAt: -1 })
       .limit(finalLimit)
-      .skip((parseInt(page) - 1) * finalLimit);
+      .skip((parseInt(page) - DEFAULT_PAGE) * finalLimit);
 
     const total = await FlowResponse.countDocuments(query);
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    res.status(HTTP_STATUS.OK).json({
       success: true,
-      count: responses.length,
-      total,
-      page: parseInt(page),
-      pages: Math.ceil(total / finalLimit),
-      responses
+      data: {
+        count: responses.length,
+        total,
+        page: parseInt(page),
+        pages: Math.ceil(total / finalLimit),
+        responses
+      },
+      message: 'Flow responses retrieved successfully',
+      processingTime
     });
   } catch (error) {
-    console.error('Error getting flow responses:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get flow responses',
-      error: error.message
+    logger.error('Error retrieving flow responses:', {
+      error: error.message,
+      stack: error.stack,
+      businessId: req.businessId?.toString(),
+      flowId: req.params.id
     });
+    throw error;
   }
 });
 
 // GET /:id/analytics - Get flow analytics
-router.get('/:id/analytics', async (req, res) => {
+router.get('/:id/analytics', businessContext, async (req, res) => {
+  const startTime = Date.now();
   try {
     const flow = await Flow.findOne({
       _id: req.params.id,
@@ -64,72 +82,81 @@ router.get('/:id/analytics', async (req, res) => {
     });
 
     if (!flow) {
-      return res.status(404).json({
-        success: false,
-        message: 'Flow not found'
-      });
+      throw new NotFoundError('Flow not found');
     }
 
     const [total, completed, abandoned, pending] = await Promise.all([
       FlowResponse.countDocuments({ flowId: flow._id }),
-      FlowResponse.countDocuments({ flowId: flow._id, status: 'COMPLETED' }),
-      FlowResponse.countDocuments({ flowId: flow._id, status: 'ABANDONED' }),
-      FlowResponse.countDocuments({ flowId: flow._id, status: 'IN_PROGRESS' })
+      FlowResponse.countDocuments({ flowId: flow._id, status: FLOW_RESPONSE_STATUS_COMPLETED }),
+      FlowResponse.countDocuments({ flowId: flow._id, status: FLOW_RESPONSE_STATUS_ABANDONED }),
+      FlowResponse.countDocuments({ flowId: flow._id, status: FLOW_RESPONSE_STATUS_IN_PROGRESS })
     ]);
 
-    const completionRate = total > 0 ? Math.round((completed / total) * 100) : 0;
-    const abandonmentRate = total > 0 ? Math.round((abandoned / total) * 100) : 0;
+    const completionRate = total > 0 ? Math.round((completed / total) * PERCENTAGE_MULTIPLIER) : 0;
+    const abandonmentRate = total > 0 ? Math.round((abandoned / total) * PERCENTAGE_MULTIPLIER) : 0;
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    res.status(HTTP_STATUS.OK).json({
       success: true,
-      analytics: {
-        totalResponses: total,
-        completed,
-        abandoned,
-        pending,
-        completionRate,
-        abandonmentRate
-      }
+      data: {
+        analytics: {
+          totalResponses: total,
+          completed,
+          abandoned,
+          pending,
+          completionRate,
+          abandonmentRate
+        }
+      },
+      message: 'Flow analytics retrieved successfully',
+      processingTime
     });
   } catch (error) {
-    console.error('Error getting flow analytics:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get flow analytics',
-      error: error.message
+    logger.error('Error retrieving flow analytics:', {
+      error: error.message,
+      stack: error.stack,
+      businessId: req.businessId?.toString(),
+      flowId: req.params.id
     });
+    throw error;
   }
 });
 
 // GET /stats/summary - Get flows summary statistics
-router.get('/stats/summary', async (req, res) => {
+router.get('/stats/summary', businessContext, async (req, res) => {
+  const startTime = Date.now();
   try {
     const [totalFlows, publishedFlows, draftFlows] = await Promise.all([
       Flow.countDocuments({ businessId: req.businessId }),
-      Flow.countDocuments({ businessId: req.businessId, status: 'PUBLISHED' }),
-      Flow.countDocuments({ businessId: req.businessId, status: 'DRAFT' })
+      Flow.countDocuments({ businessId: req.businessId, status: FLOW_STATUS_PUBLISHED }),
+      Flow.countDocuments({ businessId: req.businessId, status: FLOW_STATUS_DRAFT })
     ]);
 
     const totalResponses = await FlowResponse.countDocuments({
       businessId: req.businessId
     });
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    res.status(HTTP_STATUS.OK).json({
       success: true,
-      summary: {
-        totalFlows,
-        publishedFlows,
-        draftFlows,
-        totalResponses
-      }
+      data: {
+        summary: {
+          totalFlows,
+          publishedFlows,
+          draftFlows,
+          totalResponses
+        }
+      },
+      message: 'Flow summary retrieved successfully',
+      processingTime
     });
   } catch (error) {
-    console.error('Error getting flows summary:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to get flows summary',
-      error: error.message
+    logger.error('Error retrieving flow summary:', {
+      error: error.message,
+      stack: error.stack,
+      businessId: req.businessId?.toString()
     });
+    throw error;
   }
 });
 

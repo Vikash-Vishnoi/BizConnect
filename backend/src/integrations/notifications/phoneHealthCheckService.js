@@ -6,9 +6,23 @@
  */
 
 const cron = require('node-cron');
+const logger = require('../../common/helpers/logger');
+const { ERROR_CODES, TIME_CONSTANTS } = require('../../common/constants');
 const { Business } = require('../../core/database/models');
 const WhatsAppService = require('../whatsapp/whatsappService');
-const whatsappService = new WhatsAppService();
+
+/**
+ * Health Check Service Constants
+ */
+const HEALTH_CHECK_INTERVAL_HOURS = 6;
+const HEALTH_CHECK_CRON = '0 */6 * * *'; // Every 6 hours at :00 minutes
+const HEALTH_CHECK_THRESHOLD_MS = HEALTH_CHECK_INTERVAL_HOURS * TIME_CONSTANTS.HOUR_MS;
+
+const ALERT_STATUS = {
+  RESOLVED: 'RESOLVED',
+  PENDING: 'PENDING',
+  ACTIVE: 'ACTIVE'
+};
 
 class PhoneHealthCheckService {
   constructor() {
@@ -22,19 +36,18 @@ class PhoneHealthCheckService {
    */
   start() {
     if (this.isRunning) {
-      console.log('⚠️ Health check service is already running');
+      logger.warn('Health check service is already running');
       return;
     }
 
     // Run every 6 hours (at :00 minutes)
     // Cron format: minute hour day month weekday
-    // */6 * * * * would run every 6 hours
-    this.cronJob = cron.schedule('0 */6 * * *', async () => {
+    this.cronJob = cron.schedule(HEALTH_CHECK_CRON, async () => {
       await this.runHealthCheck();
     });
 
     this.isRunning = true;
-    console.log('✅ Phone number health check service started (runs every 6 hours)');
+    logger.info(`Phone number health check service started (runs every ${HEALTH_CHECK_INTERVAL_HOURS} hours)`);
   }
 
   /**
@@ -44,7 +57,7 @@ class PhoneHealthCheckService {
     if (this.cronJob) {
       this.cronJob.stop();
       this.isRunning = false;
-      console.log('⏹️ Phone number health check service stopped');
+      logger.info('Phone number health check service stopped');
     }
   }
 
@@ -53,7 +66,7 @@ class PhoneHealthCheckService {
    */
   async runHealthCheck() {
     try {
-      console.log('🔍 Running scheduled phone number health check...');
+      logger.info('Running scheduled phone number health check');
       const startTime = Date.now();
 
       // Get all active businesses with WhatsApp configured
@@ -63,7 +76,7 @@ class PhoneHealthCheckService {
       });
       
       if (businesses.length === 0) {
-        console.log('   No businesses found to check');
+        logger.info('No businesses found to check');
         return;
       }
 
@@ -75,18 +88,28 @@ class PhoneHealthCheckService {
         try {
           // Check if health check is needed (more than 6 hours since last check)
           const lastChecked = business.phoneNumberQuality?.lastCheckedAt;
-          const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);
+          const thresholdTime = new Date(Date.now() - HEALTH_CHECK_THRESHOLD_MS);
           
-          if (lastChecked && lastChecked > sixHoursAgo) {
-            console.log(`   Skipping business ${business.businessName} - checked recently`);
+          if (lastChecked && lastChecked > thresholdTime) {
+            logger.debug('Skipping business - checked recently', {
+              businessName: business.businessName,
+              businessId: business._id.toString()
+            });
             continue;
           }
 
           // Fetch health data from WhatsApp API
+          const credentials = await business.getWhatsAppCredentials();
+          const whatsappService = new WhatsAppService(credentials);
           const result = await whatsappService.checkPhoneHealth(business);
 
           if (!result.success) {
-            console.error(`   Failed to fetch health for business ${business.businessName}:`, result.error);
+            logger.error('Failed to fetch health for business', {
+              businessName: business.businessName,
+              businessId: business._id.toString(),
+              error: result.error,
+              code: ERROR_CODES.EXTERNAL_SERVICE_ERROR
+            });
             failed++;
             continue;
           }
@@ -103,24 +126,40 @@ class PhoneHealthCheckService {
           checked++;
 
           // Count unresolved alerts
-          const unresolvedAlerts = business.alerts?.filter(a => a.status !== 'RESOLVED').length || 0;
+          const unresolvedAlerts = business.alerts?.filter(a => a.status !== ALERT_STATUS.RESOLVED).length || 0;
           alerts += unresolvedAlerts;
 
-          console.log(`   ✅ Business ${business.businessName}: ${business.phoneNumberQuality?.currentRating}, Alerts: ${unresolvedAlerts}`);
+          logger.info('Business health check complete', {
+            businessName: business.businessName,
+            businessId: business._id.toString(),
+            currentRating: business.phoneNumberQuality?.currentRating,
+            unresolvedAlerts
+          });
 
         } catch (businessError) {
-          console.error(`   Error checking business ${business.businessName}:`, businessError.message);
+          logger.error('Error checking business', {
+            businessName: business.businessName,
+            businessId: business._id?.toString(),
+            error: businessError.message,
+            code: businessError.code || ERROR_CODES.INTERNAL_ERROR
+          });
           failed++;
         }
       }
 
-      const duration = Date.now() - startTime;
-      console.log('✅ Health check complete');
-      console.log(`   Checked: ${checked}, Failed: ${failed}, Total Alerts: ${alerts}`);
-      console.log(`   Duration: ${(duration / 1000).toFixed(2)}s`);
+      const processingTime = Date.now() - startTime;
+      logger.info('Health check complete', {
+        checked,
+        failed,
+        totalAlerts: alerts,
+        processingTime: `${(processingTime / TIME_CONSTANTS.SECOND_MS).toFixed(2)}s`
+      });
 
     } catch (error) {
-      console.error('❌ Health check service error:', error);
+      logger.error('Health check service error', {
+        error: error.message,
+        code: ERROR_CODES.INTERNAL_ERROR
+      });
     }
   }
 
@@ -130,7 +169,7 @@ class PhoneHealthCheckService {
    */
   async checkBusiness(businessId) {
     try {
-      console.log(`🔍 Running health check for business ${businessId}...`);
+      logger.info('Running health check for business', { businessId });
 
       const business = await Business.findById(businessId);
       if (!business) {
@@ -138,6 +177,8 @@ class PhoneHealthCheckService {
       }
 
       // Fetch health data from WhatsApp API
+      const credentials = await business.getWhatsAppCredentials();
+      const whatsappService = new WhatsAppService(credentials);
       const result = await whatsappService.checkPhoneHealth(business);
 
       if (!result.success) {
@@ -152,11 +193,14 @@ class PhoneHealthCheckService {
         phoneNumber: result.data.display_phone_number
       });
 
-      console.log('✅ Business health check complete');
+      logger.info('Business health check complete', { businessId });
       return business;
 
     } catch (error) {
-      console.error('❌ User health check error:', error);
+      logger.error('User health check error', {
+        error: error.message,
+        businessId
+      });
       throw error;
     }
   }

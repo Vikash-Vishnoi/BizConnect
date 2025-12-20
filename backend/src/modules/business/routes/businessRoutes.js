@@ -7,82 +7,214 @@ const express = require('express');
 const router = express.Router();
 const Business = require('../../../core/database/models/Business');
 const User = require('../../../core/database/models/User');
-const { auth } = require('../../../core/middlewares/auth');
-const { requireBusinessAdmin, requireBusinessAccess, canModify } = require('../../../core/middlewares/userTypeAuth');
-const { requireBusinessAdmin: requireBusinessAdminRBAC } = require('../../../core/middlewares/rbac');
+const { authenticate: auth } = require('../../../core/middlewares/auth');
+const { requireBusinessAdmin, requireBusinessAccess, canModify } = require('../../../core/middlewares/authorization');
+const { businessContext } = require('../../../core/middlewares/businessContext');
+const { asyncHandler, NotFoundError, ValidationError, ConflictError, AuthorizationError } = require('../../../core/middlewares/errorHandler');
+const { findByIdSafe, updateByIdSafe, createSafe } = require('../../../common/utils/dbHelpers');
 const {  
   validateCreateBusiness, 
   validateUpdateBusiness, 
   validateBusinessId 
 } = require('../../../core/middlewares/validation');
 const { sendError } = require('../../../common/helpers/errorCodes');
-const { successResponse, notFoundResponse, createdResponse } = require('../../../common/helpers/responseHelper');
+const { ERROR_CODES, HTTP_STATUS } = require('../../../common/constants');
+// Phone validation - using single source of truth
 const { sanitizePhoneNumber } = require('../../../common/helpers/phoneValidator');
+// Business validation - using centralized utility
+const { validateBusiness } = require('../../../common/utils/validators');
+const logger = require('../../../common/helpers/logger');
+
+// ===========================
+// CONSTANTS
+// ===========================
+
+// Status Values
+const STATUS_ACTIVE = 'active';
+
+// Setup Steps
+const SETUP_STEP_PART2_COMPLETE = 3;
+const SETUP_STEP_COMPLETE = 4;
+
+// User Types
+const USER_TYPE_BUSINESS_ADMIN = 'business_admin';
+const USER_TYPE_SUPER_ADMIN = 'super_admin';
+
+// Population Fields
+const POPULATE_OWNER = 'name email';
+const POPULATE_TEAM_USER = 'name email';
+
+// Sort Options
+const SORT_CREATED_AT_DESC = { createdAt: -1 };
+
+// Error Messages
+const ERROR_BUSINESS_NOT_FOUND = 'Business not found';
+const ERROR_MISSING_REQUIRED_FIELDS = 'Missing required fields: name, phoneNumberId, accessToken, wabaId, appSecret';
+const ERROR_BUSINESS_EXISTS_OTHER_USER = 'A business with this WhatsApp Phone Number ID already exists and belongs to another user';
+const ERROR_NO_PERMISSION_SETTINGS = 'You do not have permission to manage business settings';
+const ERROR_ONLY_SUPER_ADMIN_SWITCH = 'Only super admins can switch between businesses';
+const ERROR_NO_ACCESS_BUSINESS = 'You do not have access to this business';
+
+// Success Messages
+const SUCCESS_BUSINESSES_RETRIEVED = 'Businesses retrieved successfully';
+const SUCCESS_BUSINESS_RETRIEVED = 'Business retrieved successfully';
+const SUCCESS_BUSINESS_CREATED = 'Business created successfully';
+const SUCCESS_BUSINESS_UPDATED = 'Business updated successfully';
+const SUCCESS_SWITCHED_BUSINESS = 'Switched to business successfully';
+const SUCCESS_WEBHOOK_COMPLETED = 'Webhook setup completed successfully';
+
+// API Version Default
+const DEFAULT_API_VERSION = 'v18.0';
+
+// Resource Names
+const RESOURCE_NAME_BUSINESS = 'Business';
 
 // GET / - Get all businesses for current user
 router.get('/', auth, async (req, res) => {
+  const startTime = Date.now();
   try {
     const businesses = await Business.find({
       $or: [
         { owner: req.userId },
         { 'team.user': req.userId }
       ],
-      status: 'active',
+      status: STATUS_ACTIVE,
       isDeleted: false
     })
-      .populate('owner', 'name email')
-      .populate('team.user', 'name email')
-      .sort({ createdAt: -1 });
+      .populate('owner', POPULATE_OWNER)
+      .populate('team.user', POPULATE_TEAM_USER)
+      .sort(SORT_CREATED_AT_DESC);
     
-    return successResponse(res, { businesses, count: businesses.length }, 'Businesses retrieved successfully');
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({ 
+      success: true, 
+      data: { businesses, count: businesses.length }, 
+      message: SUCCESS_BUSINESSES_RETRIEVED,
+      processingTime 
+    });
   } catch (error) {
-    console.error('Error fetching businesses:', error);
-    return sendError(res, 'INTERNAL_SERVER_ERROR', error.message);
+    const processingTime = Date.now() - startTime;
+    logger.error('Route error', { 
+      error: error.message, 
+      stack: error.stack, 
+      userId: req.userId?.toString(),
+      processingTime 
+    });
+    
+    if (error instanceof ValidationError) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        success: false,
+        error: ERROR_CODES.VALIDATION_ERROR,
+        message: error.message,
+        processingTime
+      });
+    }
+    
+    if (error instanceof ConflictError) {
+      return res.status(HTTP_STATUS.CONFLICT).json({
+        success: false,
+        error: ERROR_CODES.CONFLICT_ERROR,
+        message: error.message,
+        processingTime
+      });
+    }
+    
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      error: ERROR_CODES.INTERNAL_ERROR,
+      message: 'Failed to create business',
+      processingTime
+    });
   }
 });
 
 // GET /:id - Get single business
-router.get('/:id', auth, validateBusinessId, async (req, res) => {
+router.get('/:id', auth, validateBusinessId, asyncHandler(async (req, res) => {
+  const startTime = Date.now();
   try {
-    console.log('🔍 GET /business/:id route hit');
-    console.log('Params:', req.params);
-    console.log('User:', { id: req.userId, userType: req.userType });
-    console.log('User object:', req.user);
+    logger.debug('GET /business/:id route accessed', {
+      businessId: req.params.id,
+      userId: req.userId,
+      userType: req.userType
+    });
     
-    const business = await Business.findById(req.params.id)
-      .populate('owner', 'name email')
-      .populate('team.user', 'name email');
+    const { valid, business, error } = await validateBusiness(req.params.id, {
+      populateOwner: true,
+      userId: req.userId,
+      checkActive: false // Allow viewing inactive businesses
+    });
     
-    if (!business) {
-      return sendError(res, 'BUS_NOT_FOUND');
+    if (!valid) {
+      throw new NotFoundError(error || ERROR_BUSINESS_NOT_FOUND);
     }
     
-    console.log('Business found:', { id: business._id, owner: business.owner?._id });
+    logger.info('Business retrieved successfully', {
+      businessId: business._id.toString(),
+      userId: req.userId.toString()
+    });
     
-    if (!business.hasUser(req.userId)) {
-      console.log('❌ User does not have access to this business');
-      return sendError(res, 'AUTHZ_BUSINESS_ACCESS_DENIED');
-    }
-    
-    console.log('✅ User has access to business');
-    console.log('📦 Returning business data with keys:', Object.keys(business.toObject()));
-    console.log('📦 whatsappConfig exists:', !!business.whatsappConfig);
-    console.log('📦 whatsappConfig keys:', business.whatsappConfig ? Object.keys(business.whatsappConfig.toObject ? business.whatsappConfig.toObject() : business.whatsappConfig) : 'N/A');
-    
-    return successResponse(res, business, 'Business retrieved successfully');
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({ 
+      success: true, 
+      data: business, 
+      message: SUCCESS_BUSINESS_RETRIEVED,
+      processingTime 
+    });
   } catch (error) {
-    console.error('Error fetching business:', error);
-    return sendError(res, 'INTERNAL_SERVER_ERROR', error.message);
+    const processingTime = Date.now() - startTime;
+    logger.error('Route error', { 
+      error: error.message, 
+      stack: error.stack, 
+      businessId: req.params.id,
+      userId: req.userId?.toString(),
+      processingTime 
+    });
+    
+    if (error instanceof NotFoundError) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        success: false,
+        error: ERROR_CODES.NOT_FOUND,
+        message: error.message,
+        processingTime
+      });
+    }
+    
+    if (error instanceof ValidationError) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        success: false,
+        error: ERROR_CODES.VALIDATION_ERROR,
+        message: error.message,
+        processingTime
+      });
+    }
+    
+    if (error instanceof ConflictError) {
+      return res.status(HTTP_STATUS.CONFLICT).json({
+        success: false,
+        error: ERROR_CODES.CONFLICT_ERROR,
+        message: error.message,
+        processingTime
+      });
+    }
+    
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      error: ERROR_CODES.INTERNAL_ERROR,
+      message: 'Failed to create business',
+      processingTime
+    });
   }
-});
+}));
 
 // POST / - Create new business
 // RBAC: Business Admin+ can create businesses
-router.post('/', auth, requireBusinessAdminRBAC, validateCreateBusiness, async (req, res) => {
+router.post('/', auth, requireBusinessAdmin, validateCreateBusiness, async (req, res) => {
+  const startTime = Date.now();
   try {
-    console.log('📝 Create business request received');
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
-    console.log('User ID:', req.userId);
+    logger.info('Create business request received', {
+      userId: req.userId,
+      userType: req.userType
+    });
     
     const {
       name,
@@ -94,38 +226,33 @@ router.post('/', auth, requireBusinessAdminRBAC, validateCreateBusiness, async (
       profile
     } = req.body;
     
-    console.log('✅ Step 1: Data extracted from request');
-    
     if (!name || !whatsappConfig?.phoneNumberId || !whatsappConfig?.accessToken || 
         !whatsappConfig?.wabaId || !whatsappConfig?.appSecret) {
-      console.log('❌ Missing required fields');
-      return res.status(400).json({
-        success: false,
-        error: 'Missing required fields'
-      });
+      logger.warn('Missing required fields in create business request', { userId: req.userId });
+      throw new ValidationError(ERROR_MISSING_REQUIRED_FIELDS);
     }
     
-    console.log('✅ Step 2: Required fields validated');
-    
-    console.log('🔍 Searching for existing business with phoneNumberId:', whatsappConfig.phoneNumberId);
+    logger.debug('Checking for existing business with phoneNumberId', {
+      phoneNumberId: whatsappConfig.phoneNumberId
+    });
     
     const existing = await Business.findOne({
       'whatsappConfig.phoneNumberId': whatsappConfig.phoneNumberId
     });
     
-    console.log('✅ Step 3: Checked for existing business:', existing ? 'Found' : 'Not found');
-    
     if (existing) {
-      console.log('📋 Existing business details:');
-      console.log('  - Business ID:', existing._id);
-      console.log('  - Business Name:', existing.name);
-      console.log('  - Owner:', existing.owner);
-      console.log('  - Owner ID (user):', req.userId);
-      console.log('  - Created:', existing.createdAt);
+      logger.info('Found existing business with phoneNumberId', {
+        businessId: existing._id.toString(),
+        ownerId: existing.owner.toString(),
+        requestUserId: req.userId.toString()
+      });
       
       // Check if the user owns this business
       if (existing.owner.toString() === req.userId.toString()) {
-        console.log('✅ User owns this business - updating existing business');
+        logger.info('User owns business - updating existing business', {
+          businessId: existing._id.toString(),
+          userId: req.userId.toString()
+        });
         
         // Update existing business with new credentials
         existing.name = name || existing.name;
@@ -145,17 +272,19 @@ router.post('/', auth, requireBusinessAdminRBAC, validateCreateBusiness, async (
         }
         
         // Mark as Part 2 complete, next step is Part 3
-        existing.setupStep = 3;
+        existing.setupStep = SETUP_STEP_PART2_COMPLETE;
         
         await existing.save();
         
         // Update user's businessId if not set
         await User.findByIdAndUpdate(req.userId, {
           businessId: existing._id,
-          userType: 'business_admin'
+          userType: USER_TYPE_BUSINESS_ADMIN
         });
         
-        console.log('✅ Existing business updated successfully');
+        logger.info('Existing business updated successfully', {
+          businessId: existing._id.toString()
+        });
         
         // Return updated business
         const businessResponse = existing.toObject();
@@ -169,33 +298,36 @@ router.post('/', auth, requireBusinessAdminRBAC, validateCreateBusiness, async (
           qualityRating: existing.whatsappConfig.qualityRating
         };
         
-        return res.status(200).json({
+        const processingTime = Date.now() - startTime;
+        return res.status(HTTP_STATUS.OK).json({
           success: true,
-          message: 'Business updated successfully',
+          message: SUCCESS_BUSINESS_UPDATED,
           isExisting: true,
           data: { business: businessResponse },
           setupStatus: {
             setupStep: existing.setupStep,
-            isFullyConfigured: existing.setupStep === 4
-          }
+            isFullyConfigured: existing.setupStep === SETUP_STEP_COMPLETE
+          },
+          processingTime
         });
       } else {
-        console.log('❌ Business exists but belongs to another user');
-        return res.status(400).json({
-          success: false,
-          error: 'A business with this WhatsApp Phone Number ID already exists and belongs to another user'
+        logger.warn('Business exists but belongs to another user', {
+          businessId: existing._id.toString(),
+          existingOwnerId: existing.owner.toString(),
+          requestUserId: req.userId.toString()
         });
+        throw new ConflictError(ERROR_BUSINESS_EXISTS_OTHER_USER);
       }
     }
     
-    console.log('✅ Step 4: Creating business object...');
+    logger.debug('Creating new business', { userId: req.userId });
     
     // Sanitize phone number (remove spaces and formatting)
     const sanitizedPhoneNumber = whatsappConfig.phoneNumber 
       ? sanitizePhoneNumber(whatsappConfig.phoneNumber)
       : '';
     
-    console.log('📞 Phone number sanitized:', {
+    logger.debug('Phone number sanitized', {
       original: whatsappConfig.phoneNumber,
       sanitized: sanitizedPhoneNumber
     });
@@ -219,21 +351,27 @@ router.post('/', auth, requireBusinessAdminRBAC, validateCreateBusiness, async (
         ...(profile || {}),
         displayName: displayName || name  // Profile displayName
       },
-      setupStep: 3  // Part 2 complete, next step is Part 3 (webhook)
+      setupStep: SETUP_STEP_PART2_COMPLETE  // Part 2 complete, next step is Part 3 (webhook)
     });
     
-    console.log('✅ Step 5: Business object created with setupStep=3 (next: webhook), attempting to save...');
+    logger.debug('Business object created, attempting to save', { userId: req.userId });
     
     await business.save();
     
-    console.log('✅ Step 6: Business saved successfully, ID:', business._id);
+    logger.info('Business saved successfully', {
+      businessId: business._id.toString(),
+      userId: req.userId.toString()
+    });
     
     await User.findByIdAndUpdate(req.userId, {
       businessId: business._id,
-      userType: 'business_admin'
+      userType: USER_TYPE_BUSINESS_ADMIN
     });
     
-    console.log('✅ Step 7: User updated with business ID');
+    logger.debug('User updated with business ID', {
+      userId: req.userId.toString(),
+      businessId: business._id.toString()
+    });
     
     // Return business with webhook configuration details
     const businessResponse = business.toObject();
@@ -247,141 +385,256 @@ router.post('/', auth, requireBusinessAdminRBAC, validateCreateBusiness, async (
       qualityRating: business.whatsappConfig.qualityRating
     };
     
-    res.status(201).json({
+    const processingTime = Date.now() - startTime;
+    res.status(HTTP_STATUS.CREATED).json({
       success: true,
-      message: 'Business created successfully',
-      data: { business: businessResponse }
+      message: SUCCESS_BUSINESS_CREATED,
+      data: { business: businessResponse },
+      processingTime
     });
   } catch (error) {
-    console.error('❌ Error creating business:', error);
-    console.error('Error stack:', error.stack);
-    console.error('Error name:', error.name);
-    console.error('Error message:', error.message);
-    res.status(500).json({
+    const processingTime = Date.now() - startTime;
+    logger.error('Route error', { 
+      error: error.message, 
+      stack: error.stack, 
+      userId: req.userId?.toString(),
+      processingTime 
+    });
+    
+    if (error instanceof ValidationError) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        success: false,
+        error: ERROR_CODES.VALIDATION_ERROR,
+        message: error.message,
+        processingTime
+      });
+    }
+    
+    if (error instanceof ConflictError) {
+      return res.status(HTTP_STATUS.CONFLICT).json({
+        success: false,
+        error: ERROR_CODES.CONFLICT_ERROR,
+        message: error.message,
+        processingTime
+      });
+    }
+    
+    if (error instanceof NotFoundError) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        success: false,
+        error: ERROR_CODES.NOT_FOUND,
+        message: error.message,
+        processingTime
+      });
+    }
+    
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
-      error: 'Failed to create business',
-      details: error.message
+      error: ERROR_CODES.INTERNAL_ERROR,
+      message: 'Failed to create business',
+      processingTime
     });
   }
 });
 
 // PUT /:id - Update business settings
 router.put('/:id', auth, requireBusinessAccess, canModify('settings'), async (req, res) => {
+  const startTime = Date.now();
   try {
-    const business = await Business.findById(req.params.id);
-    
-    if (!business) {
-      return res.status(404).json({
-        success: false,
-        error: 'Business not found'
-      });
+    logger.info('PUT /:id starting', {
+      businessId: req.params.id,
+      userId: req.userId?.toString(),
+      userType: req.user?.userType,
+      hasWhatsappConfig: !!req.body.whatsappConfig
+    });
+
+    // Load business with sensitive fields if updating whatsappConfig
+    let business;
+    if (req.body.whatsappConfig) {
+      business = await Business.findById(req.params.id)
+        .select('+whatsappConfig.accessToken +whatsappConfig.appSecret');
+      if (!business) {
+        throw new NotFoundError(RESOURCE_NAME_BUSINESS);
+      }
+    } else {
+      business = await findByIdSafe(Business, req.params.id, { resourceName: RESOURCE_NAME_BUSINESS });
     }
     
-    if (!req.user.hasPermission('manage', 'settings')) {
-      return res.status(403).json({
-        success: false,
-        error: 'You do not have permission to manage business settings'
-      });
-    }
+    logger.info('Business found', {
+      businessId: business._id?.toString(),
+      hasUser: !!req.user
+    });
+
+    // Permission check is already handled by canModify('settings') middleware
     
-    const { name, displayName, description, industry, website, profile, settings } = req.body;
+    const { name, displayName, description, industry, website, profile, settings, whatsappConfig } = req.body;
     
-    if (name) business.name = name;
-    if (displayName) business.displayName = displayName;
-    if (description) business.description = description;
-    if (industry) business.industry = industry;
-    if (website) business.website = website;
+    logger.info('Updating fields', {
+      hasName: !!name,
+      hasWhatsappConfig: !!whatsappConfig,
+      whatsappConfigKeys: whatsappConfig ? Object.keys(whatsappConfig) : []
+    });
+
+    if (name !== undefined) business.name = name;
+    if (displayName !== undefined) business.displayName = displayName;
+    if (description !== undefined) business.description = description;
+    if (industry !== undefined) business.industry = industry;
+    if (website !== undefined) business.website = website;
     if (profile) business.profile = { ...business.profile, ...profile };
     if (settings) business.settings = { ...business.settings, ...settings };
+    if (whatsappConfig) business.whatsappConfig = { ...business.whatsappConfig, ...whatsappConfig };
     
+    logger.info('Saving business');
     await business.save();
+    logger.info('Business saved successfully');
     
-    res.json({
-      success: true,
-      message: 'Business updated successfully',
-      data: business
+    const processingTime = Date.now() - startTime;
+    res.status(HTTP_STATUS.OK).json({ 
+      success: true, 
+      data: business, 
+      message: SUCCESS_BUSINESS_UPDATED,
+      processingTime 
     });
   } catch (error) {
-    console.error('Error updating business:', error);
-    res.status(500).json({
+    const processingTime = Date.now() - startTime;
+    logger.error('Route error', { 
+      error: error.message, 
+      stack: error.stack, 
+      businessId: req.params.id,
+      processingTime 
+    });
+    
+    if (error instanceof NotFoundError) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        success: false,
+        error: ERROR_CODES.NOT_FOUND,
+        message: error.message,
+        processingTime
+      });
+    }
+    
+    if (error instanceof ValidationError) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
+        success: false,
+        error: ERROR_CODES.VALIDATION_ERROR,
+        message: error.message,
+        processingTime
+      });
+    }
+    
+    if (error instanceof ConflictError) {
+      return res.status(HTTP_STATUS.CONFLICT).json({
+        success: false,
+        error: ERROR_CODES.CONFLICT_ERROR,
+        message: error.message,
+        processingTime
+      });
+    }
+    
+    if (error instanceof AuthorizationError) {
+      return res.status(HTTP_STATUS.FORBIDDEN).json({
+        success: false,
+        error: ERROR_CODES.AUTHORIZATION_ERROR,
+        message: error.message,
+        processingTime
+      });
+    }
+    
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
-      error: 'Failed to update business'
+      error: ERROR_CODES.INTERNAL_ERROR,
+      message: 'Failed to update business',
+      processingTime
     });
   }
 });
 
 // POST /:id/switch - Switch active business
 router.post('/:id/switch', auth, async (req, res) => {
+  const startTime = Date.now();
   try {
-    const business = await Business.findById(req.params.id);
+    const business = await findByIdSafe(Business, req.params.id, { resourceName: RESOURCE_NAME_BUSINESS });
     
-    if (!business) {
-      return res.status(404).json({
-        success: false,
-        error: 'Business not found'
-      });
-    }
-    
-    if (req.user.userType !== 'super_admin') {
-      return res.status(403).json({
-        success: false,
-        error: 'Only super admins can switch between businesses'
-      });
+    if (req.user.userType !== USER_TYPE_SUPER_ADMIN) {
+      throw new AuthorizationError(ERROR_ONLY_SUPER_ADMIN_SWITCH);
     }
     
     await User.findByIdAndUpdate(req.userId, {
       businessId: business._id
     });
     
-    res.json({
-      success: true,
-      message: 'Switched to business successfully',
-      data: business
+    const processingTime = Date.now() - startTime;
+    res.status(HTTP_STATUS.OK).json({ 
+      success: true, 
+      data: business, 
+      message: SUCCESS_SWITCHED_BUSINESS,
+      processingTime 
     });
   } catch (error) {
-    console.error('Error switching business:', error);
-    res.status(500).json({
+    const processingTime = Date.now() - startTime;
+    logger.error('Route error', { 
+      error: error.message, 
+      stack: error.stack, 
+      businessId: req.params.id,
+      processingTime 
+    });
+    
+    if (error instanceof NotFoundError) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        success: false,
+        error: ERROR_CODES.NOT_FOUND,
+        message: error.message,
+        processingTime
+      });
+    }
+    
+    if (error instanceof AuthorizationError) {
+      return res.status(HTTP_STATUS.FORBIDDEN).json({
+        success: false,
+        error: ERROR_CODES.AUTHORIZATION_ERROR,
+        message: error.message,
+        processingTime
+      });
+    }
+    
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
-      error: 'Failed to switch business'
+      error: ERROR_CODES.INTERNAL_ERROR,
+      message: 'Failed to retrieve business',
+      processingTime
     });
   }
 });
 
 // POST /:id/webhook/complete - Mark webhook setup as complete (Part 3)
 router.post('/:id/webhook/complete', auth, requireBusinessAccess, async (req, res) => {
+  const startTime = Date.now();
   try {
-    console.log('📝 Complete webhook setup request received');
-    console.log('Business ID:', req.params.id);
-    console.log('User ID:', req.userId);
+    logger.info('Complete webhook setup request received', {
+      businessId: req.params.id,
+      userId: req.userId
+    });
     
-    const business = await Business.findById(req.params.id);
-    
-    if (!business) {
-      return res.status(404).json({
-        success: false,
-        error: 'Business not found'
-      });
-    }
+    const business = await findByIdSafe(Business, req.params.id, { resourceName: RESOURCE_NAME_BUSINESS });
     
     // Verify user has access to this business
     if (!business.hasUser(req.userId)) {
-      return res.status(403).json({
-        success: false,
-        error: 'You do not have access to this business'
-      });
+      throw new AuthorizationError(ERROR_NO_ACCESS_BUSINESS);
     }
     
     // Mark webhook as configured and setup complete
     business.whatsappConfig.webhookConfigured = true;
     business.whatsappConfig.webhookConfiguredAt = new Date();
-    business.setupStep = 4;  // Mark setup as complete
+    business.setupStep = SETUP_STEP_COMPLETE;  // Mark setup as complete
     await business.save();
     
-    console.log('✅ Marked webhookConfigured and setupStep=4 (complete)');
+    logger.info('Webhook setup completed successfully', {
+      businessId: business._id.toString()
+    });
     
-    res.json({
-      success: true,
-      message: 'Webhook setup completed successfully',
+    const processingTime = Date.now() - startTime;
+    res.status(HTTP_STATUS.OK).json({ 
+      success: true, 
       data: {
         business: {
           _id: business._id,
@@ -389,13 +642,42 @@ router.post('/:id/webhook/complete', auth, requireBusinessAccess, async (req, re
           setupStep: business.setupStep,
           webhookConfigured: business.whatsappConfig.webhookConfigured
         }
-      }
+      }, 
+      message: SUCCESS_WEBHOOK_COMPLETED,
+      processingTime 
     });
   } catch (error) {
-    console.error('Error completing webhook setup:', error);
-    res.status(500).json({
+    const processingTime = Date.now() - startTime;
+    logger.error('Route error', { 
+      error: error.message, 
+      stack: error.stack, 
+      businessId: req.params.id,
+      processingTime 
+    });
+    
+    if (error instanceof NotFoundError) {
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
+        success: false,
+        error: ERROR_CODES.NOT_FOUND,
+        message: error.message,
+        processingTime
+      });
+    }
+    
+    if (error instanceof AuthorizationError) {
+      return res.status(HTTP_STATUS.FORBIDDEN).json({
+        success: false,
+        error: ERROR_CODES.AUTHORIZATION_ERROR,
+        message: error.message,
+        processingTime
+      });
+    }
+    
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
-      error: 'Failed to complete webhook setup'
+      error: ERROR_CODES.INTERNAL_ERROR,
+      message: 'Failed to complete webhook setup',
+      processingTime
     });
   }
 });

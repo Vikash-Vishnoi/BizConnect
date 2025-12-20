@@ -10,7 +10,75 @@ const express = require('express');
 const router = express.Router();
 const exportService = require('../services/exportService');
 const { Conversation, Contact } = require('../../../core/database/models');
+const { businessContext } = require('../../../core/middlewares/businessContext');
+const { ERROR_CODES, HTTP_STATUS } = require('../../../common/constants');
+const logger = require('../../../common/helpers/logger');
 // ❌ REMOVED: DataExport - model doesn't exist
+
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+// Export Formats
+const FORMAT_PDF = 'pdf';
+const FORMAT_JSON = 'json';
+const FORMAT_CSV = 'csv';
+
+// Valid Formats
+const VALID_CONVERSATION_FORMATS = [FORMAT_PDF, FORMAT_JSON, FORMAT_CSV];
+const VALID_CONTACT_FORMATS = [FORMAT_CSV, FORMAT_JSON];
+
+// Content Types
+const CONTENT_TYPE_PDF = 'application/pdf';
+const CONTENT_TYPE_JSON = 'application/json';
+const CONTENT_TYPE_CSV = 'text/csv';
+
+// File Name Prefixes
+const FILENAME_PREFIX_CHAT = 'chat-export';
+const FILENAME_PREFIX_CONVERSATIONS = 'conversations-export';
+const FILENAME_PREFIX_CONTACTS = 'contacts-export';
+
+// CSV Headers
+const CSV_HEADERS_CONTACTS = ['Name', 'Phone', 'Email', 'Tags', 'Created At', 'Last Message'];
+
+// Error Messages
+const ERROR_INVALID_FORMAT_CONVERSATIONS = 'Format must be pdf, json, or csv';
+const ERROR_INVALID_FORMAT_CONTACTS = 'Format must be csv or json';
+const ERROR_NO_CONVERSATIONS = 'No conversations found';
+const ERROR_NO_CONTACTS = 'No contacts found';
+const ERROR_NO_INPUT = 'Must provide conversationId, conversationIds array, or all=true';
+const ERROR_NO_CONTACT_INPUT = 'Must provide contactIds, tags, or all=true';
+const ERROR_PDF_SINGLE_ONLY = 'PDF format only supports single conversation export. Use json or csv for bulk exports.';
+const ERROR_EXPORT_CONVERSATIONS = 'Failed to export conversations';
+const ERROR_EXPORT_CONTACTS = 'Failed to export contacts';
+const ERROR_EXPORT_STATUS = 'Failed to get export status';
+const ERROR_EXPORT_STATS = 'Failed to get export stats';
+const ERROR_TRACKING_NOT_IMPLEMENTED = 'Export job tracking not implemented - DataExport model does not exist';
+
+// Success Messages
+const SUCCESS_STATS_RETRIEVED = 'Export stats retrieved successfully';
+
+// Default Values
+const DEFAULT_FORMAT_JSON = 'json';
+const DEFAULT_FORMAT_CSV = 'csv';
+const DEFAULT_ALL = false;
+
+// Status Codes
+const STATUS_NOT_IMPLEMENTED = 501;
+
+// Query Fields
+const QUERY_FIELDS_CONVERSATION = '_id';
+const QUERY_FIELDS_CONTACT = 'name phone email tags metadata createdAt lastMessageAt';
+
+// JSON Spacing
+const JSON_SPACING = 2;
+
+// CSV Delimiter
+const CSV_DELIMITER = ',';
+const CSV_ROW_SEPARATOR = '\n';
+const CSV_FIELD_SEPARATOR = '; ';
+const CSV_QUOTE = '"';
+const CSV_ESCAPED_QUOTE = '""';
  
 // ============================================================================
 // CONVERSATION EXPORTS
@@ -32,15 +100,17 @@ const { Conversation, Contact } = require('../../../core/database/models');
  * - POST /api/export/bulk
  * - POST /api/export/all
  */
-router.post('/conversations', async (req, res) => {
+router.post('/conversations', businessContext, async (req, res) => {
+  const startTime = Date.now();
   try {
-    const { format = 'json' } = req.query;
-    const { conversationId, conversationIds, all = false, startDate, endDate } = req.body;
+    const { format = DEFAULT_FORMAT_JSON } = req.query;
+    const { conversationId, conversationIds, all = DEFAULT_ALL, startDate, endDate } = req.body;
 
-    if (!['pdf', 'json', 'csv'].includes(format)) {
-      return res.status(400).json({ 
+    if (!VALID_CONVERSATION_FORMATS.includes(format)) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ 
         success: false,
-        error: 'Format must be pdf, json, or csv' 
+        error: ERROR_INVALID_FORMAT_CONVERSATIONS,
+        processingTime: Date.now() - startTime
       });
     }
 
@@ -59,37 +129,43 @@ router.post('/conversations', async (req, res) => {
       const conversations = await Conversation.find({
         businessId: req.businessId,
         isDeleted: false
-      }).select('_id').lean();
+      }).select(QUERY_FIELDS_CONVERSATION).lean();
 
       targetIds = conversations.map(c => c._id.toString());
 
       if (targetIds.length === 0) {
-        return res.status(404).json({ 
+        return res.status(HTTP_STATUS.NOT_FOUND).json({ 
           success: false,
-          error: 'No conversations found' 
+          error: ERROR_NO_CONVERSATIONS,
+          processingTime: Date.now() - startTime
         });
       }
     }
     // No valid input
     else {
-      return res.status(400).json({ 
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ 
         success: false,
-        error: 'Must provide conversationId, conversationIds array, or all=true' 
+        error: ERROR_NO_INPUT,
+        processingTime: Date.now() - startTime
       });
     }
 
-    console.log(`📦 Exporting ${targetIds.length} conversation(s) as ${format.toUpperCase()}`);
+    logger.info('Exporting conversations', {
+      count: targetIds.length,
+      format: format.toUpperCase(),
+      businessId: req.businessId?.toString()
+    });
 
     // Single conversation PDF export (different handling)
-    if (targetIds.length === 1 && format === 'pdf') {
+    if (targetIds.length === 1 && format === FORMAT_PDF) {
       const pdfDoc = await exportService.exportConversationToPDF(
         targetIds[0],
         req.businessId,
         { startDate, endDate }
       );
 
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="chat-export-${targetIds[0]}.pdf"`);
+      res.setHeader('Content-Type', CONTENT_TYPE_PDF);
+      res.setHeader('Content-Disposition', `attachment; filename="${FILENAME_PREFIX_CHAT}-${targetIds[0]}.${FORMAT_PDF}"`);
       
       return pdfDoc.pipe(res);
     }
@@ -98,13 +174,13 @@ router.post('/conversations', async (req, res) => {
     if (targetIds.length === 1) {
       let exportData;
       
-      if (format === 'json') {
+      if (format === FORMAT_JSON) {
         exportData = await exportService.exportConversationToJSON(
           targetIds[0],
           req.businessId,
           { startDate, endDate }
         );
-      } else if (format === 'csv') {
+      } else if (format === FORMAT_CSV) {
         exportData = await exportService.exportConversationToCSV(
           targetIds[0],
           req.businessId,
@@ -112,8 +188,8 @@ router.post('/conversations', async (req, res) => {
         );
       }
 
-      const contentType = format === 'json' ? 'application/json' : 'text/csv';
-      const filename = `chat-export-${targetIds[0]}.${format}`;
+      const contentType = format === FORMAT_JSON ? CONTENT_TYPE_JSON : CONTENT_TYPE_CSV;
+      const filename = `${FILENAME_PREFIX_CHAT}-${targetIds[0]}.${format}`;
 
       res.setHeader('Content-Type', contentType);
       res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -122,10 +198,11 @@ router.post('/conversations', async (req, res) => {
     }
 
     // Bulk export (multiple conversations)
-    if (format === 'pdf') {
-      return res.status(400).json({
+    if (format === FORMAT_PDF) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
         success: false,
-        error: 'PDF format only supports single conversation export. Use json or csv for bulk exports.'
+        error: ERROR_PDF_SINGLE_ONLY,
+        processingTime: Date.now() - startTime
       });
     }
 
@@ -136,8 +213,8 @@ router.post('/conversations', async (req, res) => {
       { startDate, endDate }
     );
 
-    const contentType = format === 'json' ? 'application/json' : 'text/csv';
-    const filename = `conversations-export-${Date.now()}.${format}`;
+    const contentType = format === FORMAT_JSON ? CONTENT_TYPE_JSON : CONTENT_TYPE_CSV;
+    const filename = `${FILENAME_PREFIX_CONVERSATIONS}-${Date.now()}.${format}`;
     
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -145,10 +222,17 @@ router.post('/conversations', async (req, res) => {
     res.send(exportData);
 
   } catch (error) {
-    console.error('Export conversations error:', error);
-    res.status(500).json({ 
+    const processingTime = Date.now() - startTime;
+    logger.error('Route error', {
+      error: error.message,
+      stack: error.stack,
+      businessId: req.businessId?.toString(),
+      processingTime
+    });
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ 
       success: false,
-      error: error.message || 'Failed to export conversations' 
+      error: error.message || ERROR_EXPORT_CONVERSATIONS,
+      processingTime
     });
   }
 });
@@ -166,15 +250,17 @@ router.post('/conversations', async (req, res) => {
  * 
  * Replaces: POST /api/export/bulk (for contacts)
  */
-router.post('/contacts', async (req, res) => {
+router.post('/contacts', businessContext, async (req, res) => {
+  const startTime = Date.now();
   try {
-    const { format = 'csv' } = req.query;
-    const { contactIds, tags, all = false } = req.body;
+    const { format = DEFAULT_FORMAT_CSV } = req.query;
+    const { contactIds, tags, all = DEFAULT_ALL } = req.body;
 
-    if (!['csv', 'json'].includes(format)) {
-      return res.status(400).json({ 
+    if (!VALID_CONTACT_FORMATS.includes(format)) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ 
         success: false,
-        error: 'Format must be csv or json' 
+        error: ERROR_INVALID_FORMAT_CONTACTS,
+        processingTime: Date.now() - startTime
       });
     }
 
@@ -190,48 +276,54 @@ router.post('/contacts', async (req, res) => {
     }
     // Must explicitly request all
     else if (!all) {
-      return res.status(400).json({ 
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({ 
         success: false,
-        error: 'Must provide contactIds, tags, or all=true' 
+        error: ERROR_NO_CONTACT_INPUT,
+        processingTime: Date.now() - startTime
       });
     }
 
     const contacts = await Contact.find(query)
-      .select('name phone email tags metadata createdAt lastMessageAt')
+      .select(QUERY_FIELDS_CONTACT)
       .lean();
 
     if (contacts.length === 0) {
-      return res.status(404).json({ 
+      return res.status(HTTP_STATUS.NOT_FOUND).json({ 
         success: false,
-        error: 'No contacts found' 
+        error: ERROR_NO_CONTACTS,
+        processingTime: Date.now() - startTime
       });
     }
 
-    console.log(`📇 Exporting ${contacts.length} contact(s) as ${format.toUpperCase()}`);
+    logger.info('Exporting contacts', {
+      count: contacts.length,
+      format: format.toUpperCase(),
+      businessId: req.businessId?.toString()
+    });
 
     let exportData;
 
-    if (format === 'json') {
-      exportData = JSON.stringify(contacts, null, 2);
+    if (format === FORMAT_JSON) {
+      exportData = JSON.stringify(contacts, null, JSON_SPACING);
     } else {
       // CSV format
-      const headers = ['Name', 'Phone', 'Email', 'Tags', 'Created At', 'Last Message'];
+      const headers = CSV_HEADERS_CONTACTS;
       const rows = contacts.map(contact => [
         contact.name || '',
         contact.phone || '',
         contact.email || '',
-        (contact.tags || []).join('; '),
+        (contact.tags || []).join(CSV_FIELD_SEPARATOR),
         contact.createdAt ? new Date(contact.createdAt).toISOString() : '',
         contact.lastMessageAt ? new Date(contact.lastMessageAt).toISOString() : ''
       ]);
 
       exportData = [headers, ...rows]
-        .map(row => row.map(field => `"${String(field).replace(/"/g, '""')}"`).join(','))
-        .join('\n');
+        .map(row => row.map(field => `${CSV_QUOTE}${String(field).replace(new RegExp(CSV_QUOTE, 'g'), CSV_ESCAPED_QUOTE)}${CSV_QUOTE}`).join(CSV_DELIMITER))
+        .join(CSV_ROW_SEPARATOR);
     }
 
-    const contentType = format === 'json' ? 'application/json' : 'text/csv';
-    const filename = `contacts-export-${Date.now()}.${format}`;
+    const contentType = format === FORMAT_JSON ? CONTENT_TYPE_JSON : CONTENT_TYPE_CSV;
+    const filename = `${FILENAME_PREFIX_CONTACTS}-${Date.now()}.${format}`;
     
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -239,10 +331,17 @@ router.post('/contacts', async (req, res) => {
     res.send(exportData);
 
   } catch (error) {
-    console.error('Export contacts error:', error);
-    res.status(500).json({ 
+    const processingTime = Date.now() - startTime;
+    logger.error('Route error', {
+      error: error.message,
+      stack: error.stack,
+      businessId: req.businessId?.toString(),
+      processingTime
+    });
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ 
       success: false,
-      error: error.message || 'Failed to export contacts' 
+      error: error.message || ERROR_EXPORT_CONTACTS,
+      processingTime
     });
   }
 });
@@ -256,17 +355,27 @@ router.post('/contacts', async (req, res) => {
  * ❌ REMOVED: DataExport model doesn't exist
  * Export jobs cannot be tracked without the DataExport model
  */
-router.get('/status/:id', async (req, res) => {
+router.get('/status/:id', businessContext, async (req, res) => {
+  const startTime = Date.now();
   try {
-    return res.status(501).json({ 
+    const processingTime = Date.now() - startTime;
+    return res.status(STATUS_NOT_IMPLEMENTED).json({ 
       success: false,
-      error: 'Export job tracking not implemented - DataExport model does not exist' 
+      error: ERROR_TRACKING_NOT_IMPLEMENTED,
+      processingTime
     });
   } catch (error) {
-    console.error('Get export status error:', error);
-    res.status(500).json({ 
+    const processingTime = Date.now() - startTime;
+    logger.error('Route error', {
+      error: error.message,
+      stack: error.stack,
+      businessId: req.businessId?.toString(),
+      processingTime
+    });
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ 
       success: false,
-      error: 'Failed to get export status' 
+      error: ERROR_EXPORT_STATUS,
+      processingTime
     });
   }
 });
@@ -279,15 +388,18 @@ router.get('/status/:id', async (req, res) => {
  * 
  * Replaces: POST /api/export/stats
  */
-router.get('/stats', async (req, res) => {
+router.get('/stats', businessContext, async (req, res) => {
+  const startTime = Date.now();
   try {
     const { conversationIds, startDate, endDate } = req.query;
 
     const ids = conversationIds ? 
-      (Array.isArray(conversationIds) ? conversationIds : conversationIds.split(',')) : 
+      (Array.isArray(conversationIds) ? conversationIds : conversationIds.split(CSV_DELIMITER)) : 
       [];
 
-    console.log('📊 Getting export stats...');
+    logger.info('Getting export stats', { 
+      businessId: req.businessId?.toString() 
+    });
 
     const stats = await exportService.getExportStats(
       req.businessId,
@@ -295,16 +407,26 @@ router.get('/stats', async (req, res) => {
       { startDate, endDate }
     );
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
       success: true,
-      stats
+      data: { stats },
+      message: SUCCESS_STATS_RETRIEVED,
+      processingTime
     });
 
   } catch (error) {
-    console.error('Get export stats error:', error);
-    res.status(500).json({ 
+    const processingTime = Date.now() - startTime;
+    logger.error('Route error', {
+      error: error.message,
+      stack: error.stack,
+      businessId: req.businessId?.toString(),
+      processingTime
+    });
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ 
       success: false,
-      error: 'Failed to get export stats' 
+      error: ERROR_EXPORT_STATS,
+      processingTime
     });
   }
 });

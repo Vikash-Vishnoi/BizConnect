@@ -15,11 +15,29 @@
 const Conversation = require('../../../core/database/models/Conversation');
 const mongoose = require('mongoose');
 const logger = require('../../../common/helpers/logger');
+const { ERROR_CODES } = require('../../../common/constants');
 const { validateBulkArray, validateNonEmptyString } = require('../../../common/helpers/validationHelpers');
+
+/**
+ * Bulk Operations Constants
+ */
+const MAX_BULK_OPERATIONS = parseInt(process.env.MAX_BULK_OPERATIONS) || 100;
+const MAX_TAGS_PER_OPERATION = parseInt(process.env.MAX_TAGS_PER_OPERATION) || 10;
+const MAX_BULK_EXPORT = 500;
+const MAX_TAG_STATS_LIMIT = 20;
+
+const CONVERSATION_STATUS = {
+  ACTIVE: 'active',
+  ARCHIVED: 'archived',
+  CLOSED: 'closed',
+  BLOCKED: 'blocked'
+};
+
+const VALID_STATUSES = Object.values(CONVERSATION_STATUS);
 
 class BulkOperationsService {
   constructor() {
-    this.maxBulkLimit = parseInt(process.env.MAX_BULK_OPERATIONS) || 100;
+    this.maxBulkLimit = MAX_BULK_OPERATIONS;
   }
 
   /**
@@ -29,8 +47,17 @@ class BulkOperationsService {
    * @returns {Promise<Object>} - Operation results
    */
   async bulkArchiveConversations(conversationIds, userId) {
+    const startTime = Date.now();
+    
     try {
-      logger.info('Bulk archiving conversations', { count: conversationIds.length, userId });
+      if (!userId) {
+        throw new Error('User ID is required');
+      }
+
+      logger.info('Bulk archiving conversations', { 
+        count: conversationIds.length, 
+        userId: userId.toString() 
+      });
 
       validateBulkArray(conversationIds, 'conversation IDs', this.maxBulkLimit);
 
@@ -38,17 +65,22 @@ class BulkOperationsService {
         {
           _id: { $in: conversationIds },
           userId: userId,
-          status: { $ne: 'archived' } // Only archive non-archived conversations
+          status: { $ne: CONVERSATION_STATUS.ARCHIVED } // Only archive non-archived conversations
         },
         {
           $set: {
-            status: 'archived',
+            status: CONVERSATION_STATUS.ARCHIVED,
             archivedAt: new Date()
           }
         }
       );
 
-      logger.info('Bulk archive completed', { archivedCount: result.modifiedCount, requested: conversationIds.length });
+      logger.info('Bulk archive completed', { 
+        archivedCount: result.modifiedCount, 
+        requested: conversationIds.length,
+        userId: userId.toString(),
+        processingTime: `${Date.now() - startTime}ms`
+      });
 
       return {
         success: true,
@@ -57,7 +89,12 @@ class BulkOperationsService {
         timestamp: new Date()
       };
     } catch (error) {
-      logger.error('Bulk archive failed', { error: error.message, userId });
+      logger.error('Bulk archive failed', { 
+        error: error.message, 
+        userId: userId?.toString(),
+        code: ERROR_CODES.INTERNAL_ERROR,
+        processingTime: `${Date.now() - startTime}ms`
+      });
       throw error;
     }
   }
@@ -283,24 +320,27 @@ class BulkOperationsService {
    * @returns {Promise<Object>} - Operation results
    */
   async bulkUpdateStatus(conversationIds, userId, status) {
+    const startTime = Date.now();
+    
     try {
       logger.info('Bulk updating conversation status', {
         count: conversationIds.length,
         status,
-        userId
+        userId: userId.toString()
       });
 
       validateBulkArray(conversationIds, 'conversation IDs', this.maxBulkLimit);
       validateNonEmptyString(status, 'Status');
       
-      const validStatuses = ['active', 'closed', 'blocked'];
-      if (!validStatuses.includes(status)) {
-        throw new Error(`Invalid status. Must be one of: ${validStatuses.join(', ')}`);
+      if (!VALID_STATUSES.includes(status)) {
+        const error = new Error(`Invalid status. Must be one of: ${VALID_STATUSES.join(', ')}`);
+        error.code = ERROR_CODES.VALIDATION_ERROR;
+        throw error;
       }
 
       const updateData = { status };
       
-      if (status === 'closed') {
+      if (status === CONVERSATION_STATUS.CLOSED) {
         updateData.closedAt = new Date();
       }
 
@@ -314,7 +354,11 @@ class BulkOperationsService {
         }
       );
 
-      logger.info('Bulk update status completed', { updatedCount: result.modifiedCount, status });
+      logger.info('Bulk update status completed', { 
+        updatedCount: result.modifiedCount, 
+        status,
+        processingTime: `${Date.now() - startTime}ms`
+      });
 
       return {
         success: true,
@@ -324,7 +368,12 @@ class BulkOperationsService {
         timestamp: new Date()
       };
     } catch (error) {
-      logger.error('Bulk update status failed', { error: error.message, userId });
+      logger.error('Bulk update status failed', { 
+        error: error.message, 
+        userId: userId?.toString(),
+        code: error.code || ERROR_CODES.INTERNAL_ERROR,
+        processingTime: `${Date.now() - startTime}ms`
+      });
       throw error;
     }
   }
@@ -343,11 +392,11 @@ class BulkOperationsService {
         taggedConversations,
         unassignedConversations
       ] = await Promise.all([
-        Conversation.countDocuments({ userId, isDeleted: false }),
-        Conversation.countDocuments({ userId, status: 'archived', isDeleted: false }),
-        Conversation.countDocuments({ userId, assignedTo: { $exists: true, $ne: null }, isDeleted: false }),
-        Conversation.countDocuments({ userId, tags: { $exists: true, $ne: [] }, isDeleted: false }),
-        Conversation.countDocuments({ userId, assignedTo: { $exists: false }, isDeleted: false })
+        Conversation.countDocuments({ userId }),
+        Conversation.countDocuments({ userId, status: 'archived' }),
+        Conversation.countDocuments({ userId, assignedTo: { $exists: true, $ne: null } }),
+        Conversation.countDocuments({ userId, tags: { $exists: true, $ne: [] } }),
+        Conversation.countDocuments({ userId, assignedTo: { $exists: false } })
       ]);
 
       // Get tag statistics
@@ -458,10 +507,16 @@ class BulkOperationsService {
    * @returns {Promise<Array>} - Conversation metadata
    */
   async bulkExportMetadata(conversationIds, userId, format = 'json') {
+    const startTime = Date.now();
+    
     try {
-      logger.info('Bulk exporting metadata', { count: conversationIds.length, format, userId });
+      logger.info('Bulk exporting metadata', { 
+        count: conversationIds.length, 
+        format, 
+        userId: userId.toString() 
+      });
 
-      validateBulkArray(conversationIds, 'conversation IDs', 500);
+      validateBulkArray(conversationIds, 'conversation IDs', MAX_BULK_EXPORT);
 
       const conversations = await Conversation.find({
         _id: { $in: conversationIds },
@@ -490,7 +545,11 @@ class BulkOperationsService {
         createdAt: conv.createdAt
       }));
 
-      logger.info('Bulk export completed', { exportedCount: exportData.length, format });
+      logger.info('Bulk export completed', { 
+        exportedCount: exportData.length, 
+        format,
+        processingTime: `${Date.now() - startTime}ms`
+      });
 
       return {
         success: true,
@@ -499,7 +558,12 @@ class BulkOperationsService {
         timestamp: new Date()
       };
     } catch (error) {
-      logger.error('Bulk export failed', { error: error.message, userId });
+      logger.error('Bulk export failed', { 
+        error: error.message, 
+        userId: userId?.toString(),
+        code: ERROR_CODES.INTERNAL_ERROR,
+        processingTime: `${Date.now() - startTime}ms`
+      });
       throw error;
     }
   }

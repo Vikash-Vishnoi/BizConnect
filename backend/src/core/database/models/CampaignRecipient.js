@@ -28,11 +28,26 @@ const campaignRecipientSchema = new mongoose.Schema({
     required: true,
     index: true
   },
+  
   contactId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Contact',
-    required: true,
+    required: false, // Optional - null for raw recipient data
+    default: null,
     index: true
+  },
+  
+  // Direct storage for raw recipient data (when contactId is null)
+  phoneNumber: {
+    type: String,
+    required: false, // Required when contactId is null
+    index: true
+  },
+  
+  name: {
+    type: String,
+    required: false,
+    default: ''
   },
   
   variables: {
@@ -74,8 +89,7 @@ const campaignRecipientSchema = new mongoose.Schema({
   },
   whatsappMessageId: {
     type: String,
-    default: null,
-    index: true
+    default: null
   },
   failedReason: {
     type: String,
@@ -96,21 +110,24 @@ const campaignRecipientSchema = new mongoose.Schema({
   timestamps: true
 });
 
-campaignRecipientSchema.index({ campaignId: 1, status: 1 });
-campaignRecipientSchema.index({ campaignId: 1, sentAt: -1 });
-campaignRecipientSchema.index({ businessId: 1, status: 1 });
-campaignRecipientSchema.index({ contactId: 1, campaignId: 1 });
+// Compound indexes for efficient querying with millions of documents
+campaignRecipientSchema.index({ campaignId: 1, status: 1 });           // Primary: filter by campaign + status
+campaignRecipientSchema.index({ campaignId: 1, sentAt: -1 });          // Time-based sorting
+campaignRecipientSchema.index({ businessId: 1, status: 1 });           // Business-level analytics
+campaignRecipientSchema.index({ businessId: 1, campaignId: 1 });       // Multi-tenant security
+campaignRecipientSchema.index({ contactId: 1, campaignId: 1 });        // Contact history lookup
+campaignRecipientSchema.index({ whatsappMessageId: 1 }, { sparse: true }); // Webhook status updates
 
 campaignRecipientSchema.statics.getCampaignStats = async function(campaignId) {
   const stats = await this.aggregate([
-    { $match: { campaignId: mongoose.Types.ObjectId(campaignId) } },
+    { $match: { campaignId: new mongoose.Types.ObjectId(campaignId) } },
     {
       $group: {
         _id: '$status',
         count: { $sum: 1 }
       }
     }
-  ]);
+  ], { maxTimeMS: 5000 }); // Pass as options object
   
   const result = {
     total: 0,

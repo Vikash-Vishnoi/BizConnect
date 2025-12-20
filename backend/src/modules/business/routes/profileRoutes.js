@@ -10,15 +10,68 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const { User, Business } = require('../../../core/database/models');
 const WhatsAppService = require('../../../integrations/whatsapp/whatsappService');
-const whatsappService = new WhatsAppService();
+const { businessContext } = require('../../../core/middlewares/businessContext');
+const { asyncHandler, NotFoundError, ValidationError } = require('../../../core/middlewares/errorHandler');
+const logger = require('../../../common/helpers/logger');
+const { validateBusiness } = require('../../../common/utils/validators');
+const { ERROR_CODES, HTTP_STATUS } = require('../../../common/constants');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
 
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+const PASSWORD_MIN_LENGTH = 6;
+const PROFILE_PHOTO_DEFAULT_MAX_SIZE_MB = 5;
+const UPLOAD_DIR_RELATIVE = '../../uploads/profiles';
+
+const ALLOWED_IMAGE_TYPES = /jpeg|jpg|png/;
+const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/jpg', 'image/png'];
+
+const INCLUDE_OPTIONS = {
+  SUMMARY: 'summary',
+  WHATSAPP: 'whatsapp',
+  BUSINESS: 'business',
+  BUSINESS_HOURS: 'business-hours',
+  VERTICALS: 'verticals'
+};
+
+const WHATSAPP_VERTICALS = [
+  'AUTOMOTIVE', 'BEAUTY', 'APPAREL', 'EDU', 'ENTERTAIN', 'EVENT_PLAN',
+  'FINANCE', 'GROCERY', 'GOVT', 'HOTEL', 'HEALTH', 'NONPROFIT', 'PROF_SERVICES',
+  'RETAIL', 'TRAVEL', 'RESTAURANT', 'NOT_A_BIZ', 'OTHER'
+];
+
+const AVATAR_ACTIONS = {
+  UPLOAD: 'upload',
+  DELETE: 'delete'
+};
+
+const ERROR_MESSAGES = {
+  USER_NOT_FOUND: 'User not found',
+  EMAIL_IN_USE: 'Email already in use',
+  PASSWORD_REQUIRED: 'Current password and new password are required',
+  PASSWORD_TOO_SHORT: `New password must be at least ${PASSWORD_MIN_LENGTH} characters`,
+  INCORRECT_PASSWORD: 'Current password is incorrect',
+  BUSINESS_REQUIRED: 'Business ID required',
+  NO_PHOTO_UPLOADED: 'No photo file uploaded',
+  IMAGE_FORMAT_ERROR: 'Only .png, .jpg and .jpeg format allowed!'
+};
+
+// ============================================================================
+// MULTER CONFIGURATION
+// ============================================================================
+
+// ============================================================================
+// MULTER CONFIGURATION
+// ============================================================================
+
 // Configure multer for profile photo upload
 const storage = multer.diskStorage({
   destination: async (req, file, cb) => {
-    const uploadDir = path.join(__dirname, '../../uploads/profiles');
+    const uploadDir = path.join(__dirname, UPLOAD_DIR_RELATIVE);
     await fs.mkdir(uploadDir, { recursive: true });
     cb(null, uploadDir);
   },
@@ -28,19 +81,18 @@ const storage = multer.diskStorage({
   }
 });
 
-const maxFileSize = parseInt(process.env.PROFILE_PHOTO_MAX_SIZE_MB || '5') * 1024 * 1024;
+const maxFileSize = parseInt(process.env.PROFILE_PHOTO_MAX_SIZE_MB || PROFILE_PHOTO_DEFAULT_MAX_SIZE_MB.toString()) * 1024 * 1024;
 const upload = multer({
   storage,
   limits: { fileSize: maxFileSize },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
+    const extname = ALLOWED_IMAGE_TYPES.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = ALLOWED_MIME_TYPES.includes(file.mimetype);
 
     if (mimetype && extname) {
       return cb(null, true);
     }
-    cb(new Error('Only .png, .jpg and .jpeg format allowed!'));
+    cb(new Error(ERROR_MESSAGES.IMAGE_FORMAT_ERROR));
   }
 });
 
@@ -58,6 +110,7 @@ const upload = multer({
  * - GET /api/profile/whatsapp (when include=whatsapp)
  */
 router.get('/', async (req, res) => {
+  const startTime = Date.now();
   try {
     const { include } = req.query;
     const includes = include ? include.split(',').map(i => i.trim()) : [];
@@ -65,10 +118,7 @@ router.get('/', async (req, res) => {
     const user = await User.findById(req.user.id).select('-password');
 
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
+      throw new NotFoundError(ERROR_MESSAGES.USER_NOT_FOUND);
     }
 
     const response = {
@@ -77,7 +127,7 @@ router.get('/', async (req, res) => {
     };
 
     // Include summary statistics
-    if (includes.includes('summary')) {
+    if (includes.includes(INCLUDE_OPTIONS.SUMMARY)) {
       const Business = require('../../../core/database/models/Business');
       const Conversation = require('../../../core/database/models/Conversation');
       const Campaign = require('../../../core/database/models/Campaign');
@@ -97,32 +147,44 @@ router.get('/', async (req, res) => {
     }
 
     // Include WhatsApp profile (requires business)
-    if (includes.includes('whatsapp') && req.businessId) {
-      const business = await Business.findById(req.businessId);
-      if (business) {
-        try {
-          const whatsappProfile = await whatsappService.getBusinessProfile(business);
-          response.whatsapp = whatsappProfile;
-        } catch (error) {
-          console.error('Error fetching WhatsApp profile:', error);
-          response.whatsapp = { error: 'Failed to fetch WhatsApp profile' };
-        }
+    if (includes.includes(INCLUDE_OPTIONS.WHATSAPP) && req.businessId) {
+      const business = await validateBusiness(req.businessId);
+      try {
+        const credentials = await business.getWhatsAppCredentials();
+        const whatsappService = new WhatsAppService(credentials);
+        const whatsappProfile = await whatsappService.getBusinessProfile(business);
+        response.whatsapp = whatsappProfile;
+      } catch (error) {
+        logger.error('Error fetching WhatsApp profile', { businessId: req.businessId, error: error.message });
+        response.whatsapp = { error: 'Failed to fetch WhatsApp profile' };
       }
     }
 
     // Include business info
-    if (includes.includes('business') && req.businessId) {
-      const business = await Business.findById(req.businessId).select('name displayName industry createdAt');
+    if (includes.includes(INCLUDE_OPTIONS.BUSINESS) && req.businessId) {
+      const business = await validateBusiness(req.businessId, { select: 'name displayName industry createdAt' });
       response.business = business;
     }
 
-    res.json(response);
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
+      ...response,
+      message: 'User profile retrieved successfully',
+      processingTime
+    });
   } catch (error) {
-    console.error('Error getting user profile:', error);
-    res.status(500).json({
+    const processingTime = Date.now() - startTime;
+    
+    if (error instanceof NotFoundError || error instanceof ValidationError) {
+      throw error;
+    }
+    
+    logger.error('Error getting user profile', { userId: req.user?.id, error: error.message, processingTime });
+    res.status(HTTP_STATUS.INTERNAL_ERROR).json({
       success: false,
       message: 'Failed to get user profile',
-      error: error.message
+      error: error.message,
+      processingTime
     });
   }
 });
@@ -132,25 +194,20 @@ router.get('/', async (req, res) => {
  * Unchanged from original
  */
 router.put('/', async (req, res) => {
+  const startTime = Date.now();
   try {
     const { name, email, phone, preferences } = req.body;
 
     const user = await User.findById(req.user.id);
 
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
+      throw new NotFoundError(ERROR_MESSAGES.USER_NOT_FOUND);
     }
 
     if (email && email !== user.email) {
       const existingUser = await User.findOne({ email });
       if (existingUser) {
-        return res.status(400).json({
-          success: false,
-          message: 'Email already in use'
-        });
+        throw new ValidationError(ERROR_MESSAGES.EMAIL_IN_USE);
       }
       user.email = email;
     }
@@ -161,17 +218,29 @@ router.put('/', async (req, res) => {
 
     await user.save();
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    res.status(HTTP_STATUS.OK).json({
       success: true,
+      data: {
+        message: 'Profile updated successfully',
+        user: { ...user.toObject(), password: undefined }
+      },
       message: 'Profile updated successfully',
-      user: { ...user.toObject(), password: undefined }
+      processingTime
     });
   } catch (error) {
-    console.error('Error updating user profile:', error);
-    res.status(500).json({
+    const processingTime = Date.now() - startTime;
+    
+    if (error instanceof NotFoundError || error instanceof ValidationError) {
+      throw error;
+    }
+    
+    logger.error('Error updating user profile', { userId: req.user?.id, error: error.message, processingTime });
+    res.status(HTTP_STATUS.INTERNAL_ERROR).json({
       success: false,
       message: 'Failed to update profile',
-      error: error.message
+      error: error.message,
+      processingTime
     });
   }
 });
@@ -181,39 +250,28 @@ router.put('/', async (req, res) => {
  * Changed from PUT to POST for better REST semantics
  */
 router.post('/password', async (req, res) => {
+  const startTime = Date.now();
   try {
     const { currentPassword, newPassword } = req.body;
 
     if (!currentPassword || !newPassword) {
-      return res.status(400).json({
-        success: false,
-        message: 'Current password and new password are required'
-      });
+      throw new ValidationError(ERROR_MESSAGES.PASSWORD_REQUIRED);
     }
 
-    if (newPassword.length < 6) {
-      return res.status(400).json({
-        success: false,
-        message: 'New password must be at least 6 characters'
-      });
+    if (newPassword.length < PASSWORD_MIN_LENGTH) {
+      throw new ValidationError(ERROR_MESSAGES.PASSWORD_TOO_SHORT);
     }
 
     const user = await User.findById(req.user.id);
 
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: 'User not found'
-      });
+      throw new NotFoundError(ERROR_MESSAGES.USER_NOT_FOUND);
     }
 
     const isMatch = await bcrypt.compare(currentPassword, user.password);
 
     if (!isMatch) {
-      return res.status(400).json({
-        success: false,
-        message: 'Current password is incorrect'
-      });
+      throw new ValidationError(ERROR_MESSAGES.INCORRECT_PASSWORD);
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -221,16 +279,26 @@ router.post('/password', async (req, res) => {
 
     await user.save();
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    res.status(HTTP_STATUS.OK).json({
       success: true,
-      message: 'Password changed successfully'
+      data: { message: 'Password changed successfully' },
+      message: 'Password changed successfully',
+      processingTime
     });
   } catch (error) {
-    console.error('Error changing password:', error);
-    res.status(500).json({
+    const processingTime = Date.now() - startTime;
+    
+    if (error instanceof NotFoundError || error instanceof ValidationError) {
+      throw error;
+    }
+    
+    logger.error('Error changing password', { userId: req.user?.id, error: error.message, processingTime });
+    res.status(HTTP_STATUS.INTERNAL_ERROR).json({
       success: false,
       message: 'Failed to change password',
-      error: error.message
+      error: error.message,
+      processingTime
     });
   }
 });
@@ -244,27 +312,20 @@ router.post('/password', async (req, res) => {
  * Can include sub-resources with query params
  * @query {string} include - Comma-separated: 'business-hours' | 'verticals'
  */
-router.get('/whatsapp', async (req, res) => {
+router.get('/whatsapp', businessContext, async (req, res) => {
+  const startTime = Date.now();
   try {
     if (!req.businessId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Business ID required'
-      });
+      throw new ValidationError(ERROR_MESSAGES.BUSINESS_REQUIRED);
     }
 
     const { include } = req.query;
     const includes = include ? include.split(',').map(i => i.trim()) : [];
 
-    const business = await Business.findById(req.businessId);
+    const business = await validateBusiness(req.businessId);
 
-    if (!business) {
-      return res.status(404).json({
-        success: false,
-        message: 'Business not found'
-      });
-    }
-
+    const credentials = await business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
     const profile = await whatsappService.getBusinessProfile(business);
 
     const response = {
@@ -273,32 +334,40 @@ router.get('/whatsapp', async (req, res) => {
     };
 
     // Include business hours if requested
-    if (includes.includes('business-hours')) {
+    if (includes.includes(INCLUDE_OPTIONS.BUSINESS_HOURS)) {
       try {
         const businessHours = await whatsappService.getBusinessHours(business);
         response.businessHours = businessHours;
       } catch (error) {
-        console.error('Error fetching business hours:', error);
+        logger.error('Error fetching business hours', { businessId: req.businessId, error: error.message });
         response.businessHours = { error: 'Failed to fetch business hours' };
       }
     }
 
     // Include available verticals if requested
-    if (includes.includes('verticals')) {
-      response.verticals = [
-        'AUTOMOTIVE', 'BEAUTY', 'APPAREL', 'EDU', 'ENTERTAIN', 'EVENT_PLAN',
-        'FINANCE', 'GROCERY', 'GOVT', 'HOTEL', 'HEALTH', 'NONPROFIT', 'PROF_SERVICES',
-        'RETAIL', 'TRAVEL', 'RESTAURANT', 'NOT_A_BIZ', 'OTHER'
-      ];
+    if (includes.includes(INCLUDE_OPTIONS.VERTICALS)) {
+      response.verticals = WHATSAPP_VERTICALS;
     }
 
-    res.json(response);
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
+      ...response,
+      message: 'WhatsApp profile retrieved successfully',
+      processingTime
+    });
   } catch (error) {
-    console.error('Error getting WhatsApp profile:', error);
-    res.status(500).json({
+    const processingTime = Date.now() - startTime;
+    
+    if (error instanceof NotFoundError || error instanceof ValidationError) {
+      throw error;
+    }
+    
+    logger.error('Error getting WhatsApp profile', { businessId: req.businessId, error: error.message, processingTime });
+    res.status(HTTP_STATUS.INTERNAL_ERROR).json({
       success: false,
       message: 'Failed to get WhatsApp profile',
-      error: error.message
+      error: error.message,
+      processingTime
     });
   }
 });
@@ -318,25 +387,16 @@ router.get('/whatsapp', async (req, res) => {
  * - PUT /api/profile/whatsapp
  * - PUT /api/profile/whatsapp/business-hours
  */
-router.put('/whatsapp', async (req, res) => {
+router.put('/whatsapp', businessContext, async (req, res) => {
+  const startTime = Date.now();
   try {
     if (!req.businessId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Business ID required'
-      });
+      throw new ValidationError(ERROR_MESSAGES.BUSINESS_REQUIRED);
     }
 
     const { about, address, description, email, vertical, websites, businessHours } = req.body;
 
-    const business = await Business.findById(req.businessId);
-
-    if (!business) {
-      return res.status(404).json({
-        success: false,
-        message: 'Business not found'
-      });
-    }
+    const business = await validateBusiness(req.businessId);
 
     const response = {
       success: true,
@@ -355,6 +415,8 @@ router.put('/whatsapp', async (req, res) => {
       if (vertical !== undefined) profileData.vertical = vertical;
       if (websites !== undefined) profileData.websites = websites;
 
+      const credentials = await business.getWhatsAppCredentials();
+      const whatsappService = new WhatsAppService(credentials);
       const updatedProfile = await whatsappService.updateBusinessProfile(
         business,
         profileData
@@ -365,17 +427,30 @@ router.put('/whatsapp', async (req, res) => {
 
     // Update business hours if provided
     if (businessHours && Array.isArray(businessHours)) {
+      const credentials = await business.getWhatsAppCredentials();
+      const whatsappService = new WhatsAppService(credentials);
       const updatedHours = await whatsappService.updateBusinessHours(business, businessHours);
       response.businessHours = updatedHours;
     }
 
-    res.json(response);
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
+      ...response,
+      processingTime
+    });
   } catch (error) {
-    console.error('Error updating WhatsApp profile:', error);
-    res.status(500).json({
+    const processingTime = Date.now() - startTime;
+    
+    if (error instanceof NotFoundError || error instanceof ValidationError) {
+      throw error;
+    }
+    
+    logger.error('Error updating WhatsApp profile', { businessId: req.businessId, error: error.message, processingTime });
+    res.status(HTTP_STATUS.INTERNAL_ERROR).json({
       success: false,
       message: 'Failed to update WhatsApp profile',
-      error: error.message
+      error: error.message,
+      processingTime
     });
   }
 });
@@ -390,56 +465,62 @@ router.put('/whatsapp', async (req, res) => {
  * - POST /api/profile/whatsapp/photo
  * - DELETE /api/profile/whatsapp/photo
  */
-router.post('/avatar', upload.single('photo'), async (req, res) => {
+router.post('/avatar', businessContext, upload.single('photo'), async (req, res) => {
+  const startTime = Date.now();
   try {
     if (!req.businessId) {
-      return res.status(400).json({
-        success: false,
-        message: 'Business ID required'
-      });
+      throw new ValidationError(ERROR_MESSAGES.BUSINESS_REQUIRED);
     }
 
-    const { action = 'upload' } = req.query;
+    const { action = AVATAR_ACTIONS.UPLOAD } = req.query;
 
-    const business = await Business.findById(req.businessId);
+    const business = await validateBusiness(req.businessId);
 
-    if (!business) {
-      return res.status(404).json({
-        success: false,
-        message: 'Business not found'
-      });
-    }
+    const credentials = await business.getWhatsAppCredentials();
+    const whatsappService = new WhatsAppService(credentials);
 
-    if (action === 'delete') {
+    if (action === AVATAR_ACTIONS.DELETE) {
       await whatsappService.deleteProfilePhoto(business);
-      return res.json({
+      const processingTime = Date.now() - startTime;
+      return res.status(HTTP_STATUS.OK).json({
         success: true,
-        message: 'Profile photo deleted successfully'
+        data: { message: 'Profile photo deleted successfully' },
+        message: 'Profile photo deleted successfully',
+        processingTime
       });
     }
 
     // Default action: upload
     if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: 'No photo file uploaded'
-      });
+      throw new ValidationError(ERROR_MESSAGES.NO_PHOTO_UPLOADED);
     }
 
     const photoPath = req.file.path;
     const result = await whatsappService.uploadProfilePhoto(business, photoPath);
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    res.status(HTTP_STATUS.OK).json({
       success: true,
+      data: {
+        message: 'Profile photo uploaded successfully',
+        result
+      },
       message: 'Profile photo uploaded successfully',
-      result
+      processingTime
     });
   } catch (error) {
-    console.error('Error managing profile photo:', error);
-    res.status(500).json({
+    const processingTime = Date.now() - startTime;
+    
+    if (error instanceof NotFoundError || error instanceof ValidationError) {
+      throw error;
+    }
+    
+    logger.error('Error managing profile photo', { businessId: req.businessId, error: error.message, processingTime });
+    res.status(HTTP_STATUS.INTERNAL_ERROR).json({
       success: false,
       message: 'Failed to manage profile photo',
-      error: error.message
+      error: error.message,
+      processingTime
     });
   }
 });

@@ -1,6 +1,17 @@
 const FlowResponse = require('../core/database/models/FlowResponse');
 const logger = require('../common/helpers/logger');
 
+// Constants for flow abandonment tracking
+const ABANDONMENT_THRESHOLD_MS = 30 * 60 * 1000; // 30 minutes
+const FLOW_STATUS_IN_PROGRESS = 'in_progress'; // In progress status
+const FLOW_STATUS_ABANDONED = 'abandoned'; // Abandoned status
+const FLOW_STATUS_EXPIRED = 'expired'; // Expired status
+const DEFAULT_RECENTLY_ABANDONED_LIMIT = 50; // Default limit for recently abandoned flows
+const MS_TO_SECONDS = 1000; // Milliseconds to seconds conversion
+const MS_TO_MINUTES = 60000; // Milliseconds to minutes conversion
+const EARLY_DROP_OFF_SCREEN_MAX = 1; // Max screens completed for early drop-off
+const PERCENTAGE_DECIMAL_PLACES = 2; // Decimal places for percentage
+
 /**
  * Flow Abandonment Tracker Job
  * Identifies and marks abandoned flow responses
@@ -15,7 +26,7 @@ const logger = require('../common/helpers/logger');
 
 class FlowAbandonmentTracker {
   constructor() {
-    this.abandonmentThreshold = 30 * 60 * 1000; // 30 minutes
+    this.abandonmentThreshold = ABANDONMENT_THRESHOLD_MS;
     this.isRunning = false;
   }
 
@@ -38,7 +49,7 @@ class FlowAbandonmentTracker {
       const cutoffTime = new Date(Date.now() - this.abandonmentThreshold);
 
       const staleFlows = await FlowResponse.find({
-        status: 'in_progress',
+        status: FLOW_STATUS_IN_PROGRESS,
         updatedAt: { $lt: cutoffTime }
       });
 
@@ -50,11 +61,13 @@ class FlowAbandonmentTracker {
           await flowResponse.markAbandoned();
           markedCount++;
 
+          const inactiveMinutes = Math.round((Date.now() - flowResponse.updatedAt.getTime()) / MS_TO_MINUTES);
+
           logger.info('Flow marked as abandoned', {
             flowResponseId: flowResponse._id,
             flowId: flowResponse.flowId,
             contactPhone: flowResponse.contactPhone,
-            inactiveFor: Math.round((Date.now() - flowResponse.updatedAt.getTime()) / 60000) + ' minutes'
+            inactiveFor: `${inactiveMinutes} minutes`
           });
 
         } catch (error) {
@@ -67,13 +80,13 @@ class FlowAbandonmentTracker {
 
       // Also check for expired flows
       const expiredFlows = await FlowResponse.find({
-        status: 'in_progress',
+        status: FLOW_STATUS_IN_PROGRESS,
         expiresAt: { $lt: new Date() }
       });
 
       for (const flowResponse of expiredFlows) {
         try {
-          flowResponse.status = 'expired';
+          flowResponse.status = FLOW_STATUS_EXPIRED;
           await flowResponse.save();
           markedCount++;
 
@@ -132,7 +145,7 @@ class FlowAbandonmentTracker {
       const { flowId, businessId, startDate, endDate } = options;
 
       // Build query
-      const query = { status: 'abandoned' };
+      const query = { status: FLOW_STATUS_ABANDONED };
       
       if (flowId) query.flowId = flowId;
       if (businessId) query.businessId = businessId;
@@ -168,7 +181,7 @@ class FlowAbandonmentTracker {
         // Categorize abandonment reason
         const screenCount = Object.keys(flow.responseData || {}).length;
 
-        if (screenCount === 0 || screenCount === 1) {
+        if (screenCount === 0 || screenCount === EARLY_DROP_OFF_SCREEN_MAX) {
           stats.abandonmentReasons.earlyDropOff++;
         } else if (timeDiff > this.abandonmentThreshold) {
           stats.abandonmentReasons.timeout++;
@@ -185,7 +198,7 @@ class FlowAbandonmentTracker {
       }
 
       if (abandonedFlows.length > 0) {
-        stats.averageTimeBeforeAbandonment = Math.round(totalTime / abandonedFlows.length / 1000); // seconds
+        stats.averageTimeBeforeAbandonment = Math.round(totalTime / abandonedFlows.length / MS_TO_SECONDS); // seconds
       }
 
       // Convert dropOffPoints to sorted array
@@ -193,7 +206,7 @@ class FlowAbandonmentTracker {
         .map(([screen, count]) => ({
           screen,
           count,
-          percentage: parseFloat(((count / abandonedFlows.length) * 100).toFixed(2))
+          percentage: parseFloat(((count / abandonedFlows.length) * 100).toFixed(PERCENTAGE_DECIMAL_PLACES))
         }))
         .sort((a, b) => b.count - a.count);
 
@@ -223,9 +236,9 @@ class FlowAbandonmentTracker {
    */
   async getRecentlyAbandoned(options = {}) {
     try {
-      const { limit = 50, flowId, businessId } = options;
+      const { limit = DEFAULT_RECENTLY_ABANDONED_LIMIT, flowId, businessId } = options;
 
-      const query = { status: 'abandoned' };
+      const query = { status: FLOW_STATUS_ABANDONED };
       if (flowId) query.flowId = flowId;
       if (businessId) query.businessId = businessId;
 
@@ -241,7 +254,7 @@ class FlowAbandonmentTracker {
         flowName: flow.flowId?.name,
         contactPhone: flow.contactPhone,
         abandonedAt: flow.updatedAt,
-        timeInFlow: Math.round((flow.updatedAt - flow.createdAt) / 1000), // seconds
+        timeInFlow: Math.round((flow.updatedAt - flow.createdAt) / MS_TO_SECONDS), // seconds
         screensCompleted: Object.keys(flow.responseData || {}).length
       }));
 

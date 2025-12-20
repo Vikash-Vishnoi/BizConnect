@@ -1,7 +1,22 @@
 /**
  * Common validation helper utilities
  * Reusable validation functions to reduce code duplication
+ * Follows DRY principle and provides consistent error messages
+ * 
+ * @module common/helpers/validationHelpers
  */
+
+const { REGEX_PATTERNS } = require('../constants');
+const config = require('../../config/server.config');
+
+// Validation limits from configuration
+const VALIDATION_LIMITS = {
+  MAX_BULK_OPERATIONS: config.validation?.maxBulkOperations || 100,
+  MAX_BULK_CONTACTS: config.validation?.maxBulkContacts || 1000,
+  MIN_PASSWORD_LENGTH: config.validation?.minPasswordLength || 6,
+  MAX_NAME_LENGTH: config.validation?.maxNameLength || 100,
+  MAX_MESSAGE_LENGTH: config.validation?.maxMessageLength || 4096,
+};
 
 /**
  * Validate bulk operation array
@@ -10,7 +25,7 @@
  * @param {number} maxLimit - Maximum allowed items
  * @throws {Error} If validation fails
  */
-function validateBulkArray(items, itemName = 'items', maxLimit = 100) {
+function validateBulkArray(items, itemName = 'items', maxLimit = VALIDATION_LIMITS.MAX_BULK_OPERATIONS) {
   if (!items || !Array.isArray(items)) {
     throw new Error(`${itemName} must be an array`);
   }
@@ -20,7 +35,7 @@ function validateBulkArray(items, itemName = 'items', maxLimit = 100) {
   }
 
   if (items.length > maxLimit) {
-    throw new Error(`Cannot process more than ${maxLimit} ${itemName} at once`);
+    throw new Error(`Cannot process more than ${maxLimit} ${itemName} at once. Provided: ${items.length}`);
   }
 
   return true;
@@ -62,9 +77,7 @@ function validateNonEmptyString(value, fieldName = 'Field') {
  * @throws {Error} If email format is invalid
  */
 function validateEmail(email) {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  
-  if (!email || !emailRegex.test(email)) {
+  if (!email || !REGEX_PATTERNS.EMAIL.test(email)) {
     throw new Error('Invalid email format');
   }
 
@@ -73,14 +86,19 @@ function validateEmail(email) {
 
 /**
  * Validate phone number format (E.164)
+ * 
+ * DEPRECATED: Use phoneValidator.js instead for consistency
+ * This function is kept for backwards compatibility
+ * 
  * @param {string} phone - Phone number to validate
  * @throws {Error} If phone format is invalid
+ * @deprecated Use require('./phoneValidator').isValidPhoneNumber() instead
+ * @see phoneValidator.js for phone number validation
  */
 function validatePhoneNumber(phone) {
-  // E.164 format: +[country code][number] (max 15 digits)
-  const phoneRegex = /^\+[1-9]\d{1,14}$/;
+  const phoneValidator = require('./phoneValidator');
   
-  if (!phone || !phoneRegex.test(phone)) {
+  if (!phoneValidator.isValidPhoneNumber(phone)) {
     throw new Error('Invalid phone number format. Must be in E.164 format (e.g., +1234567890)');
   }
 
@@ -136,8 +154,8 @@ function validateStringLength(value, minLength, maxLength, fieldName = 'Field') 
 function validateObjectId(id, fieldName = 'ID') {
   const objectIdRegex = /^[0-9a-fA-F]{24}$/;
   
-  if (!id || !objectIdRegex.test(id)) {
-    throw new Error(`${fieldName} must be a valid MongoDB ObjectId`);
+  if (!id || typeof id !== 'string' || !objectIdRegex.test(id)) {
+    throw new Error(`${fieldName} must be a valid MongoDB ObjectId (24-character hex string)`);
   }
 
   return true;

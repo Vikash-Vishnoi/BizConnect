@@ -1,9 +1,58 @@
 const express = require('express');
 const router = express.Router();
 const auditExportService = require('../services/auditExportService');
-const { auth } = require('../../../core/middlewares/auth');
-const { enforceBusinessIsolation } = require('../../../core/middlewares/businessSecurity');
+const { authenticate: auth } = require('../../../core/middlewares/auth');
+const { requireBusiness } = require('../../../core/middlewares/authorization');
+const { businessContext } = require('../../../core/middlewares/businessContext');
+const { ERROR_CODES, HTTP_STATUS } = require('../../../common/constants');
 const logger = require('../../../common/helpers/logger');
+
+// ============================================================================
+// CONSTANTS
+// ============================================================================
+
+// Valid Export Formats
+const VALID_FORMATS = ['csv', 'json', 'excel', 'pdf'];
+
+// Default Values
+const DEFAULT_FORMAT = 'csv';
+const DEFAULT_PAGE = 1;
+const DEFAULT_LIMIT = 50;
+
+// Pagination Limits
+const MIN_PAGE = 1;
+const MIN_LIMIT = 1;
+
+// Access Control
+const ROLE_ADMIN = 'admin';
+
+// Error Messages
+const ERROR_INVALID_FORMAT = 'Invalid format. Supported formats: ';
+const ERROR_EXPORT_FAILED = 'Failed to export audit logs';
+const ERROR_STATS_FAILED = 'Failed to retrieve audit statistics';
+const ERROR_FETCH_FAILED = 'Failed to retrieve audit logs';
+const ERROR_FETCH_ACTIONS_FAILED = 'Failed to retrieve audit actions';
+const ERROR_FETCH_RESOURCE_TYPES_FAILED = 'Failed to retrieve resource types';
+const ERROR_ACCESS_DENIED = 'Access denied';
+
+// Success Messages
+const SUCCESS_EXPORT = 'Audit logs exported successfully';
+const SUCCESS_STATS = 'Audit statistics retrieved successfully';
+const SUCCESS_LOGS_RETRIEVED = 'Business audit logs retrieved successfully';
+const SUCCESS_USER_LOGS_RETRIEVED = 'User audit logs retrieved successfully';
+const SUCCESS_ACTIONS_RETRIEVED = 'Audit actions retrieved successfully';
+const SUCCESS_RESOURCE_TYPES_RETRIEVED = 'Resource types retrieved successfully';
+
+// Sort Order
+const SORT_TIMESTAMP_DESC = { timestamp: -1 };
+
+// Populate Fields
+const POPULATE_USER_ID = 'email name';
+const POPULATE_BUSINESS_ID = 'name';
+
+// ============================================================================
+// ROUTES
+// ============================================================================
 
 /**
  * @route   POST /api/analytics/audit-logs/export
@@ -11,15 +60,16 @@ const logger = require('../../../common/helpers/logger');
  * @access  Private
  */
 router.post('/audit-logs/export', auth, async (req, res) => {
+  const startTime = Date.now();
   try {
-    const { filters = {}, format = 'csv' } = req.body;
+    const { filters = {}, format = DEFAULT_FORMAT } = req.body;
 
     // Validate format
-    const validFormats = ['csv', 'json', 'excel', 'pdf'];
-    if (!validFormats.includes(format.toLowerCase())) {
-      return res.status(400).json({
+    if (!VALID_FORMATS.includes(format.toLowerCase())) {
+      return res.status(HTTP_STATUS.BAD_REQUEST).json({
         success: false,
-        error: `Invalid format. Supported formats: ${validFormats.join(', ')}`
+        error: `${ERROR_INVALID_FORMAT}${VALID_FORMATS.join(', ')}`,
+        processingTime: Date.now() - startTime
       });
     }
 
@@ -36,16 +86,25 @@ router.post('/audit-logs/export', auth, async (req, res) => {
       res.send(result.data);
     }
 
-    logger.info('Audit logs exported successfully', {
-      userId: req.user._id,
+    const processingTime = Date.now() - startTime;
+    logger.info(SUCCESS_EXPORT, {
+      userId: req.user._id?.toString(),
       format,
-      recordCount: result.recordCount
+      recordCount: result.recordCount,
+      processingTime
     });
   } catch (error) {
-    logger.error('Error exporting audit logs:', error);
-    res.status(500).json({
+    const processingTime = Date.now() - startTime;
+    logger.error('Route error', {
+      error: error.message,
+      stack: error.stack,
+      userId: req.user?._id?.toString(),
+      processingTime
+    });
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
-      error: error.message || 'Failed to export audit logs'
+      error: error.message || ERROR_EXPORT_FAILED,
+      processingTime
     });
   }
 });
@@ -56,6 +115,7 @@ router.post('/audit-logs/export', auth, async (req, res) => {
  * @access  Private
  */
 router.get('/audit-logs/stats', auth, async (req, res) => {
+  const startTime = Date.now();
   try {
     const filters = {
       businessId: req.query.businessId,
@@ -76,15 +136,25 @@ router.get('/audit-logs/stats', auth, async (req, res) => {
 
     const stats = await auditExportService.getAuditStats(filters);
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
       success: true,
-      data: stats
+      data: stats,
+      message: SUCCESS_STATS,
+      processingTime
     });
   } catch (error) {
-    logger.error('Error getting audit stats:', error);
-    res.status(500).json({
+    const processingTime = Date.now() - startTime;
+    logger.error('Route error', {
+      error: error.message,
+      stack: error.stack,
+      userId: req.user?._id?.toString(),
+      processingTime
+    });
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
-      error: error.message || 'Failed to retrieve audit statistics'
+      error: error.message || ERROR_STATS_FAILED,
+      processingTime
     });
   }
 });
@@ -94,10 +164,11 @@ router.get('/audit-logs/stats', auth, async (req, res) => {
  * @desc    Get audit logs for a specific business
  * @access  Private
  */
-router.get('/audit-logs/business/:businessId', auth, enforceBusinessIsolation, async (req, res) => {
+router.get('/audit-logs/business/:businessId', auth, requireBusiness, businessContext, async (req, res) => {
+  const startTime = Date.now();
   try {
     const { businessId } = req.params;
-    const { page = 1, limit = 50, action, status, startDate, endDate } = req.query;
+    const { page = DEFAULT_PAGE, limit = DEFAULT_LIMIT, action, status, startDate, endDate } = req.query;
 
     const AuditLog = require('../../../core/database/models/AuditLog');
 
@@ -113,15 +184,16 @@ router.get('/audit-logs/business/:businessId', auth, enforceBusinessIsolation, a
     }
 
     const auditLogs = await AuditLog.find(query)
-      .sort({ timestamp: -1 })
-      .skip((page - 1) * limit)
+      .sort(SORT_TIMESTAMP_DESC)
+      .skip((page - MIN_PAGE) * limit)
       .limit(parseInt(limit))
-      .populate('userId', 'email name')
+      .populate('userId', POPULATE_USER_ID)
       .lean();
 
     const total = await AuditLog.countDocuments(query);
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
       success: true,
       data: {
         auditLogs,
@@ -131,13 +203,22 @@ router.get('/audit-logs/business/:businessId', auth, enforceBusinessIsolation, a
           total,
           pages: Math.ceil(total / limit)
         }
-      }
+      },
+      message: SUCCESS_LOGS_RETRIEVED,
+      processingTime
     });
   } catch (error) {
-    logger.error('Error fetching business audit logs:', error);
-    res.status(500).json({
+    const processingTime = Date.now() - startTime;
+    logger.error('Route error', {
+      error: error.message,
+      stack: error.stack,
+      businessId: req.params.businessId,
+      processingTime
+    });
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
-      error: error.message || 'Failed to retrieve audit logs'
+      error: error.message || ERROR_FETCH_FAILED,
+      processingTime
     });
   }
 });
@@ -148,15 +229,17 @@ router.get('/audit-logs/business/:businessId', auth, enforceBusinessIsolation, a
  * @access  Private
  */
 router.get('/audit-logs/user/:userId', auth, async (req, res) => {
+  const startTime = Date.now();
   try {
     const { userId } = req.params;
-    const { page = 1, limit = 50, action, status, startDate, endDate } = req.query;
+    const { page = DEFAULT_PAGE, limit = DEFAULT_LIMIT, action, status, startDate, endDate } = req.query;
 
     // Users can only view their own audit logs unless they're admins
-    if (req.user._id.toString() !== userId && req.user.role !== 'admin') {
-      return res.status(403).json({
+    if (req.user._id.toString() !== userId && req.user.role !== ROLE_ADMIN) {
+      return res.status(HTTP_STATUS.FORBIDDEN).json({
         success: false,
-        error: 'Access denied'
+        error: ERROR_ACCESS_DENIED,
+        processingTime: Date.now() - startTime
       });
     }
 
@@ -174,15 +257,16 @@ router.get('/audit-logs/user/:userId', auth, async (req, res) => {
     }
 
     const auditLogs = await AuditLog.find(query)
-      .sort({ timestamp: -1 })
-      .skip((page - 1) * limit)
+      .sort(SORT_TIMESTAMP_DESC)
+      .skip((page - MIN_PAGE) * limit)
       .limit(parseInt(limit))
-      .populate('businessId', 'name')
+      .populate('businessId', POPULATE_BUSINESS_ID)
       .lean();
 
     const total = await AuditLog.countDocuments(query);
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
       success: true,
       data: {
         auditLogs,
@@ -192,13 +276,22 @@ router.get('/audit-logs/user/:userId', auth, async (req, res) => {
           total,
           pages: Math.ceil(total / limit)
         }
-      }
+      },
+      message: SUCCESS_USER_LOGS_RETRIEVED,
+      processingTime
     });
   } catch (error) {
-    logger.error('Error fetching user audit logs:', error);
-    res.status(500).json({
+    const processingTime = Date.now() - startTime;
+    logger.error('Route error', {
+      error: error.message,
+      stack: error.stack,
+      userId: req.params.userId,
+      processingTime
+    });
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
-      error: error.message || 'Failed to retrieve audit logs'
+      error: error.message || ERROR_FETCH_FAILED,
+      processingTime
     });
   }
 });
@@ -209,23 +302,34 @@ router.get('/audit-logs/user/:userId', auth, async (req, res) => {
  * @access  Private
  */
 router.get('/audit-logs/actions', auth, async (req, res) => {
+  const startTime = Date.now();
   try {
     const AuditLog = require('../../../core/database/models/AuditLog');
 
     const actions = await AuditLog.distinct('action');
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
       success: true,
       data: {
         actions: actions.sort(),
         count: actions.length
-      }
+      },
+      message: SUCCESS_ACTIONS_RETRIEVED,
+      processingTime
     });
   } catch (error) {
-    logger.error('Error fetching audit actions:', error);
-    res.status(500).json({
+    const processingTime = Date.now() - startTime;
+    logger.error('Route error', {
+      error: error.message,
+      stack: error.stack,
+      userId: req.user?._id?.toString(),
+      processingTime
+    });
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
-      error: error.message || 'Failed to retrieve audit actions'
+      error: error.message || ERROR_FETCH_ACTIONS_FAILED,
+      processingTime
     });
   }
 });
@@ -236,23 +340,34 @@ router.get('/audit-logs/actions', auth, async (req, res) => {
  * @access  Private
  */
 router.get('/audit-logs/resource-types', auth, async (req, res) => {
+  const startTime = Date.now();
   try {
     const AuditLog = require('../../../core/database/models/AuditLog');
 
     const resourceTypes = await AuditLog.distinct('resourceType');
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
       success: true,
       data: {
         resourceTypes: resourceTypes.sort(),
         count: resourceTypes.length
-      }
+      },
+      message: SUCCESS_RESOURCE_TYPES_RETRIEVED,
+      processingTime
     });
   } catch (error) {
-    logger.error('Error fetching resource types:', error);
-    res.status(500).json({
+    const processingTime = Date.now() - startTime;
+    logger.error('Route error', {
+      error: error.message,
+      stack: error.stack,
+      userId: req.user?._id?.toString(),
+      processingTime
+    });
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
-      error: error.message || 'Failed to retrieve resource types'
+      error: error.message || ERROR_FETCH_RESOURCE_TYPES_FAILED,
+      processingTime
     });
   }
 });

@@ -9,6 +9,33 @@ const logger = require('../../../common/helpers/logger');
  * P1 FIX: After-hours auto-reply automation
  */
 
+// Service constants
+const SERVICE_CONTEXT = 'WORKING_HOURS_SERVICE';
+const DAYS_OF_WEEK = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+const VALID_DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+const MINUTES_PER_HOUR = 60;
+const SUNDAY_INDEX = 0;
+const SATURDAY_INDEX = 6;
+const MAX_DAYS_TO_CHECK = 7;
+
+// Error messages
+const ERROR_MESSAGES = {
+  BUSINESS_NOT_FOUND: 'Business not found',
+  INVALID_DAY: 'Invalid day',
+  MISSING_TIMES: 'Missing times for',
+  GET_TEMPLATE_ERROR: 'Get auto-reply template error',
+  UPDATE_ERROR: 'Update working hours error'
+};
+
+// Default messages
+const DEFAULT_MESSAGES = {
+  RESPOND_SOON: 'We will respond as soon as possible.',
+  CLOSED: 'We are currently closed. Please check back later.',
+  BACK_AT: "We're currently closed. We'll be back at",
+  BACK_TOMORROW: "We're currently closed. We'll be back tomorrow at",
+  BACK_ON: "We're currently closed. We'll be back on"
+};
+
 class WorkingHoursService {
   /**
    * Check if current time is within working hours
@@ -16,37 +43,46 @@ class WorkingHoursService {
    * @returns {boolean} True if within working hours
    */
   isWithinWorkingHours(business) {
-    if (!business.settings?.workingHours?.enabled) {
-      return true; // Always within hours if feature disabled
+    try {
+      if (!business.settings?.workingHours?.enabled) {
+        return true; // Always within hours if feature disabled
+      }
+
+      const workingHours = business.settings.workingHours;
+      if (!workingHours.schedule || workingHours.schedule.length === 0) {
+        return true; // No schedule defined
+      }
+
+      const now = new Date();
+      const dayOfWeek = now.getDay(); // 0 = Sunday, 6 = Saturday
+      const currentTime = now.getHours() * MINUTES_PER_HOUR + now.getMinutes(); // Minutes since midnight
+
+      // Find schedule for current day
+      const currentDayName = DAYS_OF_WEEK[dayOfWeek];
+      
+      const daySchedule = workingHours.schedule.find(s => s.day === currentDayName);
+      
+      if (!daySchedule || !daySchedule.enabled) {
+        return false; // Day is not a working day
+      }
+
+      // Parse time strings (format: "HH:MM")
+      const [openHour, openMin] = daySchedule.openTime.split(':').map(Number);
+      const [closeHour, closeMin] = daySchedule.closeTime.split(':').map(Number);
+      
+      const openMinutes = openHour * MINUTES_PER_HOUR + openMin;
+      const closeMinutes = closeHour * MINUTES_PER_HOUR + closeMin;
+
+      return currentTime >= openMinutes && currentTime < closeMinutes;
+    } catch (error) {
+      logger.error('Error checking working hours', {
+        context: SERVICE_CONTEXT,
+        businessId: business._id?.toString(),
+        error: error.message,
+        stack: error.stack
+      });
+      return true; // Default to within hours on error
     }
-
-    const workingHours = business.settings.workingHours;
-    if (!workingHours.schedule || workingHours.schedule.length === 0) {
-      return true; // No schedule defined
-    }
-
-    const now = new Date();
-    const dayOfWeek = now.getDay(); // 0 = Sunday, 6 = Saturday
-    const currentTime = now.getHours() * 60 + now.getMinutes(); // Minutes since midnight
-
-    // Find schedule for current day
-    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-    const currentDayName = dayNames[dayOfWeek];
-    
-    const daySchedule = workingHours.schedule.find(s => s.day === currentDayName);
-    
-    if (!daySchedule || !daySchedule.enabled) {
-      return false; // Day is not a working day
-    }
-
-    // Parse time strings (format: "HH:MM")
-    const [openHour, openMin] = daySchedule.openTime.split(':').map(Number);
-    const [closeHour, closeMin] = daySchedule.closeTime.split(':').map(Number);
-    
-    const openMinutes = openHour * 60 + openMin;
-    const closeMinutes = closeHour * 60 + closeMin;
-
-    return currentTime >= openMinutes && currentTime < closeMinutes;
   }
 
   /**
@@ -65,7 +101,12 @@ class WorkingHoursService {
       return template;
 
     } catch (error) {
-      logger.error('Get auto-reply template error', { businessId, error: error.message });
+      logger.error(ERROR_MESSAGES.GET_TEMPLATE_ERROR, { 
+        context: SERVICE_CONTEXT,
+        businessId: businessId?.toString(), 
+        error: error.message,
+        stack: error.stack
+      });
       return null;
     }
   }
@@ -80,18 +121,22 @@ class WorkingHoursService {
     try {
       const business = await Business.findById(businessId);
       if (!business) {
-        throw new Error('Business not found');
+        const error = new Error(ERROR_MESSAGES.BUSINESS_NOT_FOUND);
+        logger.error(ERROR_MESSAGES.BUSINESS_NOT_FOUND, {
+          context: SERVICE_CONTEXT,
+          businessId: businessId?.toString()
+        });
+        throw error;
       }
 
       // Validate schedule format
       if (schedule.schedule) {
-        const validDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
         for (const day of schedule.schedule) {
-          if (!validDays.includes(day.day)) {
-            throw new Error(`Invalid day: ${day.day}`);
+          if (!VALID_DAYS.includes(day.day)) {
+            throw new Error(`${ERROR_MESSAGES.INVALID_DAY}: ${day.day}`);
           }
           if (day.enabled && (!day.openTime || !day.closeTime)) {
-            throw new Error(`Missing times for ${day.day}`);
+            throw new Error(`${ERROR_MESSAGES.MISSING_TIMES} ${day.day}`);
           }
         }
       }
@@ -105,12 +150,20 @@ class WorkingHoursService {
 
       await business.save();
 
-      logger.info('Working hours updated', { businessId });
+      logger.info('Working hours updated', { 
+        context: SERVICE_CONTEXT,
+        businessId: businessId?.toString() 
+      });
 
       return business;
 
     } catch (error) {
-      logger.error('Update working hours error', { businessId, error: error.message });
+      logger.error(ERROR_MESSAGES.UPDATE_ERROR, { 
+        context: SERVICE_CONTEXT,
+        businessId: businessId?.toString(), 
+        error: error.message,
+        stack: error.stack
+      });
       throw error;
     }
   }
@@ -121,36 +174,44 @@ class WorkingHoursService {
    * @returns {string} Message about next available time
    */
   getNextAvailableMessage(business) {
-    if (!business.settings?.workingHours?.schedule) {
-      return 'We will respond as soon as possible.';
-    }
+    try {
+      if (!business.settings?.workingHours?.schedule) {
+        return DEFAULT_MESSAGES.RESPOND_SOON;
+      }
 
-    const now = new Date();
-    const dayOfWeek = now.getDay();
-    const schedule = business.settings.workingHours.schedule;
+      const now = new Date();
+      const dayOfWeek = now.getDay();
+      const schedule = business.settings.workingHours.schedule;
 
-    // Find next working day
-    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-    
-    for (let i = 0; i < 7; i++) {
-      const checkDay = (dayOfWeek + i) % 7;
-      const dayName = dayNames[checkDay];
-      const daySchedule = schedule.find(s => s.day === dayName && s.enabled);
-      
-      if (daySchedule) {
-        if (i === 0) {
-          // Today - check if still coming
-          return `We're currently closed. We'll be back at ${daySchedule.openTime}.`;
-        } else if (i === 1) {
-          return `We're currently closed. We'll be back tomorrow at ${daySchedule.openTime}.`;
-        } else {
-          const dayNameCapitalized = dayName.charAt(0).toUpperCase() + dayName.slice(1);
-          return `We're currently closed. We'll be back on ${dayNameCapitalized} at ${daySchedule.openTime}.`;
+      // Find next working day
+      for (let i = 0; i < MAX_DAYS_TO_CHECK; i++) {
+        const checkDay = (dayOfWeek + i) % MAX_DAYS_TO_CHECK;
+        const dayName = DAYS_OF_WEEK[checkDay];
+        const daySchedule = schedule.find(s => s.day === dayName && s.enabled);
+        
+        if (daySchedule) {
+          if (i === 0) {
+            // Today - check if still coming
+            return `${DEFAULT_MESSAGES.BACK_AT} ${daySchedule.openTime}.`;
+          } else if (i === 1) {
+            return `${DEFAULT_MESSAGES.BACK_TOMORROW} ${daySchedule.openTime}.`;
+          } else {
+            const dayNameCapitalized = dayName.charAt(0).toUpperCase() + dayName.slice(1);
+            return `${DEFAULT_MESSAGES.BACK_ON} ${dayNameCapitalized} at ${daySchedule.openTime}.`;
+          }
         }
       }
-    }
 
-    return 'We are currently closed. Please check back later.';
+      return DEFAULT_MESSAGES.CLOSED;
+    } catch (error) {
+      logger.error('Error getting next available message', {
+        context: SERVICE_CONTEXT,
+        businessId: business._id?.toString(),
+        error: error.message,
+        stack: error.stack
+      });
+      return DEFAULT_MESSAGES.CLOSED;
+    }
   }
 }
 

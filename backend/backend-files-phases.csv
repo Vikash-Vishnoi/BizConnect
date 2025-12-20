@@ -1,0 +1,128 @@
+file path,status,task
+backend\package.json,used,Project dependencies and scripts
+backend\package-lock.json,used,Dependency lock file
+backend\.gitignore,used,Git ignore patterns
+backend\.env.example,used,Environment variables template
+backend\src\server.js,used,Express server entry point
+backend\src\common\helpers\sanitizer.js,used,Input sanitization utilities
+backend\src\common\helpers\phoneValidator.js,used,Phone number validation
+backend\src\common\helpers\logger.js,used,Winston structured logging
+backend\src\common\helpers\validationHelpers.js,used,Validation helper functions
+backend\src\common\helpers\graphApiClient.js,used,WhatsApp Graph API client
+backend\src\common\helpers\geocodingHelper.js,used,Geocoding utilities
+backend\src\modules\automations\services\flowDataService.js,used,Flow data management service
+backend\src\modules\automations\routes\flowDataRoutes.js,used,Flow data routes - /flows/data
+backend\src\modules\automations\services\flowAnalyticsService.js,used,Flow analytics service
+backend\src\modules\automations\routes\flowAnalyticsRoutes.js,used,Flow analytics routes - /flows/analytics
+backend\src\modules\automations\services\flowPublishingService.js,used,Flow publishing service
+backend\src\modules\automations\routes\flowPublishingRoutes.js,used,Flow publishing routes - /flows/publish
+backend\src\modules\webhooks\services\webhookForwardingService.js,used,Webhook forwarding service
+backend\src\modules\templates\services\templateNamespaceService.js,used,Template namespace service
+backend\src\modules\webhooks\routes\messageContentBuilder.js,used,Message content builder utility
+backend\src\modules\templates\routes\templateNamespaceRoutes.js,used,Template namespace routes - /templates/namespace
+backend\src\modules\webhooks\routes\alertHandler.js,used,Webhook alert handler
+backend\src\modules\webhooks\routes\statusHandler.js,used,Webhook status handler
+backend\src\modules\webhooks\routes\welcomeHandler.js,used,Webhook welcome message handler
+backend\src\modules\webhooks\routes\messageHandler.js,used,Webhook message handler
+backend\src\modules\templates\routes\templateRoutes.js,used,Template routes - /templates
+backend\src\modules\webhooks\routes\additionalHandlers.js,used,Additional webhook handlers
+backend\src\common\helpers\errorCodes.js,used,Error code constants
+backend\src\integrations\whatsapp\whatsappBusinessService.js,used,WhatsApp Business API service
+backend\src\integrations\notifications\rateLimitService.js,used,Rate limiting service
+backend\src\integrations\whatsapp\whatsappAccountService.js,used,WhatsApp account service
+backend\src\integrations\notifications\phoneHealthCheckService.js,used,Phone health check service
+backend\src\integrations\notifications\notificationService.js,used,Notification service
+backend\src\integrations\notifications\messageReactionsService.js,used,Message reactions service
+backend\src\common\helpers\envValidator.js,used,Environment variable validator
+backend\src\integrations\whatsapp\whatsappGroupService.js,used,WhatsApp group service
+backend\src\common\helpers\businessContext.js,used,Business context helper
+backend\src\integrations\whatsapp\whatsappLocationService.js,used,WhatsApp location service
+backend\src\integrations\whatsapp\whatsappTemplateService.js,used,WhatsApp template service
+backend\src\integrations\whatsapp\whatsappStatusService.js,used,WhatsApp status service
+backend\src\integrations\whatsapp\whatsappService.js,used,Main WhatsApp service
+backend\src\integrations\whatsapp\whatsappMessagingService.js,used,WhatsApp messaging service
+backend\src\integrations\whatsapp\whatsappMediaService.js,used,WhatsApp media service
+backend\src\modules\contacts\services\bulkOperationsService.js,used,Bulk contact operations service
+backend\src\modules\contacts\services\contactTagsService.js,used,Contact tags service
+backend\src\modules\messages\services\retryService.js,used,Message retry service
+backend\src\modules\contacts\routes\rateLimitRoutes.js,used,Contact rate limit routes - /contacts/rate-limit
+backend\src\modules\contacts\routes\deduplicationRoutes.js,used,Contact deduplication routes - /contacts/deduplicate
+backend\src\modules\contacts\routes\bulkUtilityRoutes.js,used,Bulk utility routes - /contacts/bulk/utility
+backend\src\modules\contacts\routes\bulkTagsRoutes.js,used,Bulk tags routes - /contacts/bulk/tags
+backend\src\modules\contacts\routes\bulkOperationsRoutes.js,used,Bulk operations routes - /contacts/bulk
+backend\src\modules\messages\routes\complianceRoutes.js,used,Compliance routes - /messages/compliance
+backend\src\modules\messages\routes\conversationWindowRoutes.js,used,Conversation window routes - /messages/conversation-window
+backend\src\modules\messages\routes\conversationRoutes.js,used,Conversation routes - /conversations
+backend\src\modules\messages\routes\locationRoutes.js,used,Location message routes - /messages/location
+backend\src\modules\messages\routes\interactiveMessageRoutes.js,used,Interactive message routes - /messages/interactive
+backend\src\core\config\welcomeMessage.js,used,Welcome message configuration
+backend\src\modules\messages\routes\templateRejectionRoutes.js,used,Template rejection routes - /templates/rejections
+backend\src\modules\messages\routes\savedReplyRoutes.js,used,Saved reply routes - /saved-replies
+backend\src\modules\messages\routes\retryRoutes.js,used,Message retry routes - /messages/retry
+backend\src\jobs\qualityRatingTracker.js,used,Scheduled job - quality rating tracking
+backend\src\jobs\logCleanup.js,used,Scheduled job - log cleanup
+backend\src\jobs\flowAbandonmentTracker.js,used,Scheduled job - flow abandonment tracking
+backend\src\jobs\analyticsArchival.js,used,Scheduled job - analytics archival
+backend\src\modules\messages\routes\messageRoutes.js,used,Message routes - /messages
+backend\src\jobs\scheduledCampaignProcessor.js,used,Scheduled job - campaign processing
+backend\src\jobs\scheduledMessageProcessor.js,used,Scheduled job - message processing
+backend\src\modules\campaigns\routes\flowManagementRoutes.js,used,Flow management routes - /flows/manage
+backend\src\modules\campaigns\routes\flowAnalyticsRoutes.js,used,Flow analytics routes - /flows/analytics
+backend\src\jobs\templateStatusSync.js,used,Scheduled job - template status sync
+backend\src\modules\campaigns\routes\campaignOperationsRoutes.js,used,Campaign operations routes - /campaigns/operations
+backend\src\modules\campaigns\routes\campaignManagementRoutes.js,used,Campaign management routes - /campaigns
+backend\src\modules\business\routes\alertsRoutes.js,used,Alerts routes - /business/alerts
+backend\src\modules\business\services\workingHoursService.js,used,Working hours service
+backend\src\modules\business\routes\alertQueryRoutes.js,used,Alert query routes - /business/alerts/query
+backend\src\modules\business\services\capabilitiesService.js,used,Business capabilities service
+backend\src\modules\business\routes\alertActionRoutes.js,used,Alert action routes - /business/alerts/actions
+backend\src\modules\business\services\businessProfileService.js,used,Business profile service
+backend\src\modules\business\routes\businessLocationRoutes.js,used,Business location routes - /business/location
+backend\src\config\constants.js,used,Application constants configuration
+backend\src\modules\business\routes\teamRoutes.js,used,Team routes - /business/team
+backend\src\modules\business\routes\profileRoutes.js,used,Profile routes - /business/profile
+backend\src\modules\business\routes\workingHoursRoutes.js,used,Working hours routes - /business/working-hours
+backend\src\modules\business\routes\welcomeMessageRoutes.js,used,Welcome message routes - /business/welcome-message
+backend\src\modules\business\routes\verificationRoutes.js,used,Verification routes - /business/verification
+backend\src\modules\business\routes\optOutDetectionRoutes.js,used,Opt-out detection routes - /business/opt-out
+backend\src\scripts\indexAnalysis.js,not used - utility,Script - database index analysis
+backend\src\scripts\migrateCampaignsToSeparateRecipients.js,not used - utility,Script - campaign migration
+backend\src\scripts\generateDocumentation.js,not used - utility,Script - API documentation generation
+backend\src\scripts\createDatabaseIndexes.js,not used - utility,Script - create database indexes
+backend\src\scripts\createAllIndexes.js,not used - utility,Script - create all indexes
+backend\src\modules\business\routes\limitsRoutes.js,used,Limits routes - /business/limits
+backend\src\scripts\performanceAnalysis.js,not used - utility,Script - performance analysis
+backend\src\modules\business\routes\healthMonitoringRoutes.js,used,Health monitoring routes - /business/health
+backend\src\modules\business\routes\healthAlertsRoutes.js,used,Health alerts routes - /business/health/alerts
+backend\src\modules\business\routes\credentialsRoutes.js,used,Credentials routes - /business/credentials
+backend\src\modules\business\routes\capabilitiesRoutes.js,used,Capabilities routes - /business/capabilities
+backend\src\modules\business\routes\businessRoutes.js,used,Business routes - /business
+backend\src\modules\business\routes\businessProfileRoutes.js,used,Business profile routes - /business/profile
+backend\src\modules\analytics\services\exportService.js,used,Analytics export service
+backend\src\modules\analytics\services\conversationQualityService.js,used,Conversation quality service
+backend\src\modules\analytics\services\auditExportService.js,used,Audit export service
+backend\src\modules\analytics\routes\exportRoutes.js,used,Export routes - /analytics/export
+backend\src\modules\analytics\routes\auditLogRoutes.js,used,Audit log routes - /audit-logs
+backend\src\modules\analytics\routes\conversationQualityRoutes.js,used,Conversation quality routes - /analytics/quality
+backend\src\modules\auth\routes\auth.routes.js,used,Auth routes - /auth (login register logout)
+backend\src\modules\analytics\routes\analyticsRoutes.js,used,Analytics routes - /analytics
+backend\src\modules\analytics\routes\spendingRoutes.js,used,Spending routes - /analytics/spending
+backend\src\modules\analytics\routes\reactionRoutes.js,used,Reaction routes - /analytics/reactions
+backend\src\modules\contacts\routes\tagManagementRoutes.js,used,Tag management routes - /contacts/tags
+backend\src\modules\contacts\routes\tagAnalyticsRoutes.js,used,Tag analytics routes - /contacts/tags/analytics
+backend\src\common\utils\dbHelpers.js,used,Database helper utilities
+backend\src\common\utils\validators.js,used,Validation utilities
+backend\src\core\middlewares\auth.js,used,Authentication middleware
+backend\src\modules\campaigns\services\campaignService.js,used,Campaign service
+backend\src\core\middlewares\auditLogger.js,used,Audit logging middleware
+backend\src\modules\media\routes\media.routes.js,used,Media routes - /media
+backend\src\core\middlewares\authorization.js,used,Authorization middleware
+backend\src\modules\campaigns\services\flowService.js,used,Flow service
+backend\src\core\middlewares\errorHandler.js,used,Global error handling middleware
+backend\src\core\middlewares\rateLimiter.js,used,Rate limiting middleware
+backend\src\core\middlewares\handlerTimeout.js,used,Request timeout middleware
+backend\src\core\middlewares\validation.js,used,Input validation middleware
+backend\src\core\middlewares\responseFormatter.js,used,Response formatting middleware
+backend\src\core\middlewares\requestLogger.js,used,Request logging middleware
+backend\src\core\middlewares\redisRateLimiter.js,used,Redis-based rate limiter middleware
+backend\.env,used - secure,Environment variables (security review required)

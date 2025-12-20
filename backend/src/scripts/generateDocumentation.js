@@ -1,21 +1,68 @@
 const fs = require('fs');
 const path = require('path');
+const logger = require('../common/helpers/logger');
+const { ERROR_CODES } = require('../common/constants');
 
-// Output files
+// ========================================
+// CONSTANTS
+// ========================================
+
+// File Paths
 const API_ROUTES_CSV = path.join(__dirname, '../../API_ROUTES_DOCUMENTATION.csv');
 const MODELS_CSV = path.join(__dirname, '../../MODELS_DOCUMENTATION.csv');
 
 // CSV Headers
 const API_CSV_HEADER = 'Route Path,HTTP Method,Description,Required Permissions,User Type Required,Request Body/Query Parameters,Response Format,Module/Feature';
 const MODEL_CSV_HEADER = 'Model Name,Field Name,Field Type,Required,Default Value,Description,Validation Rules';
+
+// File Patterns
+const JAVASCRIPT_EXTENSION = '.js';
+const INDEX_FILENAME = 'index.js';
+const INDEX_IPYNB_FILENAME = 'index';
+
+// Route Detection Patterns
+const ROUTE_METHODS = ['get', 'post', 'put', 'delete', 'patch'];
+const ROUTER_PREFIX = 'router.';
+
+// Permissions
+const PERMISSION_NONE = 'None';
+const PERMISSION_ADMIN = 'Admin only';
+const PERMISSION_MANAGER = 'Manager+';
+const PERMISSION_BUSINESS = 'Business access';
+
+// User Types
+const USER_TYPE_PUBLIC = 'Public';
+const USER_TYPE_USER = 'User+';
+const USER_TYPE_MANAGER = 'Manager+';
+const USER_TYPE_ADMIN = 'Admin+';
+
+// Response Format
+const RESPONSE_FORMAT_JSON = 'JSON';
+
+// Default Values
+const NO_PARAMS = 'None';
+const EMPTY_STRING = '';
+
+// Comment Detection
+const COMMENT_LOOKAHEAD_LINES = 5;
+const COMMENT_LOOKBACK_LINES = 3;
+
+// Field Types
+const FIELD_TYPE_MIXED = 'Mixed';
+const FIELD_TYPE_ARRAY = 'Array';
+const FIELD_TYPE_OBJECT = 'Object';
+
+// Script Status
+const EXIT_CODE_SUCCESS = 0;
+const EXIT_CODE_FAILURE = 1;
  
 /**
  * Extract routes from a route file
  */
-function extractRoutesFromFile(filePath, modulePrefix = '') {
+function extractRoutesFromFile(filePath, modulePrefix = EMPTY_STRING) {
     const routes = [];
     const content = fs.readFileSync(filePath, 'utf8');
-    const fileName = path.basename(filePath, '.js');
+    const fileName = path.basename(filePath, JAVASCRIPT_EXTENSION);
     
     // Extract module name from path
     const relativePath = path.relative(path.join(__dirname, '../routes'), filePath);
@@ -39,9 +86,9 @@ function extractRoutesFromFile(filePath, modulePrefix = '') {
             let description = line.replace(/^(\/\/|\*)\s*/, '').trim();
             
             // Check if next few lines contain a route definition
-            for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
+            for (let j = i + 1; j < Math.min(i + COMMENT_LOOKAHEAD_LINES, lines.length); j++) {
                 const nextLine = lines[j];
-                if (nextLine.includes('router.')) {
+                if (nextLine.includes(ROUTER_PREFIX)) {
                     const routeMatch = nextLine.match(/router\.(get|post|put|delete|patch)\s*\(\s*['"`]([^'"`]+)['"`]/);
                     if (routeMatch) {
                         const key = `${routeMatch[1]}_${routeMatch[2]}`;
@@ -71,7 +118,7 @@ function extractRoutesFromFile(filePath, modulePrefix = '') {
             permissions: extractPermissions(middleware),
             userType: extractUserType(middleware),
             requestParams: extractRequestParams(content, routePath),
-            responseFormat: 'JSON',
+            responseFormat: RESPONSE_FORMAT_JSON,
             module: formatModuleName(module)
         });
     }
@@ -106,22 +153,22 @@ function extractPermissions(middleware) {
         return permissionMatch[1];
     }
     
-    if (middleware.includes('requireAdmin')) return 'Admin only';
-    if (middleware.includes('requireManager')) return 'Manager+';
-    if (middleware.includes('requireBusiness')) return 'Business access';
+    if (middleware.includes('requireAdmin')) return PERMISSION_ADMIN;
+    if (middleware.includes('requireManager')) return PERMISSION_MANAGER;
+    if (middleware.includes('requireBusiness')) return PERMISSION_BUSINESS;
     
-    return 'None';
+    return PERMISSION_NONE;
 }
 
 /**
  * Extract user type requirement
  */
 function extractUserType(middleware) {
-    if (middleware.includes('requireAdmin')) return 'Admin+';
-    if (middleware.includes('requireManager')) return 'Manager+';
-    if (middleware.includes('requireBusiness')) return 'User+';
-    if (middleware.includes('auth')) return 'User+';
-    return 'Public';
+    if (middleware.includes('requireAdmin')) return USER_TYPE_ADMIN;
+    if (middleware.includes('requireManager')) return USER_TYPE_MANAGER;
+    if (middleware.includes('requireBusiness')) return USER_TYPE_USER;
+    if (middleware.includes('auth')) return USER_TYPE_USER;
+    return USER_TYPE_PUBLIC;
 }
 
 /**
@@ -146,7 +193,7 @@ function extractRequestParams(content, routePath) {
         params.push('query params');
     }
     
-    return params.length > 0 ? params.join(', ') : 'None';
+    return params.length > 0 ? params.join(', ') : NO_PARAMS;
 }
 
 /**
@@ -162,7 +209,7 @@ function formatModuleName(module) {
 /**
  * Scan all route files in a directory
  */
-function scanRoutesDirectory(dir, prefix = '') {
+function scanRoutesDirectory(dir, prefix = EMPTY_STRING) {
     let allRoutes = [];
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     
@@ -173,7 +220,7 @@ function scanRoutesDirectory(dir, prefix = '') {
             // Recursively scan subdirectories
             const subRoutes = scanRoutesDirectory(fullPath, prefix);
             allRoutes = allRoutes.concat(subRoutes);
-        } else if (entry.isFile() && entry.name.endsWith('.js') && entry.name !== 'index.js') {
+        } else if (entry.isFile() && entry.name.endsWith(JAVASCRIPT_EXTENSION) && entry.name !== INDEX_FILENAME) {
             // Extract routes from file
             const routes = extractRoutesFromFile(fullPath, prefix);
             allRoutes = allRoutes.concat(routes);
@@ -189,10 +236,10 @@ function scanRoutesDirectory(dir, prefix = '') {
 function extractModelInfo(modelPath) {
     const fields = [];
     const content = fs.readFileSync(modelPath, 'utf8');
-    const modelName = path.basename(modelPath, '.js');
+    const modelName = path.basename(modelPath, JAVASCRIPT_EXTENSION);
     
     // Skip index.js
-    if (modelName === 'index') return fields;
+    if (modelName === INDEX_IPYNB_FILENAME) return fields;
     
     // Extract schema definition - handle multiple formats
     let schemaContent = '';
@@ -272,9 +319,9 @@ function parseFieldDefinition(fieldName, fieldDef, fields, modelName) {
     // Skip if already exists
     if (fields.some(f => f.fieldName === fieldName)) return;
     
-    let fieldType = 'Mixed';
+    let fieldType = FIELD_TYPE_MIXED;
     let required = 'false';
-    let defaultValue = '';
+    let defaultValue = EMPTY_STRING;
     
     // Extract type
     if (fieldDef.includes('type:')) {
@@ -284,9 +331,9 @@ function parseFieldDefinition(fieldName, fieldDef, fields, modelName) {
         const simpleTypeMatch = fieldDef.match(/^\s*(String|Number|Boolean|Date|ObjectId|Array|Buffer)/);
         if (simpleTypeMatch) fieldType = simpleTypeMatch[1];
     } else if (fieldDef.includes('[')) {
-        fieldType = 'Array';
+        fieldType = FIELD_TYPE_ARRAY;
     } else if (fieldDef.includes('{')) {
-        fieldType = 'Object';
+        fieldType = FIELD_TYPE_OBJECT;
     }
     
     // Extract required
@@ -297,7 +344,7 @@ function parseFieldDefinition(fieldName, fieldDef, fields, modelName) {
     // Extract default
     const defaultMatch = fieldDef.match(/default:\s*([^,}\n]+)/);
     if (defaultMatch) {
-        defaultValue = defaultMatch[1].trim().replace(/['"]/g, '');
+        defaultValue = defaultMatch[1].trim().replace(/['"]/g, EMPTY_STRING);
     }
     
     fields.push({
@@ -306,7 +353,7 @@ function parseFieldDefinition(fieldName, fieldDef, fields, modelName) {
         fieldType: fieldType,
         required: required,
         defaultValue: defaultValue,
-        description: '',
+        description: EMPTY_STRING,
         validation: extractValidation(fieldDef)
     });
 }
@@ -320,16 +367,16 @@ function extractFieldDescription(content, fieldName) {
     for (let i = 0; i < lines.length; i++) {
         if (lines[i].includes(fieldName + ':')) {
             // Look backwards for comments
-            for (let j = i - 1; j >= Math.max(0, i - 3); j--) {
+            for (let j = i - 1; j >= Math.max(0, i - COMMENT_LOOKBACK_LINES); j--) {
                 const line = lines[j].trim();
                 if (line.startsWith('//')) {
-                    return line.replace(/^\/\/\s*/, '');
+                    return line.replace(/^\/\/\s*/, EMPTY_STRING);
                 }
             }
         }
     }
     
-    return '';
+    return EMPTY_STRING;
 }
 
 /**
@@ -369,7 +416,7 @@ function scanModelsDirectory(dir) {
     for (const entry of entries) {
         const fullPath = path.join(dir, entry.name);
         
-        if (entry.isFile() && entry.name.endsWith('.js') && entry.name !== 'index.js') {
+        if (entry.isFile() && entry.name.endsWith(JAVASCRIPT_EXTENSION) && entry.name !== INDEX_FILENAME) {
             const fields = extractModelInfo(fullPath);
             allFields = allFields.concat(fields);
         }
@@ -455,47 +502,97 @@ function escapeCSV(value) {
  * Main execution
  */
 function main() {
-    console.log('🔍 Scanning route files...');
-    const routesDir = path.join(__dirname, '../routes');
-    const routes = scanRoutesDirectory(routesDir);
-    console.log(`✅ Found ${routes.length} routes`);
+    const startTime = Date.now();
     
-    console.log('\n🔍 Scanning model files...');
-    const modelsDir = path.join(__dirname, '../models');
-    const fields = scanModelsDirectory(modelsDir);
-    console.log(`✅ Found ${fields.length} model fields`);
-    
-    console.log('\n📝 Generating API Routes CSV...');
-    const routesCSV = generateRoutesCSV(routes);
-    fs.writeFileSync(API_ROUTES_CSV, routesCSV, 'utf8');
-    console.log(`✅ Saved to ${API_ROUTES_CSV}`);
-    
-    console.log('\n📝 Generating Models CSV...');
-    const modelsCSV = generateModelsCSV(fields);
-    fs.writeFileSync(MODELS_CSV, modelsCSV, 'utf8');
-    console.log(`✅ Saved to ${MODELS_CSV}`);
-    
-    console.log('\n✨ Documentation generation complete!');
-    console.log(`\nSummary:`);
-    console.log(`- Total Routes: ${routes.length}`);
-    console.log(`- Total Model Fields: ${fields.length}`);
-    console.log(`- Routes by Module:`);
-    
-    const moduleStats = {};
-    routes.forEach(r => {
-        moduleStats[r.module] = (moduleStats[r.module] || 0) + 1;
-    });
-    
-    Object.entries(moduleStats)
-        .sort((a, b) => b[1] - a[1])
-        .forEach(([module, count]) => {
-            console.log(`  - ${module}: ${count} routes`);
+    try {
+        logger.info('Starting documentation generation...');
+        
+        logger.info('Scanning route files...');
+        const routeScanStartTime = Date.now();
+        const routesDir = path.join(__dirname, '../routes');
+        const routes = scanRoutesDirectory(routesDir);
+        const routeScanTime = Date.now() - routeScanStartTime;
+        logger.info('Route scanning complete', {
+            routesFound: routes.length,
+            scanTime: `${routeScanTime}ms`
         });
+        
+        logger.info('Scanning model files...');
+        const modelScanStartTime = Date.now();
+        const modelsDir = path.join(__dirname, '../models');
+        const fields = scanModelsDirectory(modelsDir);
+        const modelScanTime = Date.now() - modelScanStartTime;
+        logger.info('Model scanning complete', {
+            fieldsFound: fields.length,
+            scanTime: `${modelScanTime}ms`
+        });
+        
+        logger.info('Generating API Routes CSV...');
+        const routesCsvStartTime = Date.now();
+        const routesCSV = generateRoutesCSV(routes);
+        fs.writeFileSync(API_ROUTES_CSV, routesCSV, 'utf8');
+        const routesCsvTime = Date.now() - routesCsvStartTime;
+        logger.info('API Routes CSV saved', {
+            filePath: API_ROUTES_CSV,
+            generateTime: `${routesCsvTime}ms`
+        });
+        
+        logger.info('Generating Models CSV...');
+        const modelsCsvStartTime = Date.now();
+        const modelsCSV = generateModelsCSV(fields);
+        fs.writeFileSync(MODELS_CSV, modelsCSV, 'utf8');
+        const modelsCsvTime = Date.now() - modelsCsvStartTime;
+        logger.info('Models CSV saved', {
+            filePath: MODELS_CSV,
+            generateTime: `${modelsCsvTime}ms`
+        });
+        
+        const totalTime = Date.now() - startTime;
+        
+        logger.info('Documentation generation complete!');
+        logger.info('Summary:', {
+            totalRoutes: routes.length,
+            totalModelFields: fields.length,
+            totalExecutionTime: `${totalTime}ms`
+        });
+        
+        const moduleStats = {};
+        routes.forEach(r => {
+            moduleStats[r.module] = (moduleStats[r.module] || 0) + 1;
+        });
+        
+        logger.info('Routes by Module:');
+        Object.entries(moduleStats)
+            .sort((a, b) => b[1] - a[1])
+            .forEach(([module, count]) => {
+                logger.info(`  - ${module}: ${count} routes`);
+            });
+            
+    } catch (error) {
+        const executionTime = Date.now() - startTime;
+        logger.error('Documentation generation failed', {
+            error: error.message,
+            stack: error.stack,
+            code: error.code || ERROR_CODES.INTERNAL_ERROR,
+            executionTime: `${executionTime}ms`
+        });
+        throw error;
+    }
 }
 
 // Run the script
 if (require.main === module) {
-    main();
+    try {
+        main();
+        logger.info('Script completed successfully');
+        process.exit(EXIT_CODE_SUCCESS);
+    } catch (error) {
+        logger.error('Script failed', {
+            error: error.message,
+            stack: error.stack
+        });
+        process.exit(EXIT_CODE_FAILURE);
+    }
 }
 
 module.exports = { scanRoutesDirectory, scanModelsDirectory, generateRoutesCSV, generateModelsCSV };

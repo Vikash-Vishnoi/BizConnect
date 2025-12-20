@@ -10,28 +10,37 @@
  * - Followed by subscriber number (4-14 digits)
  * - Total length: 8-15 characters (including +)
  * - No spaces, dashes, or special characters
+ * 
+ * @module common/helpers/phoneValidator
  */
+
+const logger = require('./logger');
+
+// E.164 format regex pattern
+const E164_REGEX = /^\+[1-9]\d{1,14}$/;
+
+// Common country codes (3-digit)
+const THREE_DIGIT_COUNTRY_CODES = ['971', '966', '965', '968', '974', '973', '964', '962', '963'];
+
+// Phone number length constraints
+const PHONE_CONSTRAINTS = {
+  MIN_LENGTH: 8,
+  MAX_LENGTH: 15,
+  MIN_COUNTRY_CODE_LENGTH: 1,
+  MAX_COUNTRY_CODE_LENGTH: 3,
+};
  
 /**
  * Validate phone number in E.164 format
  * @param {string} phoneNumber - Phone number to validate
  * @returns {boolean} - True if valid, false otherwise
  */
-const isValidPhoneNumber = (phoneNumber) => {
+const isValidPhoneNumber = phoneNumber => {
   if (!phoneNumber || typeof phoneNumber !== 'string') {
     return false;
   }
 
-  // E.164 format regex
-  // ^\\+[1-9]\\d{1,14}$
-  // ^ = start of string
-  // \\+ = literal plus sign
-  // [1-9] = first digit (1-9, no leading zero in country code)
-  // \\d{1,14} = 1 to 14 more digits
-  // $ = end of string
-  const e164Regex = /^\+[1-9]\d{1,14}$/;
-  
-  return e164Regex.test(phoneNumber);
+  return E164_REGEX.test(phoneNumber);
 };
 
 /**
@@ -42,31 +51,39 @@ const isValidPhoneNumber = (phoneNumber) => {
  * @returns {string} - Formatted phone number or original if can't format
  */
 const formatToE164 = (phoneNumber, defaultCountryCode = '1') => {
-  if (!phoneNumber) return phoneNumber;
-
-  // Remove all non-digit characters
-  let cleaned = phoneNumber.replace(/\D/g, '');
-
-  // If already starts with +, return as is if valid
-  if (phoneNumber.startsWith('+') && isValidPhoneNumber(phoneNumber)) {
+  if (!phoneNumber) {
     return phoneNumber;
   }
 
-  // If doesn't start with country code, add default
-  if (!cleaned.startsWith(defaultCountryCode) && cleaned.length >= 10) {
-    cleaned = defaultCountryCode + cleaned;
+  try {
+    // Remove all non-digit characters
+    let cleaned = phoneNumber.replace(/\D/g, '');
+
+    // If already starts with +, return as is if valid
+    if (phoneNumber.startsWith('+') && isValidPhoneNumber(phoneNumber)) {
+      return phoneNumber;
+    }
+
+    // If doesn't start with country code, add default
+    if (!cleaned.startsWith(defaultCountryCode) && cleaned.length >= 10) {
+      cleaned = defaultCountryCode + cleaned;
+    }
+
+    // Add + prefix
+    const formatted = `+${cleaned}`;
+
+    // Validate the formatted number
+    if (isValidPhoneNumber(formatted)) {
+      return formatted;
+    }
+
+    // If can't format properly, return original
+    logger.debug('Unable to format phone number to E.164', { phoneNumber });
+    return phoneNumber;
+  } catch (error) {
+    logger.error('Error formatting phone number', { phoneNumber, error: error.message });
+    return phoneNumber;
   }
-
-  // Add + prefix
-  const formatted = '+' + cleaned;
-
-  // Validate the formatted number
-  if (isValidPhoneNumber(formatted)) {
-    return formatted;
-  }
-
-  // If can't format properly, return original
-  return phoneNumber;
 };
 
 /**
@@ -88,28 +105,34 @@ const sanitizePhoneNumber = (phoneNumber) => {
  * @param {string} phoneNumber - Phone number in E.164 format
  * @returns {string|null} - Country code or null if invalid
  */
-const extractCountryCode = (phoneNumber) => {
+const extractCountryCode = phoneNumber => {
   if (!isValidPhoneNumber(phoneNumber)) {
     return null;
   }
 
-  // Remove + and get first 1-3 digits
-  const digits = phoneNumber.substring(1);
-  
-  // Try 3-digit codes first (e.g., +971 UAE)
-  const threeDigit = digits.substring(0, 3);
-  if (['971', '966', '965', '968', '974', '973'].includes(threeDigit)) {
-    return threeDigit;
-  }
+  try {
+    // Remove + and get first 1-3 digits
+    const digits = phoneNumber.substring(1);
+    
+    // Try 3-digit codes first (e.g., +971 UAE)
+    const threeDigit = digits.substring(0, 3);
+    if (THREE_DIGIT_COUNTRY_CODES.includes(threeDigit)) {
+      return threeDigit;
+    }
 
-  // Try 2-digit codes (e.g., +91 India, +44 UK)
-  const twoDigit = digits.substring(0, 2);
-  if (parseInt(twoDigit) >= 20 && parseInt(twoDigit) <= 99) {
-    return twoDigit;
-  }
+    // Try 2-digit codes (e.g., +91 India, +44 UK)
+    const twoDigit = digits.substring(0, 2);
+    const twoDigitNum = parseInt(twoDigit, 10);
+    if (twoDigitNum >= 20 && twoDigitNum <= 99) {
+      return twoDigit;
+    }
 
-  // Default to 1-digit code (e.g., +1 US/Canada)
-  return digits.substring(0, 1);
+    // Default to 1-digit code (e.g., +1 US/Canada)
+    return digits.substring(0, 1);
+  } catch (error) {
+    logger.error('Error extracting country code', { phoneNumber, error: error.message });
+    return null;
+  }
 };
 
 /**
@@ -117,17 +140,22 @@ const extractCountryCode = (phoneNumber) => {
  * @param {string} phoneNumber - Phone number in E.164 format
  * @returns {string|null} - Phone number without country code or null if invalid
  */
-const getNumberWithoutCountryCode = (phoneNumber) => {
+const getNumberWithoutCountryCode = phoneNumber => {
   if (!isValidPhoneNumber(phoneNumber)) {
     return null;
   }
 
-  const countryCode = extractCountryCode(phoneNumber);
-  if (!countryCode) {
+  try {
+    const countryCode = extractCountryCode(phoneNumber);
+    if (!countryCode) {
+      return null;
+    }
+
+    return phoneNumber.substring(1 + countryCode.length);
+  } catch (error) {
+    logger.error('Error removing country code', { phoneNumber, error: error.message });
     return null;
   }
-
-  return phoneNumber.substring(1 + countryCode.length);
 };
 
 /**

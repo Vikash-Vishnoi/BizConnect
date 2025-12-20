@@ -1,6 +1,18 @@
 const cron = require('node-cron');
+const logger = require('../common/helpers/logger');
 const AuditLog = require('../core/database/models/AuditLog');
 const AlertLog = require('../core/database/models/AlertLog');
+
+// Constants for log retention policies
+const RETENTION_AUDIT_LOG_DAYS = 90; // 90 days for audit compliance
+const RETENTION_ALERT_LOG_DAYS = 30; // 30 days (includes message errors)
+const STATS_PERIOD_30_DAYS = 30; // 30 days period for statistics
+const STATS_PERIOD_60_DAYS = 60; // 60 days period for statistics
+const STATS_PERIOD_90_DAYS = 90; // 90 days period for statistics
+const CRON_SCHEDULE_DAILY_2AM = '0 2 * * *'; // Run daily at 2:00 AM
+const ARCHIVE_DIR_PATH = '../logs/archive'; // Archive directory path
+const FILE_ENCODING_UTF8 = 'utf8'; // File encoding
+const JSON_INDENT_SPACES = 2; // JSON indentation spaces
 
 /**
  * Log Retention Policy Job
@@ -14,8 +26,8 @@ const AlertLog = require('../core/database/models/AlertLog');
  */
 
 const RETENTION_POLICIES = {
-  AuditLog: 90,      // 90 days for audit compliance
-  AlertLog: 30       // 30 days (includes message errors)
+  AuditLog: RETENTION_AUDIT_LOG_DAYS,
+  AlertLog: RETENTION_ALERT_LOG_DAYS
 };
 
 /**
@@ -23,7 +35,7 @@ const RETENTION_POLICIES = {
  */
 const cleanupOldLogs = async () => {
   try {
-    console.log('[Log Cleanup] Starting log cleanup process...');
+    logger.info('Starting log cleanup process');
 
     const results = {
       AuditLog: 0,
@@ -38,7 +50,10 @@ const cleanupOldLogs = async () => {
       createdAt: { $lt: auditLogThreshold }
     });
     results.AuditLog = auditLogResult.deletedCount;
-    console.log(`[Log Cleanup] Deleted ${auditLogResult.deletedCount} AuditLog records older than ${RETENTION_POLICIES.AuditLog} days`);
+    logger.info('Deleted AuditLog records', {
+      count: auditLogResult.deletedCount,
+      retentionDays: RETENTION_POLICIES.AuditLog
+    });
 
     // Clean up AlertLog (30 days)
     const alertLogThreshold = new Date();
@@ -48,12 +63,17 @@ const cleanupOldLogs = async () => {
       createdAt: { $lt: alertLogThreshold }
     });
     results.AlertLog = alertLogResult.deletedCount;
-    console.log(`[Log Cleanup] Deleted ${alertLogResult.deletedCount} AlertLog records older than ${RETENTION_POLICIES.AlertLog} days`);
+    logger.info('Deleted AlertLog records', {
+      count: alertLogResult.deletedCount,
+      retentionDays: RETENTION_POLICIES.AlertLog
+    });
 
     // Summary
     const totalDeleted = Object.values(results).reduce((sum, count) => sum + count, 0);
-    console.log(`[Log Cleanup] Total records deleted: ${totalDeleted}`);
-    console.log('[Log Cleanup] Cleanup process completed successfully');
+    logger.info('Log cleanup completed successfully', {
+      totalDeleted,
+      breakdown: results
+    });
 
     return {
       success: true,
@@ -61,7 +81,7 @@ const cleanupOldLogs = async () => {
       totalDeleted
     };
   } catch (error) {
-    console.error('[Log Cleanup] Error during cleanup:', error);
+    logger.error('Error during log cleanup', { error: error.message });
     return {
       success: false,
       error: error.message
@@ -78,13 +98,13 @@ const getLogStatistics = async () => {
 
     // Count logs by age
     const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - STATS_PERIOD_30_DAYS);
     
     const sixtyDaysAgo = new Date();
-    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+    sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - STATS_PERIOD_60_DAYS);
     
     const ninetyDaysAgo = new Date();
-    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+    ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - STATS_PERIOD_90_DAYS);
 
     // AuditLog stats
     stats.AuditLog = {
@@ -104,7 +124,7 @@ const getLogStatistics = async () => {
  
     return stats;
   } catch (error) {
-    console.error('[Log Cleanup] Error getting log statistics:', error);
+    logger.error('Error getting log statistics', { error: error.message });
     return null;
   }
 };
@@ -123,7 +143,7 @@ const archiveLogsBeforeDeletion = async (model, threshold, filename) => {
       const fs = require('fs');
       const path = require('path');
       
-      const archiveDir = path.join(__dirname, '../logs/archive');
+      const archiveDir = path.join(__dirname, ARCHIVE_DIR_PATH);
       
       // Create archive directory if it doesn't exist
       if (!fs.existsSync(archiveDir)) {
@@ -131,15 +151,18 @@ const archiveLogsBeforeDeletion = async (model, threshold, filename) => {
       }
 
       const archivePath = path.join(archiveDir, `${filename}_${new Date().toISOString().split('T')[0]}.json`);
-      fs.writeFileSync(archivePath, JSON.stringify(logsToArchive, null, 2));
+      fs.writeFileSync(archivePath, JSON.stringify(logsToArchive, null, JSON_INDENT_SPACES));
       
-      console.log(`[Log Cleanup] Archived ${logsToArchive.length} logs to ${archivePath}`);
+      logger.info('Archived logs before deletion', {
+        count: logsToArchive.length,
+        path: archivePath
+      });
       return logsToArchive.length;
     }
 
     return 0;
   } catch (error) {
-    console.error('[Log Cleanup] Error archiving logs:', error);
+    logger.error('Error archiving logs', { error: error.message });
     return 0;
   }
 };
@@ -173,14 +196,18 @@ const cleanupLogType = async (logType, archiveBeforeDelete = false) => {
       createdAt: { $lt: threshold }
     });
 
-    console.log(`[Log Cleanup] Deleted ${result.deletedCount} ${logType} records older than ${retentionDays} days`);
+    logger.info('Deleted log type records', {
+      logType,
+      count: result.deletedCount,
+      retentionDays
+    });
     
     return {
       success: true,
       deletedCount: result.deletedCount
     };
   } catch (error) {
-    console.error(`[Log Cleanup] Error cleaning up ${logType}:`, error);
+    logger.error('Error cleaning up log type', { logType, error: error.message });
     return {
       success: false,
       error: error.message
@@ -194,12 +221,12 @@ const cleanupLogType = async (logType, archiveBeforeDelete = false) => {
  */
 const scheduleLogCleanup = () => {
   // Run every day at 2:00 AM
-  cron.schedule('0 2 * * *', async () => {
-    console.log('[Log Cleanup] Starting scheduled cleanup job...');
+  cron.schedule(CRON_SCHEDULE_DAILY_2AM, async () => {
+    logger.info('Starting scheduled log cleanup job');
     await cleanupOldLogs();
   });
 
-  console.log('[Log Cleanup] Scheduled to run daily at 2:00 AM');
+  logger.info('Log cleanup scheduled to run daily at 2:00 AM');
 };
 
 // Export functions

@@ -1,6 +1,15 @@
 const cron = require('node-cron');
+const logger = require('../common/helpers/logger');
 const { Campaign } = require('../core/database/models');
 const campaignService = require('../modules/campaigns/services/campaignService');
+
+// Constants for scheduled campaign processing
+const CRON_SCHEDULE_EVERY_MINUTE = '* * * * *'; // Run every minute
+const CAMPAIGN_STATUS_SCHEDULED = 'scheduled'; // Scheduled campaign status
+const CAMPAIGN_STATUS_FAILED = 'failed'; // Failed campaign status
+const CAMPAIGN_SCHEDULE_TYPE_SCHEDULED = 'scheduled'; // Scheduled type
+const DEFAULT_CAMPAIGN_BATCH_SIZE = 50; // Default batch size for processing campaigns
+const CRON_TIMEZONE = 'UTC'; // Timezone for cron jobs
 
 let isProcessing = false;
 
@@ -11,30 +20,31 @@ let isProcessing = false;
 const processScheduledCampaigns = async () => {
   // Prevent concurrent processing
   if (isProcessing) {
-    console.log('⏳ Scheduled campaign processor already running, skipping...');
+    logger.debug('Scheduled campaign processor already running, skipping');
     return;
   } 
 
   isProcessing = true;
+  const startTime = Date.now();
 
   try {
     const now = new Date();
-    console.log(`🕐 [${now.toISOString()}] Processing scheduled campaigns...`);
+    logger.info('Processing scheduled campaigns', { timestamp: now.toISOString() });
 
     // Find scheduled campaigns that are due to start
     const campaigns = await Campaign.find({
-      status: 'scheduled',
-      'schedule.type': 'scheduled',
+      status: CAMPAIGN_STATUS_SCHEDULED,
+      'schedule.type': CAMPAIGN_SCHEDULE_TYPE_SCHEDULED,
       'schedule.scheduledFor': { $lte: now }
-    }).limit(50); // Process 50 campaigns at a time
+    }).limit(DEFAULT_CAMPAIGN_BATCH_SIZE);
 
     if (campaigns.length === 0) {
-      console.log('✅ No scheduled campaigns to process');
+      logger.debug('No scheduled campaigns to process');
       isProcessing = false;
       return;
     }
 
-    console.log(`📢 Found ${campaigns.length} scheduled campaigns to start`);
+    logger.info('Found scheduled campaigns to start', { count: campaigns.length });
 
     let successCount = 0;
     let failCount = 0;
@@ -42,7 +52,11 @@ const processScheduledCampaigns = async () => {
     // Process each campaign
     for (const campaign of campaigns) {
       try {
-        console.log(`🚀 Starting campaign: ${campaign.name} (${campaign._id})`);
+        logger.info('Starting scheduled campaign', {
+          campaignId: campaign._id,
+          name: campaign.name,
+          businessId: campaign.businessId?.toString()
+        });
         
         // Validate campaign has required data
         if (!campaign.businessId) {
@@ -54,28 +68,49 @@ const processScheduledCampaigns = async () => {
         
         successCount++;
         
-        console.log(`✅ Campaign ${campaign._id} started successfully`);
+        logger.info('Campaign started successfully', { 
+          campaignId: campaign._id,
+          businessId: campaign.businessId?.toString()
+        });
 
       } catch (error) {
-        console.error(`❌ Failed to start campaign ${campaign._id}:`, error.message);
+        logger.error('Failed to start campaign', {
+          campaignId: campaign._id,
+          businessId: campaign.businessId?.toString(),
+          error: error.message
+        });
         
         // Update campaign status to failed
         try {
-          campaign.status = 'failed';
+          campaign.status = CAMPAIGN_STATUS_FAILED;
           campaign.error = error.message;
           await campaign.save();
         } catch (saveError) {
-          console.error(`❌ Failed to update campaign status:`, saveError.message);
+          logger.error('Failed to update campaign status', {
+            campaignId: campaign._id,
+            error: saveError.message
+          });
         }
         
         failCount++;
       }
     }
 
-    console.log(`✅ Processed ${campaigns.length} campaigns: ${successCount} started, ${failCount} failed`);
+    const processingTime = Date.now() - startTime;
+
+    logger.info('Processed scheduled campaigns', {
+      total: campaigns.length,
+      started: successCount,
+      failed: failCount,
+      processingTime: processingTime + 'ms'
+    });
 
   } catch (error) {
-    console.error('❌ Error in scheduled campaign processor:', error);
+    const processingTime = Date.now() - startTime;
+    logger.error('Error in scheduled campaign processor', { 
+      error: error.message,
+      processingTime: processingTime + 'ms'
+    });
   } finally {
     isProcessing = false;
   }
@@ -85,14 +120,19 @@ const processScheduledCampaigns = async () => {
  * Start the cron job
  */
 const startScheduledCampaignProcessor = () => {
-  console.log('🚀 Starting scheduled campaign processor (runs every minute)...');
-
-  // Run every minute: '* * * * *'
-  cron.schedule('* * * * *', () => {
-    processScheduledCampaigns();
+  logger.info('Starting scheduled campaign processor', {
+    schedule: CRON_SCHEDULE_EVERY_MINUTE,
+    timezone: CRON_TIMEZONE
   });
 
-  console.log('✅ Scheduled campaign processor started');
+  // Run every minute
+  cron.schedule(CRON_SCHEDULE_EVERY_MINUTE, () => {
+    processScheduledCampaigns();
+  }, {
+    timezone: CRON_TIMEZONE
+  });
+
+  logger.info('Scheduled campaign processor started successfully');
 };
 
 module.exports = {

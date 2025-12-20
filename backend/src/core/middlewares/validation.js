@@ -1,34 +1,105 @@
 const { body, param, query, validationResult } = require('express-validator');
+const logger = require('../../common/helpers/logger');
+const { HTTP_STATUS } = require('../../common/constants/app.constants');
 
 /**
  * Validation Middleware
  * Express-validator rules for input validation
+ * Phase 28: Refactored with constants, structured logging, and performance tracking
  */
 
-// Configuration from environment variables
-const MAX_MESSAGE_LENGTH = parseInt(process.env.MAX_MESSAGE_LENGTH) || 4096;
-const MAX_TEMPLATE_NAME_LENGTH = parseInt(process.env.MAX_TEMPLATE_NAME_LENGTH) || 512;
-const MAX_CAMPAIGN_RECIPIENTS = parseInt(process.env.MAX_CAMPAIGN_RECIPIENTS) || 10000;
-const MIN_PASSWORD_LENGTH = parseInt(process.env.MIN_PASSWORD_LENGTH) || 6;
-const MAX_NAME_LENGTH = parseInt(process.env.MAX_NAME_LENGTH) || 100;
-const MAX_DESCRIPTION_LENGTH = parseInt(process.env.MAX_DESCRIPTION_LENGTH) || 1000;
-const MAX_BULK_CONTACTS = parseInt(process.env.MAX_BULK_CONTACTS) || 1000;
-const MAX_SEND_RATE = parseInt(process.env.MAX_SEND_RATE) || 80;
+// ========================================
+// CONSTANTS
+// ========================================
+
+// Validation limits
+const VALIDATION_LIMITS = {
+  MAX_MESSAGE_LENGTH: parseInt(process.env.MAX_MESSAGE_LENGTH) || 4096,
+  MAX_TEMPLATE_NAME_LENGTH: parseInt(process.env.MAX_TEMPLATE_NAME_LENGTH) || 512,
+  MAX_CAMPAIGN_RECIPIENTS: parseInt(process.env.MAX_CAMPAIGN_RECIPIENTS) || 10000,
+  MIN_PASSWORD_LENGTH: parseInt(process.env.MIN_PASSWORD_LENGTH) || 6,
+  MAX_NAME_LENGTH: parseInt(process.env.MAX_NAME_LENGTH) || 100,
+  MAX_DESCRIPTION_LENGTH: parseInt(process.env.MAX_DESCRIPTION_LENGTH) || 1000,
+  MAX_BULK_CONTACTS: parseInt(process.env.MAX_BULK_CONTACTS) || 1000,
+  MAX_SEND_RATE: parseInt(process.env.MAX_SEND_RATE) || 80,
+  MIN_NAME_LENGTH: 2,
+  MIN_CAMPAIGN_NAME_LENGTH: 3,
+  MAX_CAMPAIGN_NAME_LENGTH: 200,
+  MAX_TAG_LENGTH: 50,
+  MAX_NOTES_LENGTH: 1000,
+  MAX_SEARCH_LENGTH: 200,
+  MIN_PAGINATION_LIMIT: 1,
+  MAX_PAGINATION_LIMIT: 100,
+  MIN_PAGE_NUMBER: 1,
+  MAX_RETRIES: 10,
+  MIN_RETRIES: 0,
+  MAX_SCHEDULED_MESSAGE_RETRIES: 5
+};
+
+// Phone number regex (E.164 format)
+const PHONE_NUMBER_REGEX = /^\+?[1-9]\d{1,14}$/;
+
+// Template name regex (lowercase, numbers, underscores only)
+const TEMPLATE_NAME_REGEX = /^[a-z0-9_]+$/;
+
+// Log context labels
+const LOG_CONTEXT = {
+  VALIDATION_ERROR: 'Validation error',
+  VALIDATION_PROCESSED: 'Validation processed'
+};
+
+// ========================================
+// VALIDATION ERROR HANDLER
+// ========================================
 
 // Middleware to handle validation errors
 const handleValidationErrors = (req, res, next) => {
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({
-      error: 'Validation failed',
-      details: errors.array().map(err => ({
-        field: err.path,
-        message: err.msg,
-        value: err.value
-      }))
+  const startTime = Date.now();
+  
+  try {
+    const errors = validationResult(req);
+    
+    if (!errors.isEmpty()) {
+      const processingTime = Date.now() - startTime;
+      const errorArray = errors.array();
+      
+      logger.warn(LOG_CONTEXT.VALIDATION_ERROR, {
+        path: req.path,
+        method: req.method,
+        errorCount: errorArray.length,
+        errors: errorArray.map(err => ({
+          field: err.path,
+          message: err.msg
+        })),
+        processingTime: `${processingTime}ms`,
+        userId: req.userId ? req.userId.toString() : 'anonymous',
+        businessId: req.businessId ? req.businessId.toString() : undefined
+      });
+      
+      return res.validationError(
+        errorArray.map(err => ({
+          field: err.path,
+          message: err.msg,
+          value: err.value
+        }))
+      );
+    }
+    
+    const processingTime = Date.now() - startTime;
+    logger.debug(LOG_CONTEXT.VALIDATION_PROCESSED, { 
+      path: req.path,
+      processingTime: `${processingTime}ms` 
     });
+    
+    next();
+  } catch (error) {
+    const processingTime = Date.now() - startTime;
+    logger.error('Validation middleware error', { 
+      error: error.message, 
+      processingTime: `${processingTime}ms` 
+    });
+    next(error);
   }
-  next();
 };
 
 // ========================================
@@ -39,7 +110,7 @@ const validateRegister = [
   body('name')
     .trim()
     .notEmpty().withMessage('Name is required')
-    .isLength({ min: 2, max: 100 }).withMessage('Name must be between 2 and 100 characters'),
+    .isLength({ min: VALIDATION_LIMITS.MIN_NAME_LENGTH, max: VALIDATION_LIMITS.MAX_NAME_LENGTH }).withMessage(`Name must be between ${VALIDATION_LIMITS.MIN_NAME_LENGTH} and ${VALIDATION_LIMITS.MAX_NAME_LENGTH} characters`),
   
   body('email')
     .trim()
@@ -49,7 +120,7 @@ const validateRegister = [
   
   body('password')
     .notEmpty().withMessage('Password is required')
-    .isLength({ min: MIN_PASSWORD_LENGTH }).withMessage(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`),
+    .isLength({ min: VALIDATION_LIMITS.MIN_PASSWORD_LENGTH }).withMessage(`Password must be at least ${VALIDATION_LIMITS.MIN_PASSWORD_LENGTH} characters`),
   
   handleValidationErrors
 ];
@@ -75,12 +146,12 @@ const validateCreateCampaign = [
   body('name')
     .trim()
     .notEmpty().withMessage('Campaign name is required')
-    .isLength({ min: 3, max: 200 }).withMessage('Campaign name must be between 3 and 200 characters'),
+    .isLength({ min: VALIDATION_LIMITS.MIN_CAMPAIGN_NAME_LENGTH, max: VALIDATION_LIMITS.MAX_CAMPAIGN_NAME_LENGTH }).withMessage(`Campaign name must be between ${VALIDATION_LIMITS.MIN_CAMPAIGN_NAME_LENGTH} and ${VALIDATION_LIMITS.MAX_CAMPAIGN_NAME_LENGTH} characters`),
   
   body('description')
     .optional()
     .trim()
-    .isLength({ max: MAX_DESCRIPTION_LENGTH }).withMessage(`Description cannot exceed ${MAX_DESCRIPTION_LENGTH} characters`),
+    .isLength({ max: VALIDATION_LIMITS.MAX_DESCRIPTION_LENGTH }).withMessage(`Description cannot exceed ${VALIDATION_LIMITS.MAX_DESCRIPTION_LENGTH} characters`),
   
   body('templateId')
     .optional()
@@ -89,7 +160,7 @@ const validateCreateCampaign = [
   body('message')
     .optional()
     .trim()
-    .isLength({ min: 1, max: MAX_MESSAGE_LENGTH }).withMessage(`Message must be between 1 and ${MAX_MESSAGE_LENGTH} characters`),
+    .isLength({ min: 1, max: VALIDATION_LIMITS.MAX_MESSAGE_LENGTH }).withMessage(`Message must be between 1 and ${VALIDATION_LIMITS.MAX_MESSAGE_LENGTH} characters`),
   
   body('scheduledAt')
     .optional()
@@ -101,28 +172,57 @@ const validateCreateCampaign = [
       return true;
     }),
   
-  body('recipients')
-    .isArray({ min: 1 }).withMessage('At least one recipient is required')
-    .custom((recipients) => {
-      if (recipients.length > MAX_CAMPAIGN_RECIPIENTS) {
-        throw new Error(`Maximum ${MAX_CAMPAIGN_RECIPIENTS} recipients allowed`);
+  // Support both 'recipients' array and 'targetAudience.contacts' array
+  body()
+    .custom((body) => {
+      // Allow drafts without recipients
+      if (body.status === 'draft') {
+        return true;
       }
+      
+      const hasRecipients = body.recipients && Array.isArray(body.recipients) && body.recipients.length > 0;
+      const hasTargetAudience = body.targetAudience && body.targetAudience.contacts && Array.isArray(body.targetAudience.contacts) && body.targetAudience.contacts.length > 0;
+      const hasContactIds = body.contactIds && Array.isArray(body.contactIds) && body.contactIds.length > 0;
+      const hasTargetAudienceQuery = body.targetAudience && (body.targetAudience.tags || body.targetAudience.segment);
+      
+      if (!hasRecipients && !hasTargetAudience && !hasContactIds && !hasTargetAudienceQuery) {
+        throw new Error('At least one recipient source is required (recipients, targetAudience.contacts, contactIds, or targetAudience query)');
+      }
+      
+      // Check recipients count limit
+      const recipientCount = body.recipients?.length || body.targetAudience?.contacts?.length || body.contactIds?.length || 0;
+      if (recipientCount > VALIDATION_LIMITS.MAX_CAMPAIGN_RECIPIENTS) {
+        throw new Error(`Maximum ${VALIDATION_LIMITS.MAX_CAMPAIGN_RECIPIENTS} recipients allowed`);
+      }
+      
       return true;
     }),
   
   body('recipients.*.phoneNumber')
+    .optional()
     .trim()
-    .notEmpty().withMessage('Recipient phone number is required')
-    .matches(/^\+?[1-9]\d{1,14}$/).withMessage('Invalid phone number format (E.164 format)'),
+    .notEmpty().withMessage('Recipient phone number is required'),
+    // Removed strict E.164 validation to allow various formats
   
   body('recipients.*.name')
     .optional()
     .trim()
-    .isLength({ max: 100 }).withMessage('Recipient name cannot exceed 100 characters'),
+    .isLength({ max: VALIDATION_LIMITS.MAX_NAME_LENGTH }).withMessage(`Recipient name cannot exceed ${VALIDATION_LIMITS.MAX_NAME_LENGTH} characters`),
+  
+  body('targetAudience.contacts.*.phoneNumber')
+    .optional()
+    .trim()
+    .notEmpty().withMessage('Recipient phone number is required'),
+    // Removed strict E.164 validation to allow various formats
+  
+  body('targetAudience.contacts.*.name')
+    .optional()
+    .trim()
+    .isLength({ max: VALIDATION_LIMITS.MAX_NAME_LENGTH }).withMessage(`Recipient name cannot exceed ${VALIDATION_LIMITS.MAX_NAME_LENGTH} characters`),
   
   body('settings.sendRate')
     .optional()
-    .isInt({ min: 1, max: 80 }).withMessage('Send rate must be between 1 and 80 messages per minute'),
+    .isInt({ min: 1, max: VALIDATION_LIMITS.MAX_SEND_RATE }).withMessage(`Send rate must be between 1 and ${VALIDATION_LIMITS.MAX_SEND_RATE} messages per minute`),
   
   body('settings.retryFailed')
     .optional()
@@ -130,7 +230,7 @@ const validateCreateCampaign = [
   
   body('settings.maxRetries')
     .optional()
-    .isInt({ min: 0, max: 10 }).withMessage('maxRetries must be between 0 and 10'),
+    .isInt({ min: VALIDATION_LIMITS.MIN_RETRIES, max: VALIDATION_LIMITS.MAX_RETRIES }).withMessage(`maxRetries must be between ${VALIDATION_LIMITS.MIN_RETRIES} and ${VALIDATION_LIMITS.MAX_RETRIES}`),
   
   handleValidationErrors
 ];
@@ -142,12 +242,12 @@ const validateUpdateCampaign = [
   body('name')
     .optional()
     .trim()
-    .isLength({ min: 3, max: 200 }).withMessage('Campaign name must be between 3 and 200 characters'),
+    .isLength({ min: VALIDATION_LIMITS.MIN_CAMPAIGN_NAME_LENGTH, max: VALIDATION_LIMITS.MAX_CAMPAIGN_NAME_LENGTH }).withMessage(`Campaign name must be between ${VALIDATION_LIMITS.MIN_CAMPAIGN_NAME_LENGTH} and ${VALIDATION_LIMITS.MAX_CAMPAIGN_NAME_LENGTH} characters`),
   
   body('description')
     .optional()
     .trim()
-    .isLength({ max: MAX_DESCRIPTION_LENGTH }).withMessage(`Description cannot exceed ${MAX_DESCRIPTION_LENGTH} characters`),
+    .isLength({ max: VALIDATION_LIMITS.MAX_DESCRIPTION_LENGTH }).withMessage(`Description cannot exceed ${VALIDATION_LIMITS.MAX_DESCRIPTION_LENGTH} characters`),
   
   body('status')
     .optional()
@@ -172,8 +272,8 @@ const validateCreateTemplate = [
   body('name')
     .trim()
     .notEmpty().withMessage('Template name is required')
-    .isLength({ min: 1, max: MAX_TEMPLATE_NAME_LENGTH }).withMessage(`Template name must be between 1 and ${MAX_TEMPLATE_NAME_LENGTH} characters`)
-    .matches(/^[a-z0-9_]+$/).withMessage('Template name can only contain lowercase letters, numbers, and underscores'),
+    .isLength({ min: 1, max: VALIDATION_LIMITS.MAX_TEMPLATE_NAME_LENGTH }).withMessage(`Template name must be between 1 and ${VALIDATION_LIMITS.MAX_TEMPLATE_NAME_LENGTH} characters`)
+    .matches(TEMPLATE_NAME_REGEX).withMessage('Template name can only contain lowercase letters, numbers, and underscores'),
   
   body('category')
     .notEmpty().withMessage('Category is required')
@@ -212,7 +312,7 @@ const validateSendMessage = [
   
   body('to')
     .notEmpty().withMessage('Recipient phone number is required')
-    .matches(/^\+?[1-9]\d{1,14}$/).withMessage('Invalid phone number format (E.164 format)'),
+    .matches(PHONE_NUMBER_REGEX).withMessage('Invalid phone number format (E.164 format)'),
   
   body('type')
     .optional()
@@ -222,7 +322,7 @@ const validateSendMessage = [
   body('message')
     .if(body('type').equals('text'))
     .notEmpty().withMessage('Message text is required')
-    .isLength({ min: 1, max: MAX_MESSAGE_LENGTH }).withMessage(`Message must be between 1 and ${MAX_MESSAGE_LENGTH} characters`),
+    .isLength({ min: 1, max: VALIDATION_LIMITS.MAX_MESSAGE_LENGTH }).withMessage(`Message must be between 1 and ${VALIDATION_LIMITS.MAX_MESSAGE_LENGTH} characters`),
   
   body('templateId')
     .if(body('type').equals('template'))
@@ -275,11 +375,11 @@ const validateDateRange = [
 const validatePagination = [
   query('page')
     .optional()
-    .isInt({ min: 1 }).withMessage('Page must be a positive integer'),
+    .isInt({ min: VALIDATION_LIMITS.MIN_PAGE_NUMBER }).withMessage('Page must be a positive integer'),
   
   query('limit')
     .optional()
-    .isInt({ min: 1, max: 100 }).withMessage('Limit must be between 1 and 100'),
+    .isInt({ min: VALIDATION_LIMITS.MIN_PAGINATION_LIMIT, max: VALIDATION_LIMITS.MAX_PAGINATION_LIMIT }).withMessage(`Limit must be between ${VALIDATION_LIMITS.MIN_PAGINATION_LIMIT} and ${VALIDATION_LIMITS.MAX_PAGINATION_LIMIT}`),
   
   handleValidationErrors
 ];
@@ -292,12 +392,12 @@ const validateCreateContact = [
   body('phoneNumber')
     .trim()
     .notEmpty().withMessage('Phone number is required')
-    .matches(/^\+?[1-9]\d{1,14}$/).withMessage('Invalid phone number format (E.164 format)'),
+    .matches(PHONE_NUMBER_REGEX).withMessage('Invalid phone number format (E.164 format)'),
   
   body('name')
     .optional()
     .trim()
-    .isLength({ min: 1, max: 100 }).withMessage('Name must be between 1 and 100 characters'),
+    .isLength({ min: 1, max: VALIDATION_LIMITS.MAX_NAME_LENGTH }).withMessage(`Name must be between 1 and ${VALIDATION_LIMITS.MAX_NAME_LENGTH} characters`),
   
   body('email')
     .optional()
@@ -312,12 +412,12 @@ const validateCreateContact = [
   body('tags.*')
     .optional()
     .trim()
-    .isLength({ min: 1, max: 50 }).withMessage('Each tag must be between 1 and 50 characters'),
+    .isLength({ min: 1, max: VALIDATION_LIMITS.MAX_TAG_LENGTH }).withMessage(`Each tag must be between 1 and ${VALIDATION_LIMITS.MAX_TAG_LENGTH} characters`),
   
   body('notes')
     .optional()
     .trim()
-    .isLength({ max: 1000 }).withMessage('Notes cannot exceed 1000 characters'),
+    .isLength({ max: VALIDATION_LIMITS.MAX_NOTES_LENGTH }).withMessage(`Notes cannot exceed ${VALIDATION_LIMITS.MAX_NOTES_LENGTH} characters`),
   
   handleValidationErrors
 ];
@@ -329,7 +429,7 @@ const validateUpdateContact = [
   body('name')
     .optional()
     .trim()
-    .isLength({ min: 1, max: 100 }).withMessage('Name must be between 1 and 100 characters'),
+    .isLength({ min: 1, max: VALIDATION_LIMITS.MAX_NAME_LENGTH }).withMessage(`Name must be between 1 and ${VALIDATION_LIMITS.MAX_NAME_LENGTH} characters`),
   
   body('email')
     .optional()
@@ -344,7 +444,7 @@ const validateUpdateContact = [
   body('notes')
     .optional()
     .trim()
-    .isLength({ max: 1000 }).withMessage('Notes cannot exceed 1000 characters'),
+    .isLength({ max: VALIDATION_LIMITS.MAX_NOTES_LENGTH }).withMessage(`Notes cannot exceed ${VALIDATION_LIMITS.MAX_NOTES_LENGTH} characters`),
   
   handleValidationErrors
 ];
@@ -358,12 +458,12 @@ const validateContactId = [
 
 const validateBulkContacts = [
   body('contacts')
-    .isArray({ min: 1, max: 1000 }).withMessage('Must provide 1-1000 contacts'),
+    .isArray({ min: 1, max: VALIDATION_LIMITS.MAX_BULK_CONTACTS }).withMessage(`Must provide 1-${VALIDATION_LIMITS.MAX_BULK_CONTACTS} contacts`),
   
   body('contacts.*.phoneNumber')
     .trim()
     .notEmpty().withMessage('Phone number is required')
-    .matches(/^\+?[1-9]\d{1,14}$/).withMessage('Invalid phone number format'),
+    .matches(PHONE_NUMBER_REGEX).withMessage('Invalid phone number format'),
   
   handleValidationErrors
 ];
@@ -376,12 +476,12 @@ const validateCreateAutomation = [
   body('name')
     .trim()
     .notEmpty().withMessage('Automation name is required')
-    .isLength({ min: 3, max: 200 }).withMessage('Name must be between 3 and 200 characters'),
+    .isLength({ min: VALIDATION_LIMITS.MIN_CAMPAIGN_NAME_LENGTH, max: VALIDATION_LIMITS.MAX_CAMPAIGN_NAME_LENGTH }).withMessage(`Name must be between ${VALIDATION_LIMITS.MIN_CAMPAIGN_NAME_LENGTH} and ${VALIDATION_LIMITS.MAX_CAMPAIGN_NAME_LENGTH} characters`),
   
   body('description')
     .optional()
     .trim()
-    .isLength({ max: 1000 }).withMessage('Description cannot exceed 1000 characters'),
+    .isLength({ max: VALIDATION_LIMITS.MAX_DESCRIPTION_LENGTH }).withMessage(`Description cannot exceed ${VALIDATION_LIMITS.MAX_DESCRIPTION_LENGTH} characters`),
   
   body('trigger.type')
     .notEmpty().withMessage('Trigger type is required')
@@ -416,7 +516,7 @@ const validateUpdateAutomation = [
   body('name')
     .optional()
     .trim()
-    .isLength({ min: 3, max: 200 }).withMessage('Name must be between 3 and 200 characters'),
+    .isLength({ min: VALIDATION_LIMITS.MIN_CAMPAIGN_NAME_LENGTH, max: VALIDATION_LIMITS.MAX_CAMPAIGN_NAME_LENGTH }).withMessage(`Name must be between ${VALIDATION_LIMITS.MIN_CAMPAIGN_NAME_LENGTH} and ${VALIDATION_LIMITS.MAX_CAMPAIGN_NAME_LENGTH} characters`),
   
   body('isActive')
     .optional()
@@ -440,7 +540,7 @@ const validateCreateFlow = [
   body('name')
     .trim()
     .notEmpty().withMessage('Flow name is required')
-    .isLength({ min: 3, max: 200 }).withMessage('Name must be between 3 and 200 characters'),
+    .isLength({ min: VALIDATION_LIMITS.MIN_CAMPAIGN_NAME_LENGTH, max: VALIDATION_LIMITS.MAX_CAMPAIGN_NAME_LENGTH }).withMessage(`Name must be between ${VALIDATION_LIMITS.MIN_CAMPAIGN_NAME_LENGTH} and ${VALIDATION_LIMITS.MAX_CAMPAIGN_NAME_LENGTH} characters`),
   
   body('flowJson')
     .notEmpty().withMessage('Flow JSON is required')
@@ -468,7 +568,7 @@ const validateUpdateFlow = [
   body('name')
     .optional()
     .trim()
-    .isLength({ min: 3, max: 200 }).withMessage('Name must be between 3 and 200 characters'),
+    .isLength({ min: VALIDATION_LIMITS.MIN_CAMPAIGN_NAME_LENGTH, max: VALIDATION_LIMITS.MAX_CAMPAIGN_NAME_LENGTH }).withMessage(`Name must be between ${VALIDATION_LIMITS.MIN_CAMPAIGN_NAME_LENGTH} and ${VALIDATION_LIMITS.MAX_CAMPAIGN_NAME_LENGTH} characters`),
   
   body('flowJson')
     .optional()
@@ -496,7 +596,7 @@ const validateCreateScheduledMessage = [
   body('message')
     .trim()
     .notEmpty().withMessage('Message is required')
-    .isLength({ min: 1, max: MAX_MESSAGE_LENGTH }).withMessage(`Message must be between 1 and ${MAX_MESSAGE_LENGTH} characters`),
+    .isLength({ min: 1, max: VALIDATION_LIMITS.MAX_MESSAGE_LENGTH }).withMessage(`Message must be between 1 and ${VALIDATION_LIMITS.MAX_MESSAGE_LENGTH} characters`),
   
   body('scheduledAt')
     .notEmpty().withMessage('Scheduled time is required')
@@ -514,7 +614,7 @@ const validateCreateScheduledMessage = [
   
   body('maxRetries')
     .optional()
-    .isInt({ min: 0, max: 5 }).withMessage('Max retries must be between 0 and 5'),
+    .isInt({ min: VALIDATION_LIMITS.MIN_RETRIES, max: VALIDATION_LIMITS.MAX_SCHEDULED_MESSAGE_RETRIES }).withMessage(`Max retries must be between ${VALIDATION_LIMITS.MIN_RETRIES} and ${VALIDATION_LIMITS.MAX_SCHEDULED_MESSAGE_RETRIES}`),
   
   handleValidationErrors
 ];
@@ -556,7 +656,7 @@ const validateCreateBusiness = [
   body('name')
     .trim()
     .notEmpty().withMessage('Business name is required')
-    .isLength({ min: 2, max: 200 }).withMessage('Business name must be between 2 and 200 characters'),
+    .isLength({ min: VALIDATION_LIMITS.MIN_NAME_LENGTH, max: VALIDATION_LIMITS.MAX_CAMPAIGN_NAME_LENGTH }).withMessage(`Business name must be between ${VALIDATION_LIMITS.MIN_NAME_LENGTH} and ${VALIDATION_LIMITS.MAX_CAMPAIGN_NAME_LENGTH} characters`),
   
   body('whatsappConfig.phoneNumberId')
     .optional()
@@ -583,7 +683,7 @@ const validateCreateBusiness = [
   body('description')
     .optional()
     .trim()
-    .isLength({ max: 1000 }).withMessage('Description cannot exceed 1000 characters'),
+    .isLength({ max: VALIDATION_LIMITS.MAX_DESCRIPTION_LENGTH }).withMessage(`Description cannot exceed ${VALIDATION_LIMITS.MAX_DESCRIPTION_LENGTH} characters`),
   
   handleValidationErrors
 ];
@@ -595,7 +695,7 @@ const validateUpdateBusiness = [
   body('name')
     .optional()
     .trim()
-    .isLength({ min: 2, max: 200 }).withMessage('Business name must be between 2 and 200 characters'),
+    .isLength({ min: VALIDATION_LIMITS.MIN_NAME_LENGTH, max: VALIDATION_LIMITS.MAX_CAMPAIGN_NAME_LENGTH }).withMessage(`Business name must be between ${VALIDATION_LIMITS.MIN_NAME_LENGTH} and ${VALIDATION_LIMITS.MAX_CAMPAIGN_NAME_LENGTH} characters`),
   
   body('email')
     .optional()
@@ -644,18 +744,18 @@ const validateBusinessId = [
 
 const validateBulkSendMessage = [
   body('recipients')
-    .isArray({ min: 1, max: MAX_BULK_CONTACTS }).withMessage(`Must provide 1-${MAX_BULK_CONTACTS} recipients`),
+    .isArray({ min: 1, max: VALIDATION_LIMITS.MAX_BULK_CONTACTS }).withMessage(`Must provide 1-${VALIDATION_LIMITS.MAX_BULK_CONTACTS} recipients`),
   
   body('recipients.*.phoneNumber')
     .trim()
     .notEmpty().withMessage('Phone number is required')
-    .matches(/^\+?[1-9]\d{1,14}$/).withMessage('Invalid phone number format'),
+    .matches(PHONE_NUMBER_REGEX).withMessage('Invalid phone number format'),
   
   body('message')
     .if(body('templateId').not().exists())
     .trim()
     .notEmpty().withMessage('Message or template is required')
-    .isLength({ min: 1, max: MAX_MESSAGE_LENGTH }).withMessage(`Message must be between 1 and ${MAX_MESSAGE_LENGTH} characters`),
+    .isLength({ min: 1, max: VALIDATION_LIMITS.MAX_MESSAGE_LENGTH }).withMessage(`Message must be between 1 and ${VALIDATION_LIMITS.MAX_MESSAGE_LENGTH} characters`),
   
   body('templateId')
     .if(body('message').not().exists())
@@ -664,7 +764,7 @@ const validateBulkSendMessage = [
   
   body('sendRate')
     .optional()
-    .isInt({ min: 1, max: MAX_SEND_RATE }).withMessage(`Send rate must be between 1 and ${MAX_SEND_RATE} messages per minute`),
+    .isInt({ min: 1, max: VALIDATION_LIMITS.MAX_SEND_RATE }).withMessage(`Send rate must be between 1 and ${VALIDATION_LIMITS.MAX_SEND_RATE} messages per minute`),
   
   handleValidationErrors
 ];
@@ -677,7 +777,7 @@ const validateSearch = [
   query('q')
     .optional()
     .trim()
-    .isLength({ min: 1, max: 200 }).withMessage('Search query must be between 1 and 200 characters'),
+    .isLength({ min: 1, max: VALIDATION_LIMITS.MAX_SEARCH_LENGTH }).withMessage(`Search query must be between 1 and ${VALIDATION_LIMITS.MAX_SEARCH_LENGTH} characters`),
   
   query('type')
     .optional()
@@ -691,12 +791,12 @@ const validateFilterContacts = [
   query('search')
     .optional()
     .trim()
-    .isLength({ max: 200 }).withMessage('Search term too long'),
+    .isLength({ max: VALIDATION_LIMITS.MAX_SEARCH_LENGTH }).withMessage('Search term too long'),
   
   query('tag')
     .optional()
     .trim()
-    .isLength({ max: 50 }).withMessage('Tag filter too long'),
+    .isLength({ max: VALIDATION_LIMITS.MAX_TAG_LENGTH }).withMessage('Tag filter too long'),
   
   query('isOptedIn')
     .optional()

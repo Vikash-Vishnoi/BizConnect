@@ -18,46 +18,101 @@
 
 require('dotenv').config();
 const mongoose = require('mongoose');
+const logger = require('../common/helpers/logger');
+const { ERROR_CODES } = require('../common/constants');
 const { Campaign, CampaignRecipient } = require('../core/database/models');
 
+// ========================================
+// CONSTANTS
+// ========================================
+
+// Database Configuration
+const DB_CONNECTION_TIMEOUT_MS = 10000;
+const DB_OPERATION_TIMEOUT_MS = 30000;
+
+// Migration Configuration
+const DEFAULT_BATCH_SIZE = 100;
+const MIGRATION_COUNTDOWN_SECONDS = 3000; // 3 seconds
+
+// Progress Reporting
+const PROGRESS_LOG_INTERVAL = 10; // Log every N migrations
+
+// Space Calculation Constants (estimated bytes per recipient)
+const OLD_RECIPIENT_SIZE_BYTES = 500;
+const NEW_RECIPIENT_SIZE_BYTES = 200;
+const CAMPAIGN_OVERHEAD_BYTES = 5000;
+
+// Size Conversion Constants
+const BYTES_TO_KB = 1024;
+const BYTES_TO_MB = 1024 * 1024;
+
+// Display Configuration
+const SEPARATOR_LENGTH = 37;
+const SEPARATOR_CHAR = '=';
+
+// Sample Display Limit
+const SAMPLE_CAMPAIGNS_LIMIT = 5;
+
+// Script Status
+const EXIT_CODE_SUCCESS = 0;
+const EXIT_CODE_FAILURE = 1;
+
+// Validate environment variables
 if (!process.env.MONGODB_URI) {
-  console.error('❌ MONGODB_URI environment variable is required');
-  process.exit(1);
+  logger.error('MONGODB_URI environment variable is required', {
+    code: ERROR_CODES.CONFIGURATION_ERROR
+  });
+  process.exit(EXIT_CODE_FAILURE);
 }
 
 const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
 const batchSizeArg = args.find(arg => arg.startsWith('--batch-size='));
-const batchSize = batchSizeArg ? parseInt(batchSizeArg.split('=')[1]) : parseInt(process.env.MIGRATION_BATCH_SIZE) || 100;
+const batchSize = batchSizeArg 
+  ? parseInt(batchSizeArg.split('=')[1]) 
+  : parseInt(process.env.MIGRATION_BATCH_SIZE) || DEFAULT_BATCH_SIZE;
 
-console.log('📦 Campaign Migration Script');
-console.log('=====================================');
-console.log(`Mode: ${dryRun ? 'DRY RUN (no changes)' : 'LIVE MIGRATION'}`);
-console.log(`Batch Size: ${batchSize} campaigns per batch`);
-console.log('=====================================\n');
+logger.info('📦 Campaign Migration Script');
+logger.info(SEPARATOR_CHAR.repeat(SEPARATOR_LENGTH));
+logger.info(`Mode: ${dryRun ? 'DRY RUN (no changes)' : 'LIVE MIGRATION'}`);
+logger.info(`Batch Size: ${batchSize} campaigns per batch`);
+logger.info(SEPARATOR_CHAR.repeat(SEPARATOR_LENGTH));
 
 /**
  * Main migration function
  */
 async function migrateCampaigns() {
+  const startTime = Date.now();
+  
   try {
     // Connect to MongoDB
-    console.log('🔌 Connecting to MongoDB...');
-    await mongoose.connect(process.env.MONGODB_URI);
-    console.log('✅ Connected to MongoDB\n');
+    logger.info('Connecting to MongoDB...');
+    const connectionStartTime = Date.now();
+    await mongoose.connect(process.env.MONGODB_URI, {
+      serverSelectionTimeoutMS: DB_CONNECTION_TIMEOUT_MS
+    });
+    const connectionTime = Date.now() - connectionStartTime;
+    logger.info('Connected to MongoDB', {
+      connectionTime: `${connectionTime}ms`
+    });
 
     // Find campaigns that need migration
+    const findStartTime = Date.now();
     const campaignsToMigrate = await Campaign.find({
       usesSeparateRecipients: { $ne: true },
       recipients: { $exists: true, $type: 'array', $ne: [] }
     }).select('_id name businessId recipients stats').lean();
+    const findTime = Date.now() - findStartTime;
 
     if (campaignsToMigrate.length === 0) {
-      console.log('✅ No campaigns need migration. All campaigns are up-to-date.');
+      logger.info('No campaigns need migration. All campaigns are up-to-date.');
       return;
     }
 
-    console.log(`📊 Found ${campaignsToMigrate.length} campaigns to migrate\n`);
+    logger.info(`Found campaigns to migrate`, {
+      count: campaignsToMigrate.length,
+      queryTime: `${findTime}ms`
+    });
 
     // Calculate space savings
     let totalSpaceBefore = 0;
@@ -68,37 +123,38 @@ async function migrateCampaigns() {
       const recipientCount = campaign.recipients?.length || 0;
       totalRecipients += recipientCount;
       
-      totalSpaceBefore += recipientCount * 500;
-      totalSpaceAfter += (recipientCount * 200) + 5000;
+      totalSpaceBefore += recipientCount * OLD_RECIPIENT_SIZE_BYTES;
+      totalSpaceAfter += (recipientCount * NEW_RECIPIENT_SIZE_BYTES) + CAMPAIGN_OVERHEAD_BYTES;
     });
 
     const spaceSavings = totalSpaceBefore - totalSpaceAfter;
     const spaceSavingsPercent = ((spaceSavings / totalSpaceBefore) * 100).toFixed(1);
 
-    console.log('📈 Migration Statistics:');
-    console.log(`   Campaigns: ${campaignsToMigrate.length}`);
-    console.log(`   Total Recipients: ${totalRecipients.toLocaleString()}`);
-    console.log(`   Space Before: ${(totalSpaceBefore / 1024 / 1024).toFixed(2)} MB`);
-    console.log(`   Space After: ${(totalSpaceAfter / 1024 / 1024).toFixed(2)} MB`);
-    console.log(`   Space Savings: ${(spaceSavings / 1024 / 1024).toFixed(2)} MB (${spaceSavingsPercent}%)\n`);
+    logger.info('Migration Statistics:', {
+      campaigns: campaignsToMigrate.length,
+      totalRecipients: totalRecipients.toLocaleString(),
+      spaceBefore: `${(totalSpaceBefore / BYTES_TO_MB).toFixed(2)} MB`,
+      spaceAfter: `${(totalSpaceAfter / BYTES_TO_MB).toFixed(2)} MB`,
+      spaceSavings: `${(spaceSavings / BYTES_TO_MB).toFixed(2)} MB (${spaceSavingsPercent}%)`
+    });
 
     if (dryRun) {
-      console.log('🔍 DRY RUN: No changes will be made.\n');
+      logger.info('DRY RUN: No changes will be made.');
       
-      // Show first 5 campaigns that would be migrated
-      console.log('Sample campaigns that would be migrated:');
-      campaignsToMigrate.slice(0, 5).forEach((campaign, index) => {
-        console.log(`   ${index + 1}. ${campaign.name} - ${campaign.recipients.length} recipients`);
+      // Show first N campaigns that would be migrated
+      logger.info('Sample campaigns that would be migrated:');
+      campaignsToMigrate.slice(0, SAMPLE_CAMPAIGNS_LIMIT).forEach((campaign, index) => {
+        logger.info(`   ${index + 1}. ${campaign.name} - ${campaign.recipients.length} recipients`);
       });
       
       return;
     }
 
-    console.log('⚠️  WARNING: This will modify your database.');
-    console.log('Press Ctrl+C within 3 seconds to cancel...\n');
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    logger.warn('WARNING: This will modify your database.');
+    logger.warn(`Press Ctrl+C within ${MIGRATION_COUNTDOWN_SECONDS / 1000} seconds to cancel...`);
+    await new Promise(resolve => setTimeout(resolve, MIGRATION_COUNTDOWN_SECONDS));
 
-    console.log('🚀 Starting migration...\n');
+    logger.info('Starting migration...');
 
     let migratedCount = 0;
     let errorCount = 0;
@@ -107,17 +163,24 @@ async function migrateCampaigns() {
     // Process campaigns in batches
     for (let i = 0; i < campaignsToMigrate.length; i += batchSize) {
       const batch = campaignsToMigrate.slice(i, i + batchSize);
+      const batchNumber = Math.floor(i / batchSize) + 1;
+      const totalBatches = Math.ceil(campaignsToMigrate.length / batchSize);
+      const batchStartTime = Date.now();
       
-      console.log(`📦 Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(campaignsToMigrate.length / batchSize)}...`);
+      logger.info(`Processing batch ${batchNumber}/${totalBatches}...`);
 
       for (const campaign of batch) {
         try {
           await migrateCampaign(campaign);
           migratedCount++;
           
-          if (migratedCount % 10 === 0) {
+          if (migratedCount % PROGRESS_LOG_INTERVAL === 0) {
             const progress = ((migratedCount / campaignsToMigrate.length) * 100).toFixed(1);
-            console.log(`   ✅ Migrated ${migratedCount}/${campaignsToMigrate.length} (${progress}%)`);
+            logger.info(`Migration progress`, {
+              migrated: `${migratedCount}/${campaignsToMigrate.length}`,
+              percentage: `${progress}%`,
+              executionTime: `${Date.now() - startTime}ms`
+            });
           }
         } catch (error) {
           errorCount++;
@@ -126,31 +189,58 @@ async function migrateCampaigns() {
             campaignName: campaign.name,
             error: error.message
           });
-          console.error(`   ❌ Failed to migrate campaign ${campaign.name}:`, error.message);
+          logger.error(`Failed to migrate campaign`, {
+            campaignName: campaign.name,
+            campaignId: campaign._id,
+            error: error.message
+          });
         }
       }
+      
+      const batchTime = Date.now() - batchStartTime;
+      logger.info(`Batch ${batchNumber} completed`, {
+        batchTime: `${batchTime}ms`,
+        averagePerCampaign: `${Math.round(batchTime / batch.length)}ms`
+      });
     }
 
-    console.log('\n=====================================');
-    console.log('🎉 Migration Complete!');
-    console.log('=====================================');
-    console.log(`✅ Successfully migrated: ${migratedCount} campaigns`);
-    console.log(`❌ Failed migrations: ${errorCount} campaigns`);
-    console.log(`💾 Space saved: ${(spaceSavings / 1024 / 1024).toFixed(2)} MB (${spaceSavingsPercent}%)`);
+    const totalTime = Date.now() - startTime;
+    
+    logger.info(SEPARATOR_CHAR.repeat(SEPARATOR_LENGTH));
+    logger.info('Migration Complete!');
+    logger.info(SEPARATOR_CHAR.repeat(SEPARATOR_LENGTH));
+    
+    logger.info('Migration Summary:', {
+      successfulMigrations: migratedCount,
+      failedMigrations: errorCount,
+      spaceSaved: `${(spaceSavings / BYTES_TO_MB).toFixed(2)} MB (${spaceSavingsPercent}%)`,
+      totalExecutionTime: `${totalTime}ms`,
+      averageTimePerCampaign: `${Math.round(totalTime / migratedCount)}ms`
+    });
     
     if (errors.length > 0) {
-      console.log('\n⚠️  Errors:');
+      logger.error('Migration errors occurred:', {
+        errorCount: errors.length
+      });
       errors.forEach(err => {
-        console.log(`   - ${err.campaignName} (${err.campaignId}): ${err.error}`);
+        logger.error(`   - ${err.campaignName} (${err.campaignId}): ${err.error}`);
       });
     }
 
   } catch (error) {
-    console.error('❌ Migration failed:', error);
+    const executionTime = Date.now() - startTime;
+    logger.error('Migration failed', {
+      error: error.message,
+      stack: error.stack,
+      code: error.code || ERROR_CODES.INTERNAL_ERROR,
+      executionTime: `${executionTime}ms`
+    });
     throw error;
   } finally {
-    await mongoose.connection.close();
-    console.log('\n🔌 Disconnected from MongoDB');
+    if (mongoose.connection.readyState === 1) {
+      await mongoose.connection.close();
+      logger.info('Disconnected from MongoDB');
+    }
   }
 }
 
@@ -165,7 +255,10 @@ async function migrateCampaign(campaignData) {
   }
 
   if (!campaign.recipients || campaign.recipients.length === 0) {
-    console.log(`   ⏭️  Skipping ${campaign.name} - no recipients`);
+    logger.info(`Skipping campaign - no recipients`, {
+      campaignName: campaign.name,
+      campaignId: campaign._id
+    });
     return;
   }
 
@@ -201,16 +294,24 @@ async function migrateCampaign(campaignData) {
   
   await campaign.save();
 
-  console.log(`   ✅ Migrated: ${campaign.name} (${recipientDocs.length} recipients)`);
+  logger.debug(`Migrated campaign`, {
+    campaignName: campaign.name,
+    campaignId: campaign._id,
+    recipientCount: recipientDocs.length
+  });
 }
 
 /**
  * Rollback function (if needed)
  */
 async function rollbackMigration() {
+  const startTime = Date.now();
+  
   try {
-    console.log('🔄 Rolling back migration...');
-    await mongoose.connect(process.env.MONGODB_URI);
+    logger.info('Starting migration rollback...');
+    await mongoose.connect(process.env.MONGODB_URI, {
+      serverSelectionTimeoutMS: DB_CONNECTION_TIMEOUT_MS
+    });
 
     // Find campaigns that were migrated
     const migratedCampaigns = await Campaign.find({
@@ -248,17 +349,31 @@ async function rollbackMigration() {
         await CampaignRecipient.deleteMany({ campaignId: campaign._id });
 
         rolledBack++;
-        console.log(`   ✅ Rolled back: ${campaign.name}`);
+        logger.info(`Rolled back campaign`, {
+          campaignName: campaign.name,
+          campaignId: campaign._id
+        });
       }
     }
 
-    console.log(`\n✅ Rollback complete: ${rolledBack} campaigns restored`);
+    const totalTime = Date.now() - startTime;
+    logger.info('Rollback complete', {
+      campaignsRestored: rolledBack,
+      executionTime: `${totalTime}ms`
+    });
 
   } catch (error) {
-    console.error('❌ Rollback failed:', error);
+    const executionTime = Date.now() - startTime;
+    logger.error('Rollback failed', {
+      error: error.message,
+      stack: error.stack,
+      executionTime: `${executionTime}ms`
+    });
     throw error;
   } finally {
-    await mongoose.connection.close();
+    if (mongoose.connection.readyState === 1) {
+      await mongoose.connection.close();
+    }
   }
 }
 
@@ -268,17 +383,29 @@ if (require.main === module) {
   
   if (rollback) {
     rollbackMigration()
-      .then(() => process.exit(0))
+      .then(() => {
+        logger.info('Rollback script completed successfully');
+        process.exit(EXIT_CODE_SUCCESS);
+      })
       .catch(error => {
-        console.error(error);
-        process.exit(1);
+        logger.error('Rollback script failed', {
+          error: error.message,
+          stack: error.stack
+        });
+        process.exit(EXIT_CODE_FAILURE);
       });
   } else {
     migrateCampaigns()
-      .then(() => process.exit(0))
+      .then(() => {
+        logger.info('Migration script completed successfully');
+        process.exit(EXIT_CODE_SUCCESS);
+      })
       .catch(error => {
-        console.error(error);
-        process.exit(1);
+        logger.error('Migration script failed', {
+          error: error.message,
+          stack: error.stack
+        });
+        process.exit(EXIT_CODE_FAILURE);
       });
   }
 }

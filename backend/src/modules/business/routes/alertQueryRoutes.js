@@ -6,16 +6,42 @@
 const express = require('express');
 const router = express.Router();
 const { AlertLog } = require('../../../core/database/models');
+const { businessContext } = require('../../../core/middlewares/businessContext');
+const { HTTP_STATUS, ERROR_CODES } = require('../../../common/constants');
+const logger = require('../../../common/helpers/logger');
+
+// Constants
+const PAGINATION = {
+  DEFAULT_LIMIT: parseInt(process.env.ALERTS_DEFAULT_LIMIT) || 50,
+  MAX_LIMIT: parseInt(process.env.ALERTS_MAX_LIMIT) || 100,
+  DEFAULT_PAGE: 1
+};
+
+const ALERT_SEVERITY = {
+  CRITICAL: 'CRITICAL',
+  HIGH: 'HIGH',
+  MEDIUM: 'MEDIUM',
+  LOW: 'LOW'
+};
+
+const ALERT_STATUS = {
+  UNRESOLVED: 'UNRESOLVED',
+  RESOLVED: 'RESOLVED'
+};
+
+const SORT_ORDER = {
+  NEWEST_FIRST: { createdAt: -1 },
+  SEVERITY_FIRST: { severity: -1, createdAt: -1 }
+};
 
 // GET / - Get all alerts
-router.get('/', async (req, res) => {
+router.get('/', businessContext, async (req, res) => {
+  const startTime = Date.now();
   try {
-    const defaultLimit = parseInt(process.env.ALERTS_DEFAULT_LIMIT) || 50;
-    const maxLimit = parseInt(process.env.ALERTS_MAX_LIMIT) || 100;
-    const { severity, status, type, limit = defaultLimit, page = 1 } = req.query;
+    const { severity, status, type, limit = PAGINATION.DEFAULT_LIMIT, page = PAGINATION.DEFAULT_PAGE } = req.query;
 
     const requestedLimit = parseInt(limit);
-    const finalLimit = Math.min(requestedLimit, maxLimit);
+    const finalLimit = Math.min(requestedLimit, PAGINATION.MAX_LIMIT);
 
     const query = { businessId: req.businessId };
     if (severity) query.severity = severity;
@@ -23,109 +49,157 @@ router.get('/', async (req, res) => {
     if (type) query.type = type;
 
     const alerts = await AlertLog.find(query)
-      .sort({ createdAt: -1 })
+      .sort(SORT_ORDER.NEWEST_FIRST)
       .limit(finalLimit)
       .skip((parseInt(page) - 1) * finalLimit);
 
     const total = await AlertLog.countDocuments(query);
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    res.status(HTTP_STATUS.OK).json({
       success: true,
-      count: alerts.length,
-      total,
-      page: parseInt(page),
-      pages: Math.ceil(total / finalLimit),
-      alerts
+      message: 'Alerts retrieved successfully',
+      data: {
+        count: alerts.length,
+        total,
+        page: parseInt(page),
+        pages: Math.ceil(total / finalLimit),
+        alerts
+      },
+      processingTime
     });
   } catch (error) {
-    console.error('Error getting alerts:', error);
-    res.status(500).json({
+    const processingTime = Date.now() - startTime;
+    logger.error('Error getting alerts', {
+      businessId: req.businessId.toString(),
+      error: error.message,
+      processingTime
+    });
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: 'Failed to get alerts',
-      error: error.message
+      error: error.message,
+      processingTime
     });
   }
 });
 
 // GET /stats - Get alert statistics
-router.get('/stats', async (req, res) => {
+router.get('/stats', businessContext, async (req, res) => {
+  const startTime = Date.now();
   try {
     const [total, critical, high, medium, low, unresolved, resolved] = await Promise.all([
       AlertLog.countDocuments({ businessId: req.businessId }),
-      AlertLog.countDocuments({ businessId: req.businessId, severity: 'CRITICAL' }),
-      AlertLog.countDocuments({ businessId: req.businessId, severity: 'HIGH' }),
-      AlertLog.countDocuments({ businessId: req.businessId, severity: 'MEDIUM' }),
-      AlertLog.countDocuments({ businessId: req.businessId, severity: 'LOW' }),
-      AlertLog.countDocuments({ businessId: req.businessId, status: 'UNRESOLVED' }),
-      AlertLog.countDocuments({ businessId: req.businessId, status: 'RESOLVED' })
+      AlertLog.countDocuments({ businessId: req.businessId, severity: ALERT_SEVERITY.CRITICAL }),
+      AlertLog.countDocuments({ businessId: req.businessId, severity: ALERT_SEVERITY.HIGH }),
+      AlertLog.countDocuments({ businessId: req.businessId, severity: ALERT_SEVERITY.MEDIUM }),
+      AlertLog.countDocuments({ businessId: req.businessId, severity: ALERT_SEVERITY.LOW }),
+      AlertLog.countDocuments({ businessId: req.businessId, status: ALERT_STATUS.UNRESOLVED }),
+      AlertLog.countDocuments({ businessId: req.businessId, status: ALERT_STATUS.RESOLVED })
     ]);
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    res.status(HTTP_STATUS.OK).json({
       success: true,
-      stats: {
-        total,
-        bySeverity: { critical, high, medium, low },
-        byStatus: { unresolved, resolved }
-      }
+      message: 'Alert statistics retrieved successfully',
+      data: {
+        stats: {
+          total,
+          bySeverity: { critical, high, medium, low },
+          byStatus: { unresolved, resolved }
+        }
+      },
+      processingTime
     });
   } catch (error) {
-    console.error('Error getting alert stats:', error);
-    res.status(500).json({
+    const processingTime = Date.now() - startTime;
+    logger.error('Error getting alert stats', {
+      businessId: req.businessId.toString(),
+      error: error.message,
+      processingTime
+    });
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: 'Failed to get alert stats',
-      error: error.message
+      error: error.message,
+      processingTime
     });
   }
 });
 
 // GET /unresolved - Get unresolved alerts
-router.get('/unresolved', async (req, res) => {
+router.get('/unresolved', businessContext, async (req, res) => {
+  const startTime = Date.now();
   try {
     const alerts = await AlertLog.find({
       businessId: req.businessId,
-      status: 'UNRESOLVED'
-    }).sort({ severity: -1, createdAt: -1 });
+      status: ALERT_STATUS.UNRESOLVED
+    }).sort(SORT_ORDER.SEVERITY_FIRST);
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    res.status(HTTP_STATUS.OK).json({
       success: true,
-      count: alerts.length,
-      alerts
+      message: 'Unresolved alerts retrieved successfully',
+      data: {
+        count: alerts.length,
+        alerts
+      },
+      processingTime
     });
   } catch (error) {
-    console.error('Error getting unresolved alerts:', error);
-    res.status(500).json({
+    const processingTime = Date.now() - startTime;
+    logger.error('Error getting unresolved alerts', {
+      businessId: req.businessId.toString(),
+      error: error.message,
+      processingTime
+    });
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: 'Failed to get unresolved alerts',
-      error: error.message
+      error: error.message,
+      processingTime
     });
   }
 });
 
 // GET /critical - Get critical alerts
-router.get('/critical', async (req, res) => {
+router.get('/critical', businessContext, async (req, res) => {
+  const startTime = Date.now();
   try {
     const alerts = await AlertLog.find({
       businessId: req.businessId,
-      severity: 'CRITICAL'
-    }).sort({ createdAt: -1 });
+      severity: ALERT_SEVERITY.CRITICAL
+    }).sort(SORT_ORDER.NEWEST_FIRST);
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    res.status(HTTP_STATUS.OK).json({
       success: true,
-      count: alerts.length,
-      alerts
+      message: 'Critical alerts retrieved successfully',
+      data: {
+        count: alerts.length,
+        alerts
+      },
+      processingTime
     });
   } catch (error) {
-    console.error('Error getting critical alerts:', error);
-    res.status(500).json({
+    const processingTime = Date.now() - startTime;
+    logger.error('Error getting critical alerts', {
+      businessId: req.businessId.toString(),
+      error: error.message,
+      processingTime
+    });
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: 'Failed to get critical alerts',
-      error: error.message
+      error: error.message,
+      processingTime
     });
   }
 });
 
 // GET /:id - Get alert by ID
-router.get('/:id', async (req, res) => {
+router.get('/:id', businessContext, async (req, res) => {
+  const startTime = Date.now();
   try {
     const alert = await AlertLog.findOne({
       _id: req.params.id,
@@ -133,22 +207,34 @@ router.get('/:id', async (req, res) => {
     });
 
     if (!alert) {
-      return res.status(404).json({
+      const processingTime = Date.now() - startTime;
+      return res.status(HTTP_STATUS.NOT_FOUND).json({
         success: false,
-        message: 'Alert not found'
+        message: 'Alert not found',
+        processingTime
       });
     }
 
-    res.json({
+    const processingTime = Date.now() - startTime;
+    res.status(HTTP_STATUS.OK).json({
       success: true,
-      alert
+      message: 'Alert retrieved successfully',
+      data: { alert },
+      processingTime
     });
   } catch (error) {
-    console.error('Error getting alert:', error);
-    res.status(500).json({
+    const processingTime = Date.now() - startTime;
+    logger.error('Error getting alert', {
+      businessId: req.businessId.toString(),
+      alertId: req.params.id,
+      error: error.message,
+      processingTime
+    });
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
       message: 'Failed to get alert',
-      error: error.message
+      error: error.message,
+      processingTime
     });
   }
 });
