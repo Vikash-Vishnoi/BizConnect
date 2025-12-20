@@ -956,7 +956,13 @@ const Inbox = () => {
                             )}
                             {message.type === 'document' && (
                               <div className="message-document">
-                                <a href={message.content?.mediaUrl} target="_blank" rel="noopener noreferrer" className="document-link">
+                                <a 
+                                  href={message.content?.mediaUrl} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer" 
+                                  className="document-link"
+                                  download={message.content?.filename || 'document'}
+                                >
                                   <MdInsertDriveFile size={18} /> {message.content?.filename || 'Document'}
                                 </a>
                                 {message.content?.caption && <p className="media-caption">{message.content.caption}</p>}
