@@ -695,7 +695,41 @@ class WhatsAppMessagingService {
         link: mediaUrl
       };
 
+      // For documents, WhatsApp requires a filename parameter
+      if (mediaType === 'document') {
+        try {
+          // Extract filename from Cloudinary URL
+          // URL format: https://res.cloudinary.com/cloud/raw/upload/v1234/filename.pdf
+          const urlObj = new URL(mediaUrl);
+          const pathParts = urlObj.pathname.split('/');
+          let filename = pathParts[pathParts.length - 1];
+          
+          // Remove any query params from filename
+          filename = filename.split('?')[0];
+          
+          // If no filename found or it's missing extension, provide a default
+          if (!filename || !filename.includes('.')) {
+            filename = 'document.pdf';
+          }
+          
+          payload[mediaType].filename = filename;
+          logger.info('Document filename extracted', { filename, originalUrl: mediaUrl });
+        } catch (err) {
+          // Fallback to generic filename if URL parsing fails
+          payload[mediaType].filename = 'document.pdf';
+          logger.warn('Failed to extract filename from URL, using default', { 
+            error: err.message, 
+            url: mediaUrl 
+          });
+        }
+      }
+
       if (caption && (mediaType === 'image' || mediaType === 'video')) {
+        payload[mediaType].caption = caption;
+      }
+      
+      // Documents can also have captions (optional)
+      if (caption && mediaType === 'document') {
         payload[mediaType].caption = caption;
       }
 
