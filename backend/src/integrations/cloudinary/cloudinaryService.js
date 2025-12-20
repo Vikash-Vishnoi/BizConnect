@@ -154,8 +154,10 @@ class CloudinaryService {
       return 'video';
     } else if (mimeType.startsWith('audio/')) {
       return 'video'; // Cloudinary uses 'video' for audio files
+    } else if (mimeType === 'application/pdf') {
+      return 'image'; // Use 'image' for PDFs to allow inline viewing
     } else {
-      return 'raw'; // Documents and other files
+      return 'raw'; // Other documents
     }
   }
 
