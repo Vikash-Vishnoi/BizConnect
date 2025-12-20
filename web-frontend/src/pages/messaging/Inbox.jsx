@@ -118,6 +118,8 @@ const Inbox = () => {
   const [isOnline, setIsOnline] = useState(false);
   const [showQuickReplies, setShowQuickReplies] = useState(false);
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
+  const [pdfViewerData, setPdfViewerData] = useState({ url: '', filename: '' });
   const [selectedMedia, setSelectedMedia] = useState(null);
   const [showMediaPreview, setShowMediaPreview] = useState(false);
   const [lightboxImage, setLightboxImage] = useState({ isOpen: false, url: '', caption: '' });
@@ -593,6 +595,16 @@ const Inbox = () => {
     }
   };
 
+  const handleOpenPdf = (url, filename) => {
+    setPdfViewerData({ url, filename });
+    setPdfViewerOpen(true);
+  };
+
+  const handleClosePdf = () => {
+    setPdfViewerOpen(false);
+    setPdfViewerData({ url: '', filename: '' });
+  };
+
   if (loading && page === 1) {
     return (
       <div className="inbox" aria-busy="true" aria-live="polite">
@@ -956,15 +968,16 @@ const Inbox = () => {
                             )}
                             {message.type === 'document' && (
                               <div className="message-document">
-                                <a 
-                                  href={message.content?.mediaUrl} 
-                                  target="_blank" 
-                                  rel="noopener noreferrer" 
+                                <button
+                                  onClick={() => handleOpenPdf(
+                                    message.content?.mediaUrl,
+                                    message.content?.filename || 'document.pdf'
+                                  )}
                                   className="document-link"
-                                  download={message.content?.filename || 'document'}
+                                  style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, textAlign: 'left' }}
                                 >
                                   <MdInsertDriveFile size={18} /> {message.content?.filename || 'Document'}
-                                </a>
+                                </button>
                                 {message.content?.caption && <p className="media-caption">{message.content.caption}</p>}
                                 {renderMessageMeta(message)}
                               </div>
@@ -1055,6 +1068,29 @@ const Inbox = () => {
         imageUrl={lightboxImage.url}
         caption={lightboxImage.caption}
       />
+
+      {/* PDF Viewer Modal */}
+      {pdfViewerOpen && (
+        <div className="pdf-viewer-modal" onClick={handleClosePdf}>
+          <div className="pdf-viewer-content" onClick={(e) => e.stopPropagation()}>
+            <div className="pdf-viewer-header">
+              <h3>{pdfViewerData.filename}</h3>
+              <button onClick={handleClosePdf} className="pdf-close-btn">
+                <MdClose size={24} />
+              </button>
+            </div>
+            <div className="pdf-viewer-body">
+              <iframe
+                src={pdfViewerData.url}
+                title={pdfViewerData.filename}
+                width="100%"
+                height="100%"
+                style={{ border: 'none' }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
