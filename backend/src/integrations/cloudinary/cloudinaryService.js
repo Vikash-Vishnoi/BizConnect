@@ -65,9 +65,26 @@ class CloudinaryService {
       // Upload to Cloudinary
       const result = await cloudinary.uploader.upload(base64Data, uploadOptions);
 
+      // For raw resources (documents), generate authenticated signed URL
+      // This bypasses the "untrusted customer" restriction
+      let deliveryUrl = result.secure_url;
+      
+      if (resourceType === 'raw') {
+        // Generate signed URL valid for 1 year (for WhatsApp long-term access)
+        const expiresAt = Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60); // 1 year from now
+        deliveryUrl = cloudinary.url(result.public_id, {
+          resource_type: 'raw',
+          type: 'upload',
+          sign_url: true,
+          secure: true,
+          expires_at: expiresAt
+        });
+        logger.info('Generated signed URL for document (valid 1 year)');
+      }
+
       logger.info('Media uploaded to Cloudinary', {
         publicId: result.public_id,
-        url: result.secure_url,
+        url: deliveryUrl,
         format: result.format,
         resourceType: result.resource_type,
         bytes: result.bytes
@@ -75,7 +92,7 @@ class CloudinaryService {
 
       return {
         success: true,
-        url: result.secure_url,
+        url: deliveryUrl,
         publicId: result.public_id,
         format: result.format,
         resourceType: result.resource_type,
