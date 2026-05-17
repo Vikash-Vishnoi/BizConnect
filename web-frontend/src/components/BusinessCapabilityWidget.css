@@ -1,0 +1,180 @@
+/**
+ * Business Capability Widget Styles
+ * 
+ * Visual styling for WhatsApp Business Account capability monitoring widget.
+ * Includes status badges, restriction alerts, and severity indicators.
+ * Uses design system variables for consistency.
+ */
+
+.business-capability-widget {
+  padding: 24px;
+}
+
+.business-capability-widget.loading,
+.business-capability-widget.error {
+  min-height: 150px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.business-capability-widget .widget-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #E2E8F0;
+}
+
+.business-capability-widget h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #0F172A;
+  margin: 0;
+}
+
+.business-capability-widget .status-badge {
+  padding: 4px 12px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.business-capability-widget .status-green {
+  background: rgba(34, 197, 94, 0.1);
+  color: #059669;
+}
+
+.business-capability-widget .status-orange {
+  background: rgba(255, 193, 7, 0.1);
+  color: #F59E0B;
+}
+
+.business-capability-widget .status-red {
+  background: rgba(239, 68, 68, 0.1);
+  color: #EF4444;
+}
+
+.business-capability-widget .status-gray {
+  background: #FFFFFF;
+  color: #64748B;
+}
+
+.business-capability-widget .widget-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.business-capability-widget .restriction-alert {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(255, 193, 7, 0.1);
+  border: 1px solid #F59E0B;
+  border-radius: 8px;
+}
+
+.business-capability-widget .alert-icon {
+  font-size: 18px;
+}
+
+.business-capability-widget .alert-content {
+  flex: 1;
+}
+
+.business-capability-widget .alert-content strong {
+  display: block;
+  color: #0F172A;
+  margin-bottom: 4px;
+}
+
+.business-capability-widget .alert-content p {
+  color: #64748B;
+  font-size: 12px;
+  margin: 0;
+}
+
+.business-capability-widget .healthy-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid #059669;
+  border-radius: 8px;
+}
+
+.business-capability-widget .status-icon {
+  font-size: 18px;
+}
+
+.business-capability-widget .healthy-status p {
+  color: #0F172A;
+  margin: 0;
+}
+
+.business-capability-widget .restrictions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.business-capability-widget .restriction-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #FFFFFF;
+  border-radius: 8px;
+  border: 1px solid #E2E8F0;
+}
+
+.business-capability-widget .restriction-capability {
+  font-size: 12px;
+  color: #0F172A;
+  font-weight: 500;
+}
+
+.business-capability-widget .restriction-severity {
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.business-capability-widget .severity-low {
+  background: rgba(59, 130, 246, 0.1);
+  color: #5e69ee;
+}
+
+.business-capability-widget .severity-medium {
+  background: rgba(255, 193, 7, 0.1);
+  color: #F59E0B;
+}
+
+.business-capability-widget .severity-high,
+.business-capability-widget .severity-critical {
+  background: rgba(239, 68, 68, 0.1);
+  color: #EF4444;
+}
+
+.business-capability-widget .last-updated {
+  font-size: 12px;
+  color: #94A3B8;
+  margin: 0;
+  padding-top: 8px;
+  border-top: 1px solid #E2E8F0;
+}
+
+.business-capability-widget .error-message {
+  color: #EF4444;
+  font-size: 12px;
+  margin: 0;
+}

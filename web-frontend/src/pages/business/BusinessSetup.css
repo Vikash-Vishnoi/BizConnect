@@ -1,0 +1,238 @@
+/**
+ * Business Setup Page Styles (Single-Page Version)
+ * 
+ * Comprehensive single-page business onboarding form styling.
+ * Alternative to the 3-part wizard flow (BusinessSetupPart1/2/3).
+ * Features full-screen gradient background with centered card.
+ * 
+ * Features:
+ * - Full-screen gradient background
+ * - Centered setup card (max-width 600px)
+ * - Two-section form (Business Info + API Credentials)
+ * - Inline help documentation
+ * - Error/info banners
+ * - Responsive mobile layout
+ * - Copy/regenerate token buttons
+ * 
+ * Layout Structure:
+ * - business-setup-container: Full viewport with gradient
+ * - business-setup-content: Centered content wrapper
+ * - setup-header: Title and description (white text)
+ * - setup-card: Main form card
+ * - form-section: Business info and API credentials sections
+ * - credentials-help: Inline help documentation
+ * - form-actions: Submit button
+ * - setup-help: External help links
+ * 
+ * Form Sections:
+ * 1. Business Information
+ *    - Basic info, contact details, address
+ *    - Industry dropdown
+ * 2. WhatsApp API Credentials
+ *    - Help documentation with step-by-step guide
+ *    - Credential input fields (4 required)
+ *    - Auto-generated verify token with copy/regenerate
+ *    - Send rate limit slider
+ * 
+ * Help Features:
+ * - Step-by-step Meta Developer Console guide
+ * - Webhook configuration instructions
+ * - Important warnings and notes
+ * - External documentation links
+ * 
+ * @extends design-system.css
+ * @used-by BusinessSetup.jsx
+ * @responsive Mobile-first with 768px breakpoint
+ */
+
+.business-setup-container {
+  min-height: 100vh;
+  background: var(--gradient-purple);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
+
+.business-setup-content {
+  width: 100%;
+  max-width: 600px;
+}
+
+.setup-header {
+  text-align: center;
+  color: #FFFFFF;
+  margin-bottom: 40px;
+}
+
+.setup-header h1 {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0 0 12px 0;
+}
+
+.setup-header p {
+  font-size: 14px;
+  opacity: 0.9;
+  margin: 0;
+}
+
+.business-setup-container .setup-card {
+  padding: 40px;
+  background: #FFFFFF;
+  border-radius: 16px;
+  box-shadow: 0 8px 16px 0 rgba(0, 0, 0, 0.25);
+}
+
+.error-message {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #FEE2E2;
+  border: 1px solid #FEE2E2;
+  border-radius: 8px;
+  color: #dc2626;
+  margin-bottom: 24px;
+  font-size: 12px;
+}
+
+.form-section {
+  margin-bottom: 40px;
+}
+
+.form-section:last-of-type {
+  margin-bottom: 24px;
+}
+
+.form-section h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #0F172A;
+  margin: 0 0 16px 0;
+}
+
+.section-help {
+  font-size: 14px;
+  color: #64748B;
+  margin: 0 0 16px 0;
+}
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-color);
+}
+
+.setup-help {
+  margin-top: 24px;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+  color: white;
+}
+
+.setup-help h4 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 8px 0;
+}
+
+.setup-help p {
+  font-size: 14px;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.setup-help a {
+  color: white;
+  text-decoration: underline;
+  margin-left: 4px;
+  font-weight: 500;
+}
+
+.setup-help a:hover {
+  opacity: 0.8;
+}
+
+@media (max-width: 768px) {
+  .business-setup-container {
+    padding: 16px;
+  }
+
+  .business-setup-container .setup-card {
+    padding: 24px;
+  }
+
+  .setup-header h1 {
+    font-size: 24px;
+  }
+
+  .form-actions {
+    flex-direction: column;
+  }
+}
+
+.credentials-help {
+  background: #E0F2FE;
+  border-left: 4px solid #5e69ee;
+  padding: 16px;
+  margin-bottom: 24px;
+  border-radius: 8px;
+}
+
+.help-header {
+  font-size: 16px;
+  font-weight: 600;
+  color: #0F172A;
+  margin: 0 0 12px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.help-steps {
+  margin: 12px 0;
+  padding-left: 24px;
+}
+
+.help-steps li {
+  margin-bottom: 8px;
+  color: #64748B;
+  line-height: 1.6;
+}
+
+.help-steps strong {
+  color: #0F172A;
+  font-weight: 600;
+}
+
+.help-note {
+  background: #FEF3C7;
+  border-left: 3px solid #F59E0B;
+  padding: 8px 12px;
+  margin-top: 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #0F172A;
+}
+
+.verify-token-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.verify-token-group > div {
+  flex: 1;
+  min-width: 200px;
+}
+
+.verify-token-group button {
+  white-space: nowrap;
+  flex-shrink: 0;
+}

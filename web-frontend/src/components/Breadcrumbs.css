@@ -1,0 +1,115 @@
+/**
+ * Breadcrumbs Navigation Styles
+ * 
+ * Provides hierarchical navigation trail for nested pages.
+ * Includes responsive design, keyboard focus states, high contrast mode support.
+ * Uses design system variables for consistency.
+ * 
+ * Features:
+ * - Mobile-first responsive design (icons only on small screens)
+ * - Focus-visible states for keyboard navigation
+ * - High contrast mode accessibility
+ * - Print optimization (hidden in print)
+ */
+
+/* ==========================================
+ * BREADCRUMBS NAVIGATION
+ * ========================================== */
+
+.breadcrumbs {
+  padding: 16px 0;
+  margin-bottom: 24px;
+  border-bottom: 1px solid #E2E8F0;
+}
+
+.breadcrumbs-list {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.breadcrumb-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.breadcrumb-link {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+  color: #64748B;
+  text-decoration: none;
+  padding: var(--spacing-2xs) 4px;
+  border-radius: 4px;
+  transition: all 150ms ease-in-out;
+  font-weight: 500;
+}
+
+.breadcrumb-link:hover {
+  color: #5e69ee;
+  background: #e2e8f0;
+}
+
+.breadcrumb-link:focus-visible {
+  outline: 2px solid #5e69ee;
+  outline-offset: 2px;
+}
+
+.breadcrumb-current {
+  color: #0F172A;
+  font-weight: 600;
+  padding: var(--spacing-2xs) 4px;
+}
+
+.breadcrumb-separator {
+  color: #94A3B8;
+  flex-shrink: 0;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .breadcrumbs {
+    padding: 8px 0;
+    margin-bottom: 16px;
+  }
+
+  .breadcrumb-item {
+    font-size: 11px;
+  }
+
+  .breadcrumb-link span {
+    display: none; /* Hide text on mobile, show icons only */
+  }
+
+  .breadcrumb-link svg {
+    margin: 0;
+  }
+
+  .breadcrumb-current {
+    font-size: 11px;
+  }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .breadcrumb-link {
+    text-decoration: underline;
+  }
+
+  .breadcrumb-separator {
+    color: #0F172A;
+  }
+}
+
+/* Print styles */
+@media print {
+  .breadcrumbs {
+    display: none;
+  }
+}

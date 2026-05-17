@@ -1,0 +1,232 @@
+/**
+ * Status Composer Page Styles
+ * 
+ * Styling for WhatsApp Business status update creation and management.
+ * Similar to Instagram/Facebook stories interface.
+ * Includes form inputs, color picker, preview, and status history.
+ * 
+ * Features:
+ * - Two-column grid layout (composer + preview)
+ * - Custom color picker with preset options
+ * - Character counter for text input
+ * - Status preview with dynamic background
+ * - Status history cards grid
+ * - Responsive mobile stacking
+ * - Smooth transitions and animations
+ * 
+ * Design Patterns:
+ * - DRY: Uses shared Button component styles
+ * - Consistent: Design system variables throughout
+ * - Modular: Form groups, color picker, status items
+ * 
+ * @extends Button.css (removed duplicate button styles)
+ * @extends EmptyState.css (shared empty state)
+ * @used-by StatusComposer.jsx
+ */
+
+.status-composer-page {
+  min-height: 100vh;
+  background-color: #FAFBFC;
+}
+
+.status-composer-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.status-composer-header {
+  margin-bottom: 32px;
+}
+
+.status-composer-header h1 {
+  font-size: 28px;
+  font-weight: 700;
+  color: #0F172A;
+  margin-bottom: 8px;
+}
+
+.status-composer-header p {
+  color: #64748B;
+  font-size: 14px;
+}
+
+.status-composer-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  margin-bottom: 32px;
+}
+
+.composer-card {
+  background: #FFFFFF;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.1);
+}
+
+.composer-card h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #0F172A;
+  margin-bottom: 24px;
+}
+
+.status-composer__form-group {
+  margin-bottom: 16px;
+}
+
+.status-composer__form-group label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #0F172A;
+  margin-bottom: 8px;
+}
+
+.status-composer__form-group textarea,
+.status-composer__form-group input,
+.status-composer__form-group select {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: 150ms ease-in-out;
+  background: #FFFFFF;
+  color: #0F172A;
+}
+
+.status-composer__form-group textarea:focus,
+.status-composer__form-group input:focus,
+.status-composer__form-group select:focus {
+  outline: none;
+  border-color: #5e69ee;
+  box-shadow: 0 0 0 3px rgba(94, 105, 238, 0.1);
+}
+
+.color-picker-input {
+  height: 40px;
+  cursor: pointer;
+}
+
+.status-preview {
+  background: #FAFBFC;
+  border-radius: 12px;
+  padding: 24px;
+  min-height: 96px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.preview-content {
+  padding: 24px;
+  border-radius: 8px;
+  max-width: 100%;
+  word-wrap: break-word;
+}
+
+.preview-content h3 {
+  margin-bottom: 12px;
+  color: #FFFFFF;
+}
+
+.preview-content a {
+  color: #FFFFFF;
+  text-decoration: underline;
+}
+
+.composer-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+/* Removed duplicate button styles - now using shared Button component styles from src/components/Button.css */
+
+.statuses-list {
+  background: #FFFFFF;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.1);
+}
+
+.statuses-list h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #0F172A;
+  margin-bottom: 24px;
+}
+
+.status-items {
+  display: grid;
+  gap: 12px;
+}
+
+.status-item {
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid #E2E8F0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.status-info {
+  flex: 1;
+}
+
+.status-text {
+  font-size: 14px;
+  color: #0F172A;
+  margin-bottom: 4px;
+}
+
+.status-meta {
+  font-size: 11px;
+  color: #64748B;
+}
+
+.status-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-icon {
+  width: 48px;
+  height: 48px;
+  border: none;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: 150ms ease-in-out;
+  background: #FAFBFC;
+  color: #64748B;
+}
+
+.btn-icon:hover {
+  background: #7d86f2;
+  color: #FFFFFF;
+}
+
+.btn-icon.delete:hover {
+  background: #EF4444;
+  color: #FFFFFF;
+}
+
+.loading,
+/* Empty state uses shared EmptyState.css component */
+
+@media (max-width: 768px) {
+  .status-composer-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .composer-actions {
+    flex-direction: column;
+  }
+}

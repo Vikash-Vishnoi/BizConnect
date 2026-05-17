@@ -1,0 +1,202 @@
+/**
+ * Shared Stats Components
+ * 
+ * Centralized stat card styling used across dashboard, analytics, and campaign pages.
+ * Single source of truth for all stat-related components.
+ * 
+ * Features:
+ * - Responsive grid layout (4/2/1 columns)
+ * - Stat cards with icon and content
+ * - Color-coded icon variants (primary/success/info/warning/danger/neutral)
+ * - Hover elevation effect (translateY -4px)
+ * - Compact variant for dense layouts
+ * - 3-column variant option
+ * - Responsive breakpoints (1200px, 768px)
+ * 
+ * Layout Structure:
+ * - stats-grid: Responsive grid container
+ * - stat-card: Individual stat with icon + content
+ * - stat-card__icon: Color-coded icon background
+ * - stat-card__content: Label, value, change
+ * - stat-card__value: Large bold number
+ * - stat-card__label: Small secondary text
+ * - stat-card__change: Percentage with positive/negative color
+ * 
+ * Icon Variants:
+ * - primary: Purple gradient
+ * - success: Green gradient
+ * - info: Blue gradient
+ * - warning: Yellow/orange gradient
+ * - danger: Red/error gradient
+ * - neutral: Gray gradient
+ * 
+ * Grid Variants:
+ * - Default: 4 columns
+ * - --compact: Reduced padding and spacing
+ * - --three: 3-column layout
+ * 
+ * @extends design-system.css
+ * @used-by Dashboard, Analytics, CampaignDetail, ScheduledMessages
+ * @responsive Mobile-first with 1200px and 768px breakpoints
+ */
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.stat-card {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  background: #FFFFFF;
+  border-radius: 16px;
+  box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.1);
+  transition: transform 200ms ease-in-out, box-shadow 200ms ease-in-out;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid #E2E8F0;
+}
+
+.stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 3px 6px 0 rgba(0, 0, 0, 0.12);
+}
+
+.stat-card__icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+  color: #FFFFFF;
+}
+
+.stat-card__icon--primary {
+  background: var(--gradient-primary);
+}
+
+.stat-card__icon--success {
+  background: var(--gradient-success);
+}
+
+.stat-card__icon--info {
+  background: var(--gradient-blue);
+}
+
+.stat-card__icon--warning {
+  background: var(--gradient-warning);
+}
+
+.stat-card__icon--danger {
+  background: var(--gradient-error);
+}
+
+.stat-card__icon--secondary {
+  background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+}
+
+.stat-card__icon--neutral {
+  background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+}
+
+.stat-card__content {
+  flex: 1;
+  min-width: 0;
+}
+
+.stat-card__label {
+  font-size: 11px;
+  color: #64748B;
+  margin: 0 0 4px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stat-card__value {
+  font-size: 20px !important;
+  font-weight: 700 !important;
+  color: #0F172A !important;
+  margin: 0 0 4px 0;
+  line-height: 1;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+}
+
+.stat-card__change {
+  font-size: 11px;
+  color: #94A3B8;
+  margin: 0;
+}
+
+.stat-card__change--positive {
+  color: #059669;
+}
+
+.stat-card__change--negative {
+  color: #EF4444;
+}
+
+/* Responsive grid */
+@media (max-width: 1200px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stat-card {
+    padding: 16px;
+  }
+
+  .stat-card__value {
+    font-size: 18px;
+  }
+}
+
+/* Compact variant */
+.stats-grid--compact {
+  gap: 4px;
+}
+
+.stats-grid--compact .stat-card {
+  padding: 8px;
+}
+
+.stats-grid--compact .stat-card__icon {
+  width: 32px;
+  height: 32px;
+  font-size: 16px;
+}
+
+.stats-grid--compact .stat-card__value {
+  font-size: 16px;
+}
+
+/* 3-column variant */
+.stats-grid--three {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+@media (max-width: 1200px) {
+  .stats-grid--three {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .stats-grid--three {
+    grid-template-columns: 1fr;
+  }
+}

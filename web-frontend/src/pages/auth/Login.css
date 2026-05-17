@@ -1,0 +1,426 @@
+/**
+ * Login Page Styles
+ * 
+ * Authentication page with split-screen layout.
+ * Left: Platform branding, features, statistics.
+ * Right: Login form with email/password inputs.
+ * 
+ * Features:
+ * - Split-screen layout (50/50)
+ * - Animated branding with floating logo
+ * - Feature highlights with staggered slide-in
+ * - Platform statistics display
+ * - Login form with error handling
+ * - Password visibility toggle
+ * - Keep me signed in checkbox
+ * - Forgot password link
+ * - Responsive mobile layout (hides left panel)
+ * - Smooth animations and transitions
+ * 
+ * Layout Structure:
+ * - auth-container: Full-height flex container
+ * - auth-left: Branding and features (hidden on mobile)
+ * - auth-right: Login form panel
+ * - auth-card: White card with form
+ * - auth-features: Feature highlights with icons
+ * - auth-stats: Platform metrics grid
+ * 
+ * Left Panel:
+ * - Gradient background (purple primary)
+ * - Floating WhatsApp logo animation
+ * - Brand title and subtitle
+ * - 3 feature items with glass morphism
+ * - Statistics grid (3 columns)
+ * - Slide-in animations (staggered 0.2s delay)
+ * 
+ * Right Panel:
+ * - Light background (#F9FAFB)
+ * - Centered white card with shadow
+ * - Form with email and password inputs
+ * - Error alert with shake animation
+ * - Submit button with loading state
+ * - Links to register and forgot password
+ * - Support link at bottom
+ * 
+ * Animations:
+ * - float: Logo animation (3s ease-in-out infinite)
+ * - slideInLeft: Features animation (0.6s)
+ * - slideInRight: Card animation (0.6s)
+ * - shake: Error alert (0.4s)
+ * 
+ * @extends design-system.css
+ * @used-by Login.jsx
+ * @responsive Mobile-first, hides left panel <1024px
+ */
+
+.auth-container {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* Gradient background variant */
+.auth-container-gradient {
+  background: linear-gradient(135deg, #6366F1 0%, #4F46E5 100%);
+}
+
+.auth-left {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 80px;
+  color: #FFFFFF;
+  background: var(--gradient-primary);
+}
+
+.auth-branding {
+  margin-bottom: 80px;
+}
+
+.brand-logo {
+  margin-bottom: 24px;
+  animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+.brand-title {
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  line-height: 1.2;
+}
+
+.brand-subtitle {
+  font-size: 18px;
+  opacity: 0.8;
+  line-height: 1.75;
+}
+
+.auth-features {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  margin-bottom: 80px;
+}
+
+.feature-item {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  animation: slideInLeft 0.6s ease-out;
+}
+
+/* Feature card with glassmorphism effect */
+.feature-card {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  padding: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.feature-item:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.feature-item:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.feature-icon {
+  width: 48px;
+  height: 48px;
+  background: rgba(57, 175, 234, 0.25);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  backdrop-filter: blur(10px);
+  transition: all 200ms ease-in-out;
+}
+
+.feature-item:hover .feature-icon {
+  background: rgba(57, 175, 234, 0.4);
+  transform: scale(1.1);
+}
+
+.feature-icon svg {
+  color: #FFFFFF;
+}
+
+/* Success color variant for feature icons */
+.feature-icon-success {
+  color: #10B981;
+}
+
+.feature-content h3 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.feature-content p {
+  font-size: 12px;
+  opacity: 0.8;
+  line-height: 1.5;
+}
+
+.auth-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 24px;
+  padding: 32px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.stat-item {
+  text-align: center;
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.stat-label {
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.auth-right {
+  flex: 1;
+}
+
+/* Light background variant for right panel */
+.auth-right-panel {
+  background: #F9FAFB;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px;
+  background: #FAFBFC;
+}
+
+.auth-card {
+  background: #FFFFFF;
+  border-radius: 16px;
+  box-shadow: 0 6px 12px 0 rgba(0, 0, 0, 0.2);
+ 
+
+/* Elevated shadow variant */
+.auth-card-elevated {
+  background: white;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+} width: 100%;
+  max-width: 480px;
+  padding: 64px;
+  animation: slideInRight 0.6s ease-out;
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.auth-header h2 {
+  font-size: 28px;
+  font-weight: 700;
+  color: #0F172A;
+  margin-bottom: 8px;
+}
+
+.auth-header p {
+  color: #64748B;
+  font-size: 16px;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.error-alert {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background-color: #FEE2E2;
+  border: 1px solid #EF4444;
+  border-radius: 8px;
+  color: #dc2626;
+  font-size: 12px;
+  animation: shake 0.4s ease;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-5px); }
+  75% { transform: translateX(5px); }
+}
+
+.error-alert svg {
+  flex-shrink: 0;
+  stroke: #dc2626;
+}
+
+.auth-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: calc(-1 * 8px) 0;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: #64748B;
+  font-size: 12px;
+  user-select: none;
+  transition: color 200ms ease-in-out;
+}
+
+.checkbox-label:hover {
+  color: #0F172A;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #5e69ee;
+}
+
+.link-primary {
+  color: #5e69ee;
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 200ms ease-in-out;
+}
+
+.link-primary:hover {
+  color: #4a52d9;
+  text-decoration: underline;
+}
+
+.link-bold {
+  font-weight: 600;
+}
+
+.password-toggle {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748B;
+  transition: all 200ms ease-in-out;
+  border-radius: 4px;
+  margin-top: 12px;
+}
+
+.password-toggle:hover {
+  color: #39AFEA;
+  background: #68c5f0;
+}
+
+.password-toggle:active {
+  transform: translateY(-50%) scale(0.95);
+}
+
+.password-toggle svg {
+  display: block;
+}
+
+.auth-footer {
+  text-align: center;
+  margin-top: 32px;
+  padding-top: 32px;
+  border-top: 1px solid #E2E8F0;
+}
+
+.auth-footer p {
+  color: #64748B;
+  font-size: 12px;
+}
+
+.auth-help {
+  margin-top: 24px;
+  text-align: center;
+}
+
+.auth-help p {
+  color: #64748B;
+  font-size: 12px;
+}
+
+.auth-help a {
+  color: #5e69ee;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 200ms ease-in-out;
+}
+
+.auth-help a:hover {
+  color: #4a52d9;
+  text-decoration: underline;
+}
+
+@media (max-width: 1024px) {
+  .auth-left {
+    display: none;
+  }
+  
+  .auth-right {
+    flex: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .auth-right {
+    padding: 24px;
+  }
+  
+  .auth-card {
+    padding: 32px 24px;
+  }
+  
+  .auth-header h2 {
+    font-size: 22px;
+  }
+}

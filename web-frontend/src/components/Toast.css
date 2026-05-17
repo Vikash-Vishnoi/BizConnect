@@ -1,0 +1,154 @@
+/**
+ * Toast Notification Styles
+ * 
+ * Temporary notification messages displayed at top-right corner.
+ * Support success, error, warning, and info variants.
+ * 
+ * Features:
+ * - Auto-dismiss after timeout
+ * - Slide-in animation from right
+ * - Color-coded by type (success/error/warning/info)
+ * - Icon + message + close button layout
+ * - Stacked notifications (vertical)
+ * - Click-through background (pointer-events: none on container)
+ * - Fixed positioning (top-right)
+ * - Mobile responsive (full width on small screens)
+ * 
+ * Toast Types:
+ * - success: Green border-left (#22c55e)
+ * - error: Red border-left (#ef4444)
+ * - warning: Orange border-left (#f59e0b)
+ * - info: Blue border-left (#3b82f6)
+ * 
+ * Layout:
+ * - toast-container: Fixed container at top-right
+ * - toast: Individual notification card
+ * - toast-icon: Status icon (color-coded)
+ * - toast-message: Message text
+ * - toast-close: Close button (×)
+ * 
+ * Animations:
+ * - slideIn: Slide from right with fade (0.3s)
+ * - Auto-remove after duration
+ * 
+ * @extends design-system.css
+ * @used-by Toast.jsx
+ * @responsive Full width on mobile (<768px)
+ */
+
+.toast-container {
+  position: fixed;
+  top: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 400px;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 24px;
+  background: #FFFFFF;
+  border-radius: 8px;
+  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.15);
+  animation: slideIn 0.3s ease-out;
+  pointer-events: auto;
+  min-width: 300px;
+  border-left: 4px solid;
+}
+
+.toast-success {
+  border-left-color: var(--success, #22c55e);
+}
+
+.toast-error {
+  border-left-color: var(--error, #ef4444);
+}
+
+.toast-warning {
+  border-left-color: var(--warning, #f59e0b);
+}
+
+.toast-info {
+  border-left-color: var(--info, #3b82f6);
+}
+
+.toast-icon {
+  display: flex;
+  align-items: center;
+  font-size: 32px;
+  flex-shrink: 0;
+}
+
+.toast-success .toast-icon {
+  color: var(--success, #22c55e);
+}
+
+.toast-error .toast-icon {
+  color: var(--error, #ef4444);
+}
+
+.toast-warning .toast-icon {
+  color: var(--warning, #f59e0b);
+}
+
+.toast-info .toast-icon {
+  color: var(--info, #3b82f6);
+}
+
+.toast-message {
+  flex: 1;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #0F172A;
+}
+
+.toast-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: #64748B;
+  font-size: 20px;
+  flex-shrink: 0;
+  transition: all 200ms ease-in-out;
+}
+
+.toast-close:hover {
+  background: #e2e8f0;
+  color: #0F172A;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@media (max-width: 768px) {
+  .toast-container {
+    top: 8px;
+    right: 8px;
+    left: 8px;
+    max-width: none;
+  }
+
+  .toast {
+    min-width: auto;
+  }
+}

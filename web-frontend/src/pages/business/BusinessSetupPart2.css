@@ -1,0 +1,435 @@
+/**
+ * Business Setup Part 2 Page Styles
+ * 
+ * WhatsApp Business API credentials configuration styling.
+ * Second step of 3-part onboarding wizard.
+ * Includes credential input form and progress indicator.
+ * 
+ * Features:
+ * - Full-height page layout
+ * - Centered setup card (max-width 900px)
+ * - Progress indicator showing Step 2 active
+ * - Form sections for API credentials
+ * - Input fields with labels
+ * - Navigation buttons (Back, Continue)
+ * - Error banner styling
+ * - Loading states
+ * - Responsive mobile layout
+ * 
+ * Layout Structure:
+ * - setup-part2-page: Full viewport container
+ * - setup-card: Centered content card
+ * - setup-header: Title and progress indicator
+ * - setup-form: Credential input form
+ * - form-section: Grouped form fields
+ * - form-actions: Button group
+ * 
+ * Progress Indicator:
+ * - 3 steps with circles and connecting lines
+ * - Step 2 highlighted as active
+ * - Visual feedback for current position
+ * 
+ * Form Layout:
+ * - Vertical stacking of input groups
+ * - Full-width input fields
+ * - Help text for each credential
+ * - Validation error display
+ * 
+ * @extends page-layouts.css
+ * @used-by BusinessSetupPart2.jsx
+ * @responsive Mobile-first with 768px breakpoint
+ */
+
+/* Page Layout - Scoped to Part 2 */
+.setup-part2-page.page-container {
+  height: 100vh;
+  background: #FAFBFC;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.setup-part2-page .page-content.setup-page {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px 24px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+/* Setup Card */
+.setup-part2-page .setup-card {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+/* Header Section */
+.setup-part2-page .setup-header {
+  margin-bottom: 32px;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.setup-part2-page .setup-header h1 {
+  font-size: 22px;
+  font-weight: 600;
+  color: #0F172A;
+  margin-bottom: 8px;
+  text-align: left;
+}
+
+.setup-part2-page .setup-header.center h1,
+.setup-part2-page .setup-header.center .setup-description {
+  text-align: center;
+}
+
+.setup-part2-page .setup-header.center .progress-indicator {
+  justify-content: center;
+  margin: 0 auto;
+}
+
+.setup-part2-page .setup-description {
+  font-size: 14px;
+  color: #64748B;
+  margin-bottom: 24px;
+  line-height: 1.5;
+}
+
+/* Progress Indicator */
+.setup-part2-page .progress-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  max-width: 500px;
+  margin: 0;
+  gap: 16px;
+}
+
+.setup-part2-page .progress-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.setup-part2-page .step-circle {
+  width: 36px;
+  height: 36px;
+  border-radius: 9999px;
+  background: #FAFBFC;
+  color: #94A3B8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  border: 2px solid #E2E8F0;
+  transition: all 200ms ease-in-out;
+}
+
+.setup-part2-page .progress-step.active .step-circle {
+  background: var(--gradient-primary);
+  color: white;
+  border-color: #5e69ee;
+  box-shadow: 0 3px 6px 0 rgba(0, 0, 0, 0.12);
+}
+
+.setup-part2-page .progress-step.completed .step-circle {
+  background: #059669;
+  color: white;
+  border-color: #059669;
+}
+
+.setup-part2-page .progress-step span {
+  font-size: 12px;
+  color: #94A3B8;
+  font-weight: 500;
+}
+
+.setup-part2-page .progress-step.active span,
+.setup-part2-page .progress-step.completed span {
+  color: #0F172A;
+  font-weight: 600;
+}
+
+.setup-part2-page .progress-line {
+  width: 60px;
+  height: 2px;
+  background: #E2E8F0;
+  margin-bottom: 20px;
+  transition: all 200ms ease-in-out;
+}
+
+.setup-part2-page .progress-line.completed {
+  background: #059669;
+}
+
+/* Form */
+.setup-part2-page .setup-form {
+  padding: 0;
+}
+
+.setup-part2-page .form-section {
+  margin-bottom: 40px;
+  padding-bottom: 32px;
+  border-bottom: 1px solid #E2E8F0;
+}
+
+.setup-part2-page .form-section:last-of-type {
+  margin-bottom: 32px;
+  border-bottom: none;
+}
+
+.setup-part2-page .section-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.setup-part2-page .section-header::before,
+.setup-part2-page .section-header::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, transparent, #E2E8F0, transparent);
+}
+
+.setup-part2-page .section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #0F172A;
+  margin: 0;
+  padding: 0 16px;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.setup-part2-page .section-subtitle {
+  font-size: 12px;
+  color: #64748B;
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+
+.setup-part2-page .section-subtitle a {
+  color: #5e69ee;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.setup-part2-page .section-subtitle a:hover {
+  text-decoration: underline;
+}
+
+.setup-part2-page .section-description {
+  font-size: 12px;
+  color: #64748B;
+  margin-bottom: 24px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* Error and Success Messages */
+.setup-part2-page .error-message {
+  padding: 16px;
+  background: #FEE2E2;
+  border: 1px solid #EF4444;
+  border-radius: 8px;
+  color: #dc2626;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+  font-size: 12px;
+}
+
+.setup-part2-page .error-message span:first-child {
+  font-size: 18px;
+}
+
+.setup-part2-page .success-message {
+  padding: 16px;
+  background: #D1FAE5;
+  border: 1px solid #059669;
+  border-radius: 8px;
+  color: #047857;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.setup-part2-page .success-message span:first-child {
+  font-size: 18px;
+  color: #059669;
+}
+
+/* Info Banner */
+.setup-part2-page .info-banner {
+  display: flex;
+  gap: 16px;
+  padding: 24px;
+  background: #E0F2FE;
+  border-radius: 12px;
+  margin-bottom: 32px;
+  border-left: 4px solid #39AFEA;
+}
+
+.setup-part2-page .info-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.setup-part2-page .info-content {
+  flex: 1;
+}
+
+.setup-part2-page .info-content p {
+  margin: 0;
+  color: #2563eb;
+  line-height: 1.5;
+  font-size: 12px;
+}
+
+.setup-part2-page .info-content p:first-child {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.setup-part2-page .info-content a {
+  color: #2563eb;
+  text-decoration: underline;
+  font-weight: 600;
+}
+
+.setup-part2-page .info-content a:hover {
+  color: #5e69ee;
+}
+
+/* Form Grid */
+.setup-part2-page .form-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 24px;
+}
+
+.setup-part2-page .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.setup-part2-page .form-group.full-width {
+  grid-column: 1 / -1;
+}
+
+.setup-part2-page .form-group label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #0F172A;
+}
+
+.setup-part2-page .field-help {
+  font-size: 11px;
+  color: #64748B;
+  margin-top: 4px;
+  line-height: 1.5;
+}
+
+/* Validate Section */
+.setup-part2-page .validate-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 0;
+  border-top: 1px solid #E2E8F0;
+  border-bottom: 1px solid #E2E8F0;
+  margin-bottom: 24px;
+}
+
+.setup-part2-page .validate-section button {
+  min-width: 240px;
+}
+
+.setup-part2-page .validate-help {
+  margin: 0;
+  font-size: 12px;
+  color: #64748B;
+  text-align: center;
+}
+
+/* Form Actions */
+.setup-part2-page .form-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 32px;
+  border-top: 1px solid #E2E8F0;
+}
+
+.setup-part2-page .form-actions button {
+  min-width: 160px;
+}
+
+.setup-part2-page .form-actions button:first-child {
+  margin-right: auto;
+}
+
+.setup-part2-page .form-actions button:last-child {
+  margin-left: 0;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .setup-part2-page .page-content.setup-page {
+    padding: 16px;
+  }
+
+  .setup-part2-page .setup-header h1 {
+    font-size: 22px;
+  }
+
+  .setup-part2-page .info-banner {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .setup-part2-page .progress-indicator {
+    max-width: 100%;
+    gap: 8px;
+  }
+
+  .setup-part2-page .progress-line {
+    width: 60px;
+  }
+
+  .setup-part2-page .step-circle {
+    width: 40px;
+    height: 40px;
+    font-size: 14px;
+  }
+
+  .setup-part2-page .progress-step span {
+    font-size: 11px;
+  }
+
+  .setup-part2-page .section-title {
+    font-size: 16px;
+  }
+
+  .setup-part2-page .form-actions {
+    flex-direction: column;
+  }
+
+  .setup-part2-page .form-actions button {
+    max-width: 100%;
+  }
+}

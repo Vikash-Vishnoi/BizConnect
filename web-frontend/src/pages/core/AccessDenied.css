@@ -1,0 +1,314 @@
+/**
+ * Access Denied Page Styles
+ * 
+ * 403 Forbidden error page styling with animated lock icon.
+ * Centered layout with permission denial message and navigation options.
+ * Part of role-based access control UI/UX.
+ * 
+ * Features:
+ * - Centered error card layout
+ * - Animated lock icon with glow effect
+ * - 403 error code badge
+ * - Permission info card
+ * - Action buttons with icons
+ * - Support contact link
+ * - Decorative background elements
+ * - Smooth entrance animations
+ * - Responsive mobile layout
+ * 
+ * Design Elements:
+ * - Gradient background with purple theme
+ * - Lock icon with pulse glow animation
+ * - Gradient text for title
+ * - Info card with blue accent
+ * - Button group with hover effects
+ * - Floating background decorations
+ * 
+ * Animations:
+ * - slideUp: Card entrance (0.6s)
+ * - pulse: Lock glow effect (2s infinite)
+ * - lockShake: Lock shake on load (0.8s)
+ * 
+ * Layout:
+ * - Full viewport height centered
+ * - Max-width content card (600px)
+ * - Vertical stacking on mobile
+ * - Z-index layering for decorations
+ * 
+ * @used-by AccessDenied.jsx
+ * @animation Multiple keyframe animations
+ * @responsive Mobile-first with 768px breakpoint
+ */
+
+.access-denied-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--gradient-purple);
+  padding: 24px;
+  position: relative;
+  overflow: hidden;
+}
+
+.access-denied-content {
+  background: #FFFFFF;
+  border-radius: 32px;
+  padding: 80px 48px;
+  max-width: 600px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 12px 24px 0 rgba(0, 0, 0, 0.3);
+  position: relative;
+  z-index: 1000;
+  animation: slideUp 0.6s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Lock Icon */
+.lock-icon-wrapper {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 40px;
+}
+
+.lock-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 140px;
+  height: 140px;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.3) 0%, transparent 70%);
+  border-radius: 9999px;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.6;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.1);
+    opacity: 0.3;
+  }
+}
+
+.lock-icon {
+  position: relative;
+  z-index: 1;
+  animation: lockShake 0.8s ease-in-out;
+  filter: drop-shadow(0 4px 12px rgba(99, 102, 241, 0.4));
+}
+
+@keyframes lockShake {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-10deg); }
+  75% { transform: rotate(10deg); }
+}
+
+/* Error Badge */
+.error-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--gradient-purple);
+  color: #FFFFFF;
+  padding: 8px 32px;
+  border-radius: 9999px;
+  font-weight: 600;
+  font-size: 12px;
+  margin-bottom: 32px;
+  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.15);
+}
+
+.error-code {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.error-separator {
+  opacity: var(--opacity-50);
+}
+
+.error-label {
+  font-size: 11px;
+  letter-spacing: 1px;
+}
+
+/* Title & Description */
+.access-denied-title {
+  font-size: 28px;
+  font-weight: 700;
+  color: #0F172A;
+  margin: 0 0 16px 0;
+  background: var(--gradient-purple);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.access-denied-description {
+  font-size: 14px;
+  color: #64748B;
+  line-height: 1.6;
+  margin: 0 0 40px 0;
+}
+
+/* Permission Info Card */
+.permission-info-card {
+  background: #E0F2FE;
+  border: 1px solid #39AFEA;
+  border-radius: 12px;
+  padding: 24px;
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  text-align: left;
+  margin-bottom: 40px;
+}
+
+.permission-info-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  background: #FFFFFF;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #5e69ee;
+}
+
+.permission-info-text {
+  flex: 1;
+}
+
+.permission-info-text strong {
+  display: block;
+  color: #5e69ee;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.permission-info-text p {
+  color: #64748B;
+  font-size: 12px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* Action Buttons */
+.access-denied-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 32px;
+}
+
+/* Removed duplicate button styles - now using shared Button component styles from src/components/Button.css */
+
+/* Footer */
+.access-denied-footer {
+  padding-top: 32px;
+  border-top: 1px solid #E2E8F0;
+  color: #64748B;
+  font-size: 12px;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  color: #5e69ee;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+  margin-left: 4px;
+  transition: 200ms ease-in-out;
+}
+
+.link-button:hover {
+  color: #4a52d9;
+}
+
+/* Background Decorations */
+.bg-decoration {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.bg-decoration-1 {
+  width: 400px;
+  height: 400px;
+  top: -100px;
+  right: -100px;
+  animation: float 6s ease-in-out infinite;
+}
+
+.bg-decoration-2 {
+  width: 300px;
+  height: 300px;
+  bottom: -80px;
+  left: -80px;
+  animation: float 8s ease-in-out infinite;
+  animation-delay: 1s;
+}
+
+.bg-decoration-3 {
+  width: 200px;
+  height: 200px;
+  top: 50%;
+  left: 10%;
+  animation: float 7s ease-in-out infinite;
+  animation-delay: 2s;
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-20px) scale(1.05);
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .access-denied-content {
+    padding: 48px 32px;
+  }
+
+  .access-denied-title {
+    font-size: 24px;
+  }
+
+  .lock-icon {
+    width: 100px;
+    height: 100px;
+  }
+
+  .access-denied-actions {
+    flex-direction: column;
+  }
+
+  .btn-primary,
+  .btn-secondary {
+    width: 100%;
+    justify-content: center;
+  }
+}

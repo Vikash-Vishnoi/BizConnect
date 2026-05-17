@@ -1,0 +1,357 @@
+/**
+ * @file ConversationAnalytics.css
+ * @description Conversation analytics dashboard styling with real-time metrics and visual data representation
+ * 
+ * @features
+ * - Metric cards with color-coded borders (primary, success, info, warning)
+ * - Response time distribution bars with gradient colors
+ * - Status breakdown grid (active, resolved, pending, closed)
+ * - Key insights section with icon cards
+ * - Date range selector
+ * - Responsive grid layouts
+ * 
+ * @layout
+ * - conversation-analytics-container: Main container (1400px max-width)
+ * - metrics-grid: 4-column auto-fit grid (280px min per card)
+ * - charts-section: 2-column auto-fit grid (400px min per card)
+ * - response-time-bars: Vertical stack of progress bars
+ * - status-breakdown: 2x2 grid of status items
+ * - insights-grid: Auto-fit grid (280px min per insight)
+ * 
+ * @components
+ * - metric-card: Analytics metric with icon, value, and change indicator
+ * - chart-card: Container for charts with title
+ * - time-bar: Progress bar with 4 gradient variants (excellent, good, average, poor)
+ * - insight-card: Key insight with icon and detail text
+ * 
+ * @responsive
+ * - Desktop: Multi-column grids, horizontal layouts
+ * - Tablet (1024px): Single column charts
+ * - Mobile (768px): All grids single column, reduced padding
+ * 
+ * @dependencies
+ * - Uses design system variables from design-system.css
+ * - Uses shared loading/empty states from LoadingSkeleton.css
+ */
+
+.conversation-analytics-container {
+  padding: 20px;
+  max-width: 1400px;
+  margin: 80px auto 0;
+  min-height: calc(100vh - 80px);
+  background: #f8f9fa;
+}
+
+.conversation-analytics-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.conversation-analytics-header h1 {
+  font-size: 28px;
+  margin-bottom: 8px;
+  color: #0F172A;
+}
+
+.conversation-analytics-header p {
+  color: #64748B;
+  font-size: 16px;
+  margin: 0;
+}
+
+.date-range-selector select {
+  padding: 10px 20px;
+  border: 2px solid #E2E8F0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 300ms ease-in-out;
+}
+
+.date-range-selector select:focus {
+  outline: none;
+  border-color: #5e69ee;
+}
+
+/* Loading and empty states use shared components */
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+.metric-card {
+  background: #FFFFFF;
+  padding: 24px;
+  border-radius: 12px;
+  box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.1);
+  display: flex;
+  gap: 16px;
+  transition: 300ms ease-in-out;
+  border-left: 4px solid;
+}
+
+.metric-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.15);
+}
+
+.metric-card.primary {
+  border-left-color: #5e69ee;
+}
+
+.metric-card.success {
+  border-left-color: #059669;
+}
+
+.metric-card.info {
+  border-left-color: #39AFEA;
+}
+
+.metric-card.warning {
+  border-left-color: #F59E0B;
+}
+
+.metric-icon {
+  font-size: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.metric-content {
+  flex: 1;
+}
+
+.metric-label {
+  font-size: 14px;
+  color: #64748B;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.metric-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #0F172A;
+  margin-bottom: 4px;
+}
+
+.metric-change {
+  font-size: 13px;
+  color: #94A3B8;
+}
+
+.charts-section {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+.chart-card {
+  background: #FFFFFF;
+  padding: 28px;
+  border-radius: 12px;
+  box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.1);
+  min-height: 400px;
+}
+
+.chart-card h3 {
+  font-size: 20px;
+  color: #0F172A;
+  margin-bottom: 24px;
+}
+
+.response-time-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.time-bar-item {
+  display: grid;
+  grid-template-columns: 100px 1fr 60px;
+  gap: 12px;
+  align-items: center;
+}
+
+.time-label {
+  font-size: 14px;
+  color: #64748B;
+  font-weight: 500;
+}
+
+.time-bar-wrapper {
+  background: #f0f0f0;
+  height: 32px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.time-bar {
+  height: 100%;
+  border-radius: 8px;
+  transition: 500ms ease-in-out;
+}
+
+.time-bar.excellent {
+  background: var(--gradient-success);
+}
+
+.time-bar.good {
+  background: var(--gradient-blue);
+}
+
+.time-bar.average {
+  background: var(--gradient-warning);
+}
+
+.time-bar.poor {
+  background: var(--gradient-error);
+}
+
+.time-percentage {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0F172A;
+  text-align: right;
+}
+
+.status-breakdown {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+}
+
+.status-icon {
+  font-size: 32px;
+}
+
+.status-info {
+  flex: 1;
+}
+
+.status-label {
+  font-size: 14px;
+  color: #64748B;
+  margin-bottom: 4px;
+}
+
+.status-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #0F172A;
+}
+
+.insights-section {
+  background: #FFFFFF;
+  padding: 32px;
+  border-radius: 12px;
+  box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.1);
+}
+
+.insights-section h3 {
+  font-size: 24px;
+  color: #0F172A;
+  margin-bottom: 24px;
+}
+
+.insights-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.insight-card {
+  display: flex;
+  gap: 16px;
+  padding: 24px;
+  background: var(--gradient-surface);
+  border-radius: 12px;
+  transition: 300ms ease-in-out;
+}
+
+.insight-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 3px 6px 0 rgba(0, 0, 0, 0.12);
+}
+
+.insight-icon {
+  font-size: 40px;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--gradient-purple);
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+
+.insight-content {
+  flex: 1;
+}
+
+.insight-content h4 {
+  font-size: 14px;
+  color: #0F172A;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.insight-content p {
+  font-size: 24px;
+  font-weight: 700;
+  color: #5e69ee;
+  margin-bottom: 4px;
+}
+
+.insight-detail {
+  font-size: 12px;
+  color: #94A3B8;
+}
+
+@media (max-width: 1024px) {
+  .charts-section {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .conversation-analytics-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .status-breakdown {
+    grid-template-columns: 1fr;
+  }
+
+  .insights-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .conversation-analytics-container {
+    padding: 16px;
+  }
+}

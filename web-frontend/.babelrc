@@ -1,0 +1,25 @@
+/**
+ * Babel Configuration for WhatsApp Marketing Platform
+ * 
+ * @description
+ * Configures Babel to transpile modern JavaScript (ES6+) and React JSX syntax
+ * to browser-compatible JavaScript for production builds.
+ * 
+ * @presets
+ * - @babel/preset-env: Transpiles ES6+ to ES5 based on target browsers
+ * - @babel/preset-react: Transforms JSX syntax to React.createElement calls
+ * 
+ * @usage
+ * This configuration is automatically used by Webpack's babel-loader during
+ * the build process. No manual invocation required.
+ * 
+ * @compatibility
+ * Targets modern browsers as defined in package.json browserslist field.
+ * Supports async/await, arrow functions, spread operators, and all ES6+ features.
+ */
+{
+  "presets": [
+    "@babel/preset-env",
+    "@babel/preset-react"
+  ]
+}

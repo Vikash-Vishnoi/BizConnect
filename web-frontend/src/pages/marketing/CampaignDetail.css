@@ -1,0 +1,534 @@
+/**
+ * Campaign Detail Page Styles
+ * 
+ * Comprehensive campaign analytics and status page.
+ * Features statistics grid, progress tracking, and performance metrics.
+ * Displays real-time campaign data with visual progress indicators.
+ * 
+ * Features:
+ * - Full-page campaign detail layout
+ * - Back navigation button
+ * - Campaign header with title and status badge
+ * - Statistics cards grid (sent, delivered, read, failed)
+ * - Animated progress bar with shimmer effect
+ * - Performance metrics with bar charts
+ * - Two-column info and metrics grid
+ * - Responsive mobile stacking
+ * 
+ * Layout Structure:
+ * - campaign-detail: Full-page wrapper
+ * - campaign-detail-content: Max-width content area
+ * - campaign-detail-header: Title, status, actions
+ * - campaign-stats-grid: Statistics cards (4 columns)
+ * - campaign-progress-card: Progress bar section
+ * - campaign-detail-grid: Info and metrics columns
+ * - campaign-info-card: Campaign details
+ * - campaign-metrics-card: Performance metrics
+ * 
+ * Statistics Cards:
+ * - Icon + value + label layout
+ * - Large bold numbers
+ * - Color-coded icons (sent, delivered, read, failed)
+ * - Responsive grid (auto-fit minmax 250px)
+ * 
+ * Progress Bar:
+ * - Animated gradient fill
+ * - Shimmer effect animation
+ * - Percentage text display
+ * - Progress details (sent/total)
+ * 
+ * Metrics:
+ * - Delivery rate, read rate, failure rate
+ * - Horizontal bar charts with gradients
+ * - Success (green), Info (blue) color coding
+ * - Breakdown grid for detailed stats
+ * 
+ * Animations:
+ * - Progress bar fill transition (0.5s ease)
+ * - Shimmer effect (2s infinite)
+ * - Hover effects on buttons
+ * 
+ * @extends design-system.css
+ * @used-by CampaignDetail.jsx
+ * @responsive Mobile-first approach
+ */
+
+.campaign-detail {
+  min-height: 100vh;
+  background: #FAFBFC;
+}
+
+.campaign-detail-content {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+/* Header */
+.back-button {
+  background: none;
+  border: none;
+  color: #5e69ee;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 8px 0;
+  margin-bottom: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 150ms ease-in-out;
+}
+
+.back-button:hover {
+  color: #4a52d9;
+  transform: translateX(-4px);
+}
+
+.back-button:focus-visible {
+  outline: 2px solid #5e69ee;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.campaign-detail-header {
+  margin-bottom: 32px;
+}
+
+.campaign-detail-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.campaign-detail-title {
+  font-size: var(--font-size-6xl);
+  font-weight: 700;
+  color: #0F172A;
+  margin-bottom: 4px;
+  letter-spacing: -0.5px;
+}
+
+.campaign-detail-subtitle {
+  font-size: 18px;
+  color: #64748B;
+  line-height: 1.55;
+}
+
+.campaign-detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.campaign-detail-status {
+  padding: 8px 16px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+/* Stats Cards */
+.campaign-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+.campaign-detail-content .campaign-stat-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 24px;
+}
+
+.campaign-stat-icon {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.campaign-stat-details {
+  flex: 1;
+}
+
+.campaign-stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #0F172A;
+  margin-bottom: 4px;
+  letter-spacing: -0.5px;
+}
+
+.campaign-stat-label {
+  font-size: 12px;
+  color: #64748B;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Progress Card */
+.campaign-progress-card {
+  margin-bottom: 32px;
+}
+
+.card-section-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #0F172A;
+  margin-bottom: 16px;
+}
+
+.progress-bar-container {
+  margin-bottom: 16px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 24px;
+  background: #F1F5F9;
+  border-radius: 9999px;
+  overflow: hidden;
+  position: relative;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: var(--gradient-primary);
+  transition: width 0.5s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.progress-bar-fill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  right: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--shimmer),
+    transparent
+  );
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.progress-text {
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0F172A;
+  margin-top: 8px;
+}
+
+.progress-details {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #64748B;
+  margin-top: 8px;
+}
+
+/* Main Content Grid */
+.campaign-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 32px;
+  margin-bottom: 32px;
+}
+
+.campaign-info-card,
+.campaign-metrics-card {
+  height: fit-content;
+}
+
+.campaign-info-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 0;
+  border-bottom: 1px solid #F1F5F9;
+}
+
+.campaign-info-item:last-child {
+  border-bottom: none;
+}
+
+.campaign-info-label {
+  font-size: 12px;
+  color: #64748B;
+  font-weight: 500;
+}
+
+.campaign-info-value {
+  font-size: 12px;
+  color: #0F172A;
+  font-weight: 600;
+  text-align: right;
+}
+
+/* Metrics */
+.metric-item {
+  margin-bottom: 24px;
+}
+
+.metric-item:last-of-type {
+  margin-bottom: 32px;
+}
+
+.metric-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.metric-label {
+  font-size: 12px;
+  color: #64748B;
+  font-weight: 500;
+}
+
+.metric-value {
+  font-size: 18px;
+  color: #0F172A;
+  font-weight: 700;
+}
+
+.metric-bar {
+  width: 100%;
+  height: 12px;
+  background: #F1F5F9;
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.metric-bar-fill {
+  height: 100%;
+  transition: width 0.5s ease;
+  border-radius: 9999px;
+}
+
+.metric-bar-success {
+  background: var(--gradient-success);
+}
+
+.metric-bar-info {
+  background: var(--gradient-blue);
+}
+
+.metric-breakdown {
+  padding-top: 24px;
+  border-top: 1px solid #F1F5F9;
+}
+
+.metric-breakdown-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #0F172A;
+  margin-bottom: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.metric-breakdown-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.metric-breakdown-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px;
+  background: #FAFBFC;
+  border-radius: 4px;
+}
+
+.metric-breakdown-label {
+  font-size: 11px;
+  color: #64748B;
+}
+
+.metric-breakdown-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0F172A;
+}
+
+/* Actions Card */
+.campaign-actions-card {
+  text-align: center;
+}
+
+.campaign-actions-buttons {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* Modal */
+.campaign-detail__modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1050;
+  padding: 24px;
+}
+
+.campaign-detail__modal-content {
+  background: var(--card-background);
+  border-radius: 16px;
+  padding: 32px;
+  max-width: 500px;
+  width: 100%;
+  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.15);
+}
+
+.campaign-detail__modal-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0F172A;
+  margin-bottom: 16px;
+}
+
+.campaign-detail__modal-text {
+  font-size: 14px;
+  color: #64748B;
+  line-height: 1.5;
+  margin-bottom: 32px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16px;
+}
+
+/* Loading & Error */
+.loading {
+  text-align: center;
+  padding: 32px;
+  font-size: 14px;
+  color: #64748B;
+}
+
+.error-message {
+  background: #FEE2E2;
+  color: #EF4444;
+  padding: 16px;
+  border-radius: 12px;
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+/* Recipients Table */
+.recipients-table-container {
+  max-height: 400px;
+  overflow-y: auto;
+  overflow-x: auto;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+}
+
+.campaign-detail .recipients-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px !important;
+  font-family: var(--font-family) !important;
+}
+
+.campaign-detail .recipients-table thead {
+  position: sticky;
+  top: 0;
+  background-color: #FAFBFC;
+  z-index: 1;
+}
+
+.campaign-detail .recipients-table thead tr {
+  border-bottom: 1px solid #E2E8F0;
+  text-align: left;
+}
+
+.campaign-detail .recipients-table th {
+  padding: 8px 16px;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  color: #64748B;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.campaign-detail .recipients-table tbody tr {
+  border-bottom: 1px solid #F1F5F9;
+  transition: background 150ms ease-in-out;
+}
+
+.campaign-detail .recipients-table tbody tr:hover {
+  background: #FAFBFC;
+}
+
+.campaign-detail .recipients-table td {
+  padding: 8px 16px;
+  font-size: 12px !important;
+  font-family: var(--font-family) !important;
+  font-weight: 400 !important;
+  color: #0F172A;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .campaign-detail-content {
+    padding: 16px;
+  }
+
+  .campaign-detail-title {
+    font-size: 24px;
+  }
+
+  .campaign-detail-subtitle {
+    font-size: 14px;
+  }
+
+  .campaign-detail-title-row {
+    flex-direction: column;
+  }
+
+  .campaign-stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .campaign-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .campaign-actions-buttons {
+    flex-direction: column;
+  }
+
+  .campaign-actions-buttons button {
+    width: 100%;
+  }
+
+  .metric-breakdown-grid {
+    grid-template-columns: 1fr;
+  }
+}

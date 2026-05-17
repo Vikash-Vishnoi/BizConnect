@@ -1,0 +1,202 @@
+file path,phase,status,task
+web-frontend\package.json,1,pending,Project dependencies and scripts configuration
+web-frontend\package-lock.json,1,pending,Lock file for dependencies
+web-frontend\.gitignore,1,pending,Git ignore rules
+web-frontend\.env,1,pending,Environment variables (local)
+web-frontend\.env.example,1,pending,Environment variables template
+web-frontend\webpack.config.js,1,pending,Webpack build configuration
+web-frontend\.eslintrc.json,2,pending,ESLint rules configuration
+web-frontend\.prettierrc.json,2,pending,Prettier formatting rules
+web-frontend\.prettierignore,2,pending,Prettier ignore patterns
+web-frontend\.babelrc,2,pending,Babel transpiler configuration
+web-frontend\README.md,2,pending,Project documentation
+web-frontend\public\index.html,3,pending,Main HTML template
+web-frontend\public\favicon.ico,3,pending,Website favicon icon
+web-frontend\public\manifest.json,3,pending,PWA manifest configuration
+web-frontend\public\service-worker.js,3,pending,Service worker for PWA
+web-frontend\src\index.js,3,pending,React app entry point
+web-frontend\src\App.js,3,pending,Main app component with routing
+web-frontend\src\config\constants.js,4,pending,App-wide constants
+web-frontend\src\config\api.js,4,pending,API endpoints configuration
+web-frontend\src\types\jsdoc-types.js,4,pending,JSDoc type definitions
+web-frontend\src\types\index.js,4,pending,Types barrel exports
+web-frontend\src\utils\roles.js,4,pending,User role utilities
+web-frontend\src\utils\businessSetup.js,4,pending,Business setup helpers
+web-frontend\src\contexts\AuthContext.jsx,5,pending,Authentication context provider
+web-frontend\src\hooks\useDebounce.js,5,pending,Debounce custom hook
+web-frontend\src\hooks\useTemplateForm.js,5,pending,Template form management hook
+web-frontend\src\hooks\useAutoSave.js,5,pending,Auto-save functionality hook
+web-frontend\src\styles\global.css,6,pending,Global styles
+web-frontend\src\styles\design-system.css,6,pending,Design system variables
+web-frontend\src\styles\page-layouts.css,6,pending,Common page layouts
+web-frontend\src\components\Button.jsx,7,pending,Reusable button component
+web-frontend\src\components\Button.css,7,pending,Button styles
+web-frontend\src\components\Input.jsx,7,pending,Reusable input component
+web-frontend\src\components\Input.css,7,pending,Input styles
+web-frontend\src\components\Card.jsx,7,pending,Card container component
+web-frontend\src\components\Card.css,7,pending,Card styles
+web-frontend\src\components\Modal.css,8,pending,Modal dialog styles
+web-frontend\src\components\Toast.jsx,8,pending,Toast notification component
+web-frontend\src\components\Toast.css,8,pending,Toast styles
+web-frontend\src\components\Stats.css,8,pending,Statistics display styles
+web-frontend\src\components\Navbar.jsx,8,pending,Navigation bar component
+web-frontend\src\components\Navbar.css,8,pending,Navbar styles
+web-frontend\src\components\Breadcrumbs.jsx,9,pending,Breadcrumb navigation component
+web-frontend\src\components\Breadcrumbs.css,9,pending,Breadcrumb styles
+web-frontend\src\components\Banners.css,9,pending,Banner notification styles
+web-frontend\src\components\LoadingSkeleton.jsx,9,pending,Loading skeleton component
+web-frontend\src\components\LoadingSkeleton.css,9,pending,Loading skeleton styles
+web-frontend\src\components\LoadingState.css,9,pending,Loading state styles
+web-frontend\src\components\EmptyState.css,10,pending,Empty state display styles
+web-frontend\src\components\ErrorBoundary.jsx,10,pending,Error boundary component
+web-frontend\src\components\ConfirmationModal.jsx,10,pending,Confirmation dialog component
+web-frontend\src\components\ProtectedRoute.jsx,10,pending,Route protection wrapper
+web-frontend\src\components\ScheduleMessageModal.jsx,10,pending,Message scheduling modal
+web-frontend\src\components\ScheduleMessageModal.css,10,pending,Schedule modal styles
+web-frontend\src\components\OptimizedImage.jsx,11,pending,Optimized image component
+web-frontend\src\components\OptimizedImage.css,11,pending,Optimized image styles
+web-frontend\src\components\OfficialAnalytics.jsx,11,pending,Analytics widget component
+web-frontend\src\components\OfficialAnalytics.css,11,pending,Analytics widget styles
+web-frontend\src\components\BusinessCapabilityWidget.jsx,11,pending,Business capability display
+web-frontend\src\components\BusinessCapabilityWidget.css,11,pending,Business capability styles
+web-frontend\src\components\BusinessSetupRequired.jsx,11,pending,Setup required component
+web-frontend\src\components\BusinessSetupRequired.css,11,pending,Setup required styles
+web-frontend\src\services\api.js,12,pending,Base API service with interceptors
+web-frontend\src\services\auth\authService.js,12,pending,Auth API calls - /auth routes
+web-frontend\src\services\auth\index.js,12,pending,Auth services barrel exports
+web-frontend\src\services\business\businessService.js,12,pending,Business API calls - /business routes
+web-frontend\src\services\business\configService.js,12,pending,Config API calls - /business/config routes
+web-frontend\src\services\business\index.js,12,pending,Business services barrel exports
+web-frontend\src\services\business\capabilityService.js,13,pending,Capability API calls - /business/capabilities routes
+web-frontend\src\services\business\teamService.js,13,pending,Team API calls - /business/team routes
+web-frontend\src\services\business\phoneHealthService.js,13,pending,Phone health API calls - /business/phone-health routes
+web-frontend\src\services\business\optInService.js,13,pending,Opt-in API calls - /business/opt-in routes
+web-frontend\src\services\contacts\contactService.js,14,pending,Contact API calls - /contacts routes
+web-frontend\src\services\contacts\index.js,14,pending,Contacts services barrel exports
+web-frontend\src\services\campaigns\campaignService.js,14,pending,Campaign API calls - /campaigns routes
+web-frontend\src\services\campaigns\index.js,14,pending,Campaigns services barrel exports
+web-frontend\src\services\templates\templateService.js,14,pending,Template API calls - /templates routes
+web-frontend\src\services\templates\index.js,14,pending,Templates services barrel exports
+web-frontend\src\services\messaging\inboxService.js,15,pending,Inbox API calls - /conversations routes
+web-frontend\src\services\messaging\messageEchoService.js,15,pending,Message echo API calls - /messages routes
+web-frontend\src\services\messaging\index.js,15,pending,Messaging services barrel exports
+web-frontend\src\services\media\mediaService.js,15,pending,Media API calls - /media routes
+web-frontend\src\services\media\index.js,15,pending,Media services barrel exports
+web-frontend\src\services\automations\automationService.js,16,pending,Automation API calls - /automations routes
+web-frontend\src\services\automations\flowService.js,16,pending,Flow API calls - /flows routes
+web-frontend\src\services\automations\index.js,16,pending,Automations services barrel exports
+web-frontend\src\services\analytics\analyticsService.js,16,pending,Analytics API calls - /analytics routes
+web-frontend\src\services\analytics\trackingService.js,16,pending,Event tracking service
+web-frontend\src\services\analytics\index.js,16,pending,Analytics services barrel exports
+web-frontend\src\services\core\alertService.js,17,pending,Alert API calls - /alerts routes
+web-frontend\src\services\core\searchService.js,17,pending,Search API calls - /search routes
+web-frontend\src\services\core\retryService.js,17,pending,Retry API calls - /retry routes
+web-frontend\src\services\core\userPreferenceService.js,17,pending,User preferences API calls
+web-frontend\src\services\core\websocket.js,17,pending,WebSocket connection service
+web-frontend\src\services\core\index.js,17,pending,Core services barrel exports
+web-frontend\src\pages\auth\Login.jsx,18,pending,Login page with /auth/login
+web-frontend\src\pages\auth\Login.css,18,pending,Login page styles
+web-frontend\src\pages\auth\Register.jsx,18,pending,Register page with /auth/register
+web-frontend\src\pages\auth\Register.css,18,pending,Register page styles
+web-frontend\src\pages\auth\index.js,18,pending,Auth pages barrel exports
+web-frontend\src\pages\core\Dashboard.jsx,19,pending,Dashboard page with analytics
+web-frontend\src\pages\core\Dashboard.css,19,pending,Dashboard styles
+web-frontend\src\pages\core\Settings.jsx,19,pending,Settings page with profile/business config
+web-frontend\src\pages\core\Settings.css,19,pending,Settings styles
+web-frontend\src\pages\core\NotificationPreferences.jsx,19,pending,Notification preferences page
+web-frontend\src\pages\core\index.js,19,pending,Core pages barrel exports
+web-frontend\src\pages\core\NotFound.jsx,20,pending,404 error page
+web-frontend\src\pages\core\NotFound.css,20,pending,404 page styles
+web-frontend\src\pages\core\AccessDenied.jsx,20,pending,403 access denied page
+web-frontend\src\pages\core\AccessDenied.css,20,pending,Access denied styles
+web-frontend\src\pages\business\BusinessSetup.jsx,21,pending,Business setup wizard main
+web-frontend\src\pages\business\BusinessSetup.css,21,pending,Business setup styles
+web-frontend\src\pages\business\BusinessSetupPart1.jsx,21,pending,Business setup step 1
+web-frontend\src\pages\business\BusinessSetupPart1.css,21,pending,Setup step 1 styles
+web-frontend\src\pages\business\BusinessSetupPart2.jsx,22,pending,Business setup step 2
+web-frontend\src\pages\business\BusinessSetupPart2.css,22,pending,Setup step 2 styles
+web-frontend\src\pages\business\BusinessSetupPart3.jsx,22,pending,Business setup step 3
+web-frontend\src\pages\business\BusinessSetupPart3.css,22,pending,Setup step 3 styles
+web-frontend\src\pages\business\index.js,22,pending,Business pages barrel exports
+web-frontend\src\pages\contacts\Contacts.jsx,23,pending,Contacts list page with /contacts routes
+web-frontend\src\pages\contacts\Contacts.css,23,pending,Contacts list styles
+web-frontend\src\pages\contacts\Contact.jsx,23,pending,Contact detail page
+web-frontend\src\pages\contacts\Contact.css,23,pending,Contact detail styles
+web-frontend\src\pages\contacts\ContactHistory.jsx,23,pending,Contact conversation history
+web-frontend\src\pages\contacts\ContactHistory.css,23,pending,Contact history styles
+web-frontend\src\pages\contacts\index.js,23,pending,Contacts pages barrel exports
+web-frontend\src\pages\messaging\Inbox.jsx,24,pending,Inbox page with /conversations routes
+web-frontend\src\pages\messaging\Inbox.css,24,pending,Inbox styles
+web-frontend\src\pages\messaging\Conversation.jsx,24,pending,Conversation detail with /messages routes
+web-frontend\src\pages\messaging\Conversation.css,24,pending,Conversation styles
+web-frontend\src\pages\messaging\index.js,24,pending,Messaging pages barrel exports
+web-frontend\src\pages\messaging\Templates.jsx,25,pending,Templates list with /templates routes
+web-frontend\src\pages\messaging\Templates.css,25,pending,Templates list styles
+web-frontend\src\pages\messaging\TemplateDetail.jsx,25,pending,Template detail page
+web-frontend\src\pages\messaging\TemplateDetail.css,25,pending,Template detail styles
+web-frontend\src\pages\messaging\CreateTemplate.jsx,26,pending,Create template form
+web-frontend\src\pages\messaging\CreateTemplate.css,26,pending,Create template styles
+web-frontend\src\pages\messaging\EditTemplate.jsx,26,pending,Edit template form
+web-frontend\src\pages\messaging\StatusComposer.jsx,26,pending,WhatsApp status composer
+web-frontend\src\pages\messaging\StatusComposer.css,26,pending,Status composer styles
+web-frontend\src\pages\marketing\Campaigns.jsx,27,pending,Campaigns list with /campaigns routes
+web-frontend\src\pages\marketing\Campaigns.css,27,pending,Campaigns list styles
+web-frontend\src\pages\marketing\CampaignDetail.jsx,27,pending,Campaign detail page
+web-frontend\src\pages\marketing\CampaignDetail.css,27,pending,Campaign detail styles
+web-frontend\src\pages\marketing\CreateCampaign.jsx,27,pending,Create campaign form
+web-frontend\src\pages\marketing\CreateCampaign.css,27,pending,Create campaign styles
+web-frontend\src\pages\marketing\index.js,27,pending,Marketing pages barrel exports
+web-frontend\src\pages\automation\FlowList.jsx,28,pending,Automation flows list with /flows routes
+web-frontend\src\pages\automation\FlowList.css,28,pending,Flow list styles
+web-frontend\src\pages\automation\SavedReplies.jsx,28,pending,Saved replies with /saved-replies routes
+web-frontend\src\pages\automation\SavedReplies.css,28,pending,Saved replies styles
+web-frontend\src\pages\automation\ScheduledMessages.jsx,28,pending,Scheduled messages with /scheduled routes
+web-frontend\src\pages\automation\ScheduledMessages.css,28,pending,Scheduled messages styles
+web-frontend\src\pages\automation\WelcomeMessageSettings.jsx,29,pending,Welcome message settings
+web-frontend\src\pages\automation\WelcomeMessageSettings.css,29,pending,Welcome message styles
+web-frontend\src\pages\automation\index.js,29,pending,Automation pages barrel exports
+web-frontend\src\pages\analytics\Analytics.jsx,30,pending,Analytics overview with /analytics routes
+web-frontend\src\pages\analytics\Analytics.css,30,pending,Analytics overview styles
+web-frontend\src\pages\analytics\ConversationAnalytics.jsx,30,pending,Conversation analytics page
+web-frontend\src\pages\analytics\ConversationAnalytics.css,30,pending,Conversation analytics styles
+web-frontend\src\pages\analytics\TemplateAnalytics.jsx,30,pending,Template analytics page
+web-frontend\src\pages\analytics\TemplateAnalytics.css,30,pending,Template analytics styles
+web-frontend\src\pages\analytics\index.js,30,pending,Analytics pages barrel exports
+web-frontend\src\pages\admin\TeamMembers.jsx,31,pending,Team management with /business/team routes
+web-frontend\src\pages\admin\TeamMembers.css,31,pending,Team members styles
+web-frontend\src\pages\admin\RoleManager.jsx,31,pending,Role management page
+web-frontend\src\pages\admin\RoleManager.css,31,pending,Role manager styles
+web-frontend\src\pages\admin\BusinessSettings.jsx,32,pending,Business settings with /business routes
+web-frontend\src\pages\admin\BusinessSettings.css,32,pending,Business settings styles
+web-frontend\src\pages\admin\PhoneHealth.jsx,32,pending,Phone health monitoring
+web-frontend\src\pages\admin\PhoneHealth.css,32,pending,Phone health styles
+web-frontend\src\pages\admin\QualityRatingHistory.jsx,32,pending,Quality rating history
+web-frontend\src\pages\admin\QualityRatingHistory.css,32,pending,Quality rating styles
+web-frontend\src\pages\admin\RateLimitDashboard.jsx,33,pending,Rate limit monitoring
+web-frontend\src\pages\admin\RateLimitDashboard.css,33,pending,Rate limit styles
+web-frontend\src\pages\admin\Alerts.jsx,33,pending,Alerts management with /alerts routes
+web-frontend\src\pages\admin\Alerts.css,33,pending,Alerts styles
+web-frontend\src\pages\admin\AuditLog.jsx,33,pending,Audit log viewer with /audit routes
+web-frontend\src\pages\admin\AuditLog.css,33,pending,Audit log styles
+web-frontend\src\pages\admin\MessageErrors.jsx,34,pending,Message error logs
+web-frontend\src\pages\admin\MessageErrors.css,34,pending,Message errors styles
+web-frontend\src\pages\admin\OptInManager.jsx,34,pending,Opt-in management
+web-frontend\src\pages\admin\OptInManager.css,34,pending,Opt-in manager styles
+web-frontend\src\pages\admin\Privacy.jsx,34,pending,Privacy settings page
+web-frontend\src\pages\admin\Privacy.css,34,pending,Privacy settings styles
+web-frontend\src\pages\admin\index.js,34,pending,Admin pages barrel exports
+web-frontend\src\pages\shared\SearchGlobal.jsx,35,pending,Global search with /search routes
+web-frontend\src\pages\shared\SearchGlobal.css,35,pending,Global search styles
+web-frontend\src\pages\shared\index.js,35,pending,Shared pages barrel exports
+web-frontend\src\pages\public\Terms.jsx,36,pending,Terms of service page
+web-frontend\src\pages\public\Terms.css,36,pending,Terms page styles
+web-frontend\src\pages\public\PrivacyPolicy.jsx,36,pending,Privacy policy page
+web-frontend\src\pages\public\index.js,36,pending,Public pages barrel exports
+web-frontend\src\pages\public\seo\SEOPages.jsx,37,pending,SEO pages component
+web-frontend\src\pages\public\seo\SEOPages.css,37,pending,SEO pages styles
+web-frontend\src\pages\public\seo\SEOPagesBatch2.jsx,37,pending,SEO pages batch 2
+web-frontend\src\pages\public\seo\SEOLocations.jsx,37,pending,SEO location pages
+web-frontend\src\pages\public\seo\SEOIntegrations.jsx,37,pending,SEO integrations pages
+web-frontend\src\pages\public\seo\SEOIndustries.jsx,38,pending,SEO industry pages
+web-frontend\src\pages\public\seo\SEOCompliance.jsx,38,pending,SEO compliance pages
+web-frontend\src\pages\public\seo\SEOBlog.jsx,38,pending,SEO blog pages

@@ -1,0 +1,278 @@
+/**
+ * ============================================================================
+ * Business Settings Page Styles
+ * ============================================================================
+ * 
+ * @description
+ * Styling for business configuration page with tabbed navigation for different
+ * settings sections (general, team, credentials, integrations). Features form
+ * layouts, team member management, and role badge styling.
+ * 
+ * @features
+ * - Tabbed navigation for settings sections
+ * - Form layouts with labeled inputs and textareas
+ * - Team member cards with avatars and role badges
+ * - Team invite form with email and role selector
+ * - Credential warning banners
+ * - Save and configure action buttons
+ * - Responsive mobile layout
+ * 
+ * @sections
+ * - business-settings-header: Page title and description
+ * - business-settings-tabs: Tab navigation (general, team, credentials, etc.)
+ * - business-settings-content: Tab content container
+ * - settings-section: Individual settings group
+ * - team-invite-form: Email/role input for team invitations
+ * - team-list: List of team members with cards
+ * - team-member-card: Individual team member display
+ * 
+ * @components
+ * - Form groups with labels and inputs
+ * - Role badges (uppercase, rounded, colored)
+ * - Member avatars (emoji icons)
+ * - Warning banners for sensitive information
+ * 
+ * @responsive
+ * - Mobile (≤768px): Stacked invite form, reduced padding
+ * 
+ * @used-by
+ * - src/pages/admin/BusinessSettings.jsx
+ * 
+ * @extends
+ * - global.css (CSS variables, spacing)
+ * - EmptyState.css (shared empty state component)
+ * ============================================================================
+ */
+
+.business-settings {
+  padding: 16px;
+  max-width: 1200px;
+  margin: 80px auto 0;
+}
+
+.business-settings-loading {
+  text-align: center;
+  padding: 100px 16px;
+  font-size: 18px;
+  color: #64748B;
+}
+
+.business-settings-header {
+  margin-bottom: 32px;
+}
+
+.business-settings-header h1 {
+  font-size: 28px;
+  margin-bottom: 10px;
+  color: #0F172A;
+}
+
+.business-settings-header p {
+  color: #64748B;
+  font-size: 16px;
+}
+
+.business-settings-tabs {
+  display: flex;
+  gap: 10px;
+  border-bottom: 2px solid #E2E8F0;
+  margin-bottom: 32px;
+  overflow-x: auto;
+}
+
+.tab-button {
+  padding: 12px 24px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 16px;
+  color: #64748B;
+  border-bottom: 3px solid transparent;
+  transition: all 300ms ease-in-out;
+  white-space: nowrap;
+}
+
+.tab-button:hover {
+  color: #5e69ee;
+  background: #F4F4FB;
+}
+
+.tab-button.active {
+  color: #5e69ee;
+  border-bottom-color: #5e69ee;
+  font-weight: 600;
+}
+
+.business-settings-content {
+  background: white;
+  border-radius: 12px;
+  padding: 32px;
+  box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.1);
+}
+
+.settings-section h2 {
+  font-size: 24px;
+  margin-bottom: 16px;
+  color: #0F172A;
+}
+
+.business-settings__form-group {
+  margin-bottom: 16px;
+}
+
+.business-settings__form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #0F172A;
+}
+
+.business-settings__form-group input,
+.business-settings__form-group textarea,
+.business-settings__form-group select {
+  width: 100%;
+  padding: 12px;
+  border: 2px solid #E2E8F0;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: border-color 300ms ease-in-out;
+}
+
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: #5e69ee;
+}
+
+.save-button,
+.configure-button {
+  padding: 12px 32px;
+  background: var(--gradient-purple);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 200ms ease-in-out, box-shadow 200ms ease-in-out;
+}
+
+.save-button:hover,
+.configure-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.15);
+}
+
+.save-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.team-invite-form {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.team-invite-form input {
+  flex: 1;
+  padding: 10px;
+  border: 2px solid #E2E8F0;
+  border-radius: 8px;
+}
+
+.team-invite-form select {
+  padding: 10px;
+  border: 2px solid #E2E8F0;
+  border-radius: 8px;
+  min-width: 120px;
+}
+
+.team-invite-form button {
+  padding: 10px 16px;
+  background: #5e69ee;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.team-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.team-member-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #E2E8F0;
+}
+
+.member-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.member-avatar {
+  font-size: 28px;
+}
+
+.member-name {
+  font-weight: 600;
+  color: #0F172A;
+  margin-bottom: 4px;
+}
+
+.member-email {
+  font-size: 14px;
+  color: #64748B;
+}
+
+.role-badge {
+  padding: 4px 12px;
+  background: #5e69ee;
+  color: white;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.credentials-warning {
+  padding: 12px 16px;
+  background: #FEF3C7;
+  border: 1px solid #F59E0B;
+  border-radius: 8px;
+  color: #d97706;
+  margin-bottom: 16px;
+}
+
+.info-text {
+  color: #64748B;
+  margin-bottom: 16px;
+}
+
+/* Empty state uses shared EmptyState.css component */
+
+@media (max-width: 768px) {
+  .business-settings {
+    padding: 12px;
+  }
+  
+  .team-invite-form {
+    flex-direction: column;
+  }
+  
+  .team-invite-form select {
+    min-width: auto;
+  }
+}

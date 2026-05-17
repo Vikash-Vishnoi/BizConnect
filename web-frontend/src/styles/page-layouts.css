@@ -1,0 +1,630 @@
+/**
+ * 📐 Page Layouts - Shared UI Patterns
+ * 
+ * Consistent layout patterns and reusable UI components for all pages.
+ * Provides a design system foundation for page structures, headers, grids, and common patterns.
+ * 
+ * @module styles/page-layouts
+ * 
+ * @description
+ * This stylesheet defines reusable layout patterns extracted from Dashboard and standardized
+ * across the application. Includes page containers, headers, content grids, filters, lists,
+ * card grids, status badges, data tables, and action bars.
+ * 
+ * @patterns
+ * - Page Containers: Full-screen fixed layouts with overflow control
+ * - Page Headers: Title, subtitle, and action button layouts
+ * - Content Grids: 2-column, 3-column, and auto-fit responsive grids
+ * - Section Headers: Section titles with links and dividers
+ * - Filters Section: Grid layout for filter controls
+ * - List Items: Clickable list items with hover effects
+ * - Card Grids: Responsive card layouts with auto-fill
+ * - Status Badges: Color-coded status indicators
+ * - Data Tables: Responsive tables with hover states
+ * - Action Bars: Top/bottom action button containers
+ * 
+ * @responsive
+ * - Mobile (≤768px): Single column layouts, full-width cards
+ * - Tablet (≤1200px): Reduced grid columns, horizontal scroll for tables
+ * - Desktop (>1200px): Full multi-column grids
+ * 
+ * @features
+ * - Consistent spacing using CSS custom properties
+ * - Hover effects and transitions
+ * - Status badge color coding (success/warning/danger/info/secondary)
+ * - Empty states and loading states (deferred to shared components)
+ * - Responsive breakpoints for all layouts
+ * - Accessibility-ready structure
+ * 
+ * @notes
+ * - Stats Grid moved to Stats.css as single source of truth
+ * - Empty/Loading states use shared component CSS
+ * - All measurements use design system tokens from design-system.css
+ */
+
+/* ========================================
+   Page Container Patterns
+   ======================================== */
+
+.page-container {
+  min-height: 100vh;
+  width: 100%;
+  background: #FAFBFC;
+  display: flex;
+  flex-direction: column;
+}
+
+.page-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 24px;
+  padding-top: 5px; /* Account for fixed navbar (56px) + minimal spacing (4px) */
+  box-sizing: border-box;
+  background: #FAFBFC;
+}
+
+/* ========================================
+   Page Headers
+   ======================================== */
+
+.page-header {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 8px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.page-header-text {
+  flex: 1;
+  min-width: 180px;
+  text-align: center;
+}
+
+.page-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0F172A;
+  margin: 0 0 2px 0;
+}
+
+.page-subtitle {
+  font-size: 12px;
+  color: #64748B;
+  margin: 0;
+}
+
+.page-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.page-actions button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+/* ========================================
+   Stats Grid - MOVED TO Stats.css
+   Import Stats.css in pages that need stats
+   ======================================== */
+
+/* Removed duplicate .stats-grid, .stat-card, .stat-icon definitions
+   These are now in src/components/Stats.css as the single source of truth
+   Import Stats.css in your page component to use stats */
+
+/* ========================================
+  font-weight: 700;
+  color: #0F172A;
+  margin: 0 0 2px 0;
+}
+
+.stat-change {
+  font-size: 11px;
+  color: #94A3B8;
+  margin: 0;
+}
+
+/* ========================================
+   Content Grid Layouts
+   ======================================== */
+
+.content-grid-2col {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.content-grid-3col {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.content-grid-auto {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+/* ========================================
+   Section Headers
+   ======================================== */
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #E2E8F0;
+}
+
+.section-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #0F172A;
+  margin: 0;
+}
+
+.section-subtitle {
+  font-size: 12px;
+  color: #64748B;
+  margin: 4px 0 0 0;
+}
+
+.section-link {
+  background: none;
+  border: none;
+  color: #5e69ee;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 200ms ease-in-out;
+}
+
+.section-link:hover {
+  color: #4a52d9;
+  text-decoration: underline;
+}
+
+/* ========================================
+   Filters Section
+   ======================================== */
+
+.filters-section {
+  background: #FFFFFF;
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 12px;
+  border: 1px solid #E2E8F0;
+}
+
+.filters-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.filter-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748B;
+  margin: 0;
+}
+
+/* ========================================
+   List Items (for campaigns, templates, etc.)
+   ======================================== */
+
+.list-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 200px;
+}
+
+.list-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: #FAFBFC;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 200ms ease-in-out;
+  border: 1px solid #E2E8F0;
+}
+
+.list-item:hover {
+  background: #F1F5F9;
+  transform: translateX(4px);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.list-item-info {
+  flex: 1;
+}
+
+.list-item-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0F172A;
+  margin: 0 0 4px 0;
+}
+
+.list-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #64748B;
+  margin: 0;
+}
+
+.list-item-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ========================================
+   Card Grid (for templates, campaigns, etc.)
+   ======================================== */
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.item-card {
+  background: #FFFFFF;
+  border-radius: 16px;
+  padding: 24px;
+  border: 1px solid #E2E8F0;
+  cursor: pointer;
+  transition: all 200ms ease-in-out;
+}
+
+.item-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 3px 6px 0 rgba(0, 0, 0, 0.12);
+  border-color: #5e69ee;
+}
+
+.item-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.item-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #0F172A;
+  margin: 0 0 4px 0;
+}
+
+.item-card-subtitle {
+  font-size: 12px;
+  color: #64748B;
+  margin: 0;
+}
+
+.item-card-body {
+  margin-bottom: 12px;
+}
+
+.item-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 12px;
+  border-top: 1px solid #E2E8F0;
+}
+
+/* ========================================
+   Status Badges
+   ======================================== */
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.status-badge svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+.status-badge-success {
+  background: #D1FAE5;
+  color: #047857;
+}
+
+.status-badge-warning {
+  background: #FEF3C7;
+  color: #d97706;
+}
+
+.status-badge-danger {
+  background: #FEE2E2;
+  color: #dc2626;
+}
+
+.status-badge-info {
+  background: #E0F2FE;
+  color: #2563eb;
+}
+
+.status-badge-secondary {
+  background: #f8f9fa;
+  color: #94A3B8;
+}
+
+/* ========================================
+   Empty States
+   ======================================== */
+
+/* Empty state - Use shared EmptyState.css component instead */
+
+/* ========================================
+   Data Tables
+   ======================================== */
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #FFFFFF;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid #E2E8F0;
+}
+
+.data-table thead {
+  background: #FAFBFC;
+  border-bottom: 2px solid #E2E8F0;
+}
+
+.data-table th {
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748B;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.data-table td {
+  padding: 12px 16px;
+  font-size: 14px;
+  color: #0F172A;
+  border-top: 1px solid #E2E8F0;
+}
+
+.data-table tbody tr {
+  transition: background 0.2s;
+  cursor: pointer;
+}
+
+.data-table tbody tr:hover {
+  background: #F1F5F9;
+}
+
+/* ========================================
+   Loading & Error States
+   ======================================== */
+
+/* Loading state - Use shared LoadingState.css component instead */
+
+.error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  background: #FEE2E2;
+  border: 1px solid #FEE2E2;
+  border-radius: 8px;
+  color: #dc2626;
+  gap: 12px;
+}
+
+.error-banner button {
+  padding: 8px 16px;
+  background: white;
+  border: 1px solid #dc2626;
+  border-radius: 6px;
+  color: #dc2626;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.error-banner button:hover {
+  background: #dc2626;
+  color: white;
+}
+
+.success-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  background: #D1FAE5;
+  border: 1px solid #D1FAE5;
+  border-radius: 8px;
+  color: #047857;
+}
+
+/* ========================================
+   Action Bars
+   ======================================== */
+
+.action-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: #FFFFFF;
+  border-radius: 16px;
+  margin-bottom: 16px;
+  border: 1px solid #E2E8F0;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.action-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.action-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ========================================
+   Responsive Design
+   ======================================== */
+
+@media (max-width: 1200px) {
+  .stats-grid {
+    grid-template-columns: repeat(5, 1fr);
+  }
+
+  .content-grid-2col,
+  .content-grid-3col {
+    grid-template-columns: 1fr;
+  }
+
+  .card-grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .page-content {
+    padding: 16px;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .page-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .stats-grid {
+    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
+  }
+
+  .filters-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .list-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .list-item-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .action-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .action-bar-left,
+  .action-bar-right {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .data-table {
+    font-size: 12px;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: 8px 12px;
+  }
+}
+
+/* ========================================
+   Animation
+   ======================================== */
+
+.fade-in {
+  animation: fadeIn 0.4s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.slide-in-left {
+  animation: slideInLeft 0.3s ease-out;
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}

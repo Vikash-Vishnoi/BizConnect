@@ -1,0 +1,500 @@
+/**
+ * Flow List Page Styles
+ * 
+ * Automation flow management with card-based grid layout.
+ * Features status indicators, action buttons, and modal forms.
+ * 
+ * Features:
+ * - Grid layout for flow cards (responsive columns)
+ * - Status indicators (active/inactive with pulse)
+ * - Action buttons (toggle, edit, delete)
+ * - Flow statistics (execution count, success rate)
+ * - Create/edit modal with form
+ * - Empty state for no flows
+ * - Trigger type icons (emoji)
+ * - Hover effects and animations
+ * - Confirmation modal for deletion
+ * 
+ * Layout Structure:
+ * - flow-list-container: Page wrapper
+ * - flow-list-header: Title and action buttons
+ * - flows-grid: Responsive card grid
+ * - flow-card: Individual flow with status
+ * - flow-list__modal: Create/edit form overlay
+ * 
+ * Flow Card:
+ * - Status indicator bar at top (4px height)
+ * - Pulsing status dot (top-right)
+ * - Trigger icon (emoji, left side)
+ * - Flow name and description
+ * - Action buttons (toggle, edit, delete)
+ * - Metadata (trigger type, status badge)
+ * - Statistics grid (executions, success rate)
+ * - Hover elevation effect (translateY -4px)
+ * 
+ * Status Indicators:
+ * - Active: Green with pulse animation
+ * - Inactive: Gray without pulse
+ * - Status bar: Full-width gradient at card top
+ * - Status badge: Pill-shaped label
+ * 
+ * Action Buttons:
+ * - Toggle: Blue (play/pause flow)
+ * - Edit: Purple (modify flow settings)
+ * - Delete: Red (remove flow)
+ * - Scale animation on hover (1.1x)
+ * 
+ * Modal:
+ * - Overlay with backdrop (rgba black 0.6)
+ * - White card with form inputs
+ * - Name, description, trigger select
+ * - Active checkbox
+ * - Submit and cancel buttons
+ * - ARIA attributes for accessibility
+ * 
+ * @extends design-system.css
+ * @used-by FlowList.jsx
+ * @responsive Mobile-first with grid breakpoints
+ */
+
+.flow-list-container {
+  padding: 24px;
+  max-width: 1400px;
+  margin: 80px auto 0;
+  min-height: calc(100vh - 80px);
+  background: #FAFBFC;
+}
+
+.flow-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 40px;
+}
+
+.flow-list-header h1 {
+  font-size: 28px;
+  margin-bottom: 8px;
+  color: #0F172A;
+}
+
+.flow-list-header p {
+  color: #64748B;
+  font-size: 14px;
+  margin: 0;
+}
+
+.create-btn {
+  padding: 12px 24px;
+  background: var(--gradient-purple);
+  color: #FFFFFF;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 300ms ease-in-out;
+  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.15);
+}
+
+.create-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px 0 rgba(0, 0, 0, 0.2);
+}
+
+/* Loading and empty states use shared components:
+   Import: '../../components/LoadingState.css'
+   Import: '../../components/EmptyState.css'
+*/
+
+.create-btn-secondary {
+  padding: 8px 24px;
+  background: #FFFFFF;
+  color: #5e69ee;
+  border: 2px solid #5e69ee;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 300ms ease-in-out;
+}
+
+.create-btn-secondary:hover {
+  background: #5e69ee;
+  color: #FFFFFF;
+}
+
+.flows-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 24px;
+}
+
+.flow-card {
+  background: #FFFFFF;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  transition: all 300ms ease-in-out;
+  position: relative;
+  overflow: hidden;
+}
+
+.flow-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.15);
+}
+
+.flow-status-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: #E2E8F0;
+}
+
+.flow-card .flow-status-indicator .active {
+  background: var(--gradient-success);
+  height: 100%;
+}
+
+.status-dot {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  animation: pulse 2s infinite;
+}
+
+.status-dot.active {
+  background: #059669;
+}
+
+.status-dot.inactive {
+  background: #94A3B8;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.flow-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.flow-title-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.trigger-icon {
+  font-size: 22px;
+}
+
+.flow-title-section h3 {
+  font-size: 18px;
+  color: #0F172A;
+  margin: 0;
+}
+
+.flow-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.toggle-btn, .edit-btn, .delete-btn {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 200ms ease-in-out;
+}
+
+.toggle-btn {
+  background: #E0F2FE;
+}
+
+.toggle-btn:hover {
+  background: #39AFEA;
+  transform: scale(1.1);
+}
+
+.edit-btn {
+  background: #f3e5f5;
+}
+
+.edit-btn:hover {
+  background: #9c27b0;
+  color: #FFFFFF;
+  transform: scale(1.1);
+}
+
+.delete-btn {
+  background: #FEE2E2;
+}
+
+.delete-btn:hover {
+  background: #EF4444;
+  transform: scale(1.1);
+}
+
+.flow-description {
+  color: #64748B;
+  font-size: 12px;
+  margin-bottom: 16px;
+  line-height: 1.5;
+}
+
+.flow-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #E2E8F0;
+}
+
+.meta-item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+}
+
+.meta-label {
+  color: #94A3B8;
+  font-weight: 500;
+}
+
+.meta-value {
+  color: #0F172A;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.status-badge {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.status-badge.active {
+  background: #D1FAE5;
+  color: #059669;
+}
+
+.status-badge.inactive {
+  background: #FAFBFC;
+  color: #94A3B8;
+}
+
+.flow-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.stat-item {
+  text-align: center;
+  padding: 12px;
+  background: #FAFBFC;
+  border-radius: 8px;
+}
+
+.stat-value {
+  display: block;
+  font-size: 22px;
+  font-weight: 700;
+  color: #5e69ee;
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  display: block;
+  font-size: 11px;
+  color: #64748B;
+  font-weight: 500;
+}
+
+/* Modal Styles */
+.flow-list__modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1050;
+  padding: 24px;
+}
+
+.flow-list__modal-content {
+  background: #FFFFFF;
+  border-radius: 12px;
+  padding: 40px;
+  max-width: 600px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 16px 0 rgba(0, 0, 0, 0.25);
+}
+
+.flow-list__modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.flow-list__modal-header h2 {
+  font-size: 22px;
+  color: #0F172A;
+  margin: 0;
+}
+
+.flow-list__close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #94A3B8;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.flow-list__close-btn:hover {
+  color: #0F172A;
+}
+
+.flow-list__form-group {
+  margin-bottom: 24px;
+}
+
+.flow-list__form-group label {
+  display: block;
+  font-weight: 600;
+  color: #0F172A;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.flow-list__form-group input,
+.flow-list__form-group select,
+.flow-list__form-group textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border: 2px solid #E2E8F0;
+  border-radius: 8px;
+  font-size: 12px;
+  transition: all 300ms ease-in-out;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #5e69ee;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 4px;
+  transition: background 200ms ease-in-out;
+}
+
+.checkbox-label:hover {
+  background: #FAFBFC;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+
+.checkbox-label span {
+  font-size: 12px;
+  color: #0F172A;
+  font-weight: 500;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 40px;
+}
+
+.cancel-btn {
+  padding: 8px 24px;
+  background: #FFFFFF;
+  color: #64748B;
+  border: 2px solid #E2E8F0;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 300ms ease-in-out;
+}
+
+.cancel-btn:hover {
+  border-color: #94A3B8;
+  color: #0F172A;
+}
+
+.submit-btn {
+  padding: 8px 24px;
+  background: var(--gradient-purple);
+  color: #FFFFFF;
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 300ms ease-in-out;
+}
+
+.submit-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.15);
+}
+
+@media (max-width: 768px) {
+  .flow-list-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .flows-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .flow-list-container {
+    padding: 16px;
+  }
+}

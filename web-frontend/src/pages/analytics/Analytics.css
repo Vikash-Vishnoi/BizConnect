@@ -1,0 +1,449 @@
+/**
+ * ============================================================================
+ * Analytics Page Styles
+ * ============================================================================
+ * 
+ * @description
+ * Comprehensive styling for analytics dashboard with charts, date pickers,
+ * and statistical data visualization. Supports multiple chart layouts and
+ * responsive design for all device sizes.
+ * 
+ * @features
+ * - Analytics dashboard layout with header and tabs
+ * - Date range selector with preset buttons (7d, 30d, 90d, custom)
+ * - Custom date range picker with start/end inputs
+ * - Stats grid for key metrics (extends page-layouts.css)
+ * - Charts grid with 2-column layout (full-width option)
+ * - Tab navigation for different analytics views
+ * - Export actions for reports (PDF, CSV)
+ * - Print-optimized styles
+ * - Error banner for data loading failures
+ * 
+ * @layout
+ * - analytics-container: Main container (1400px max-width)
+ * - analytics-header: Page title and export actions
+ * - analytics-tabs: Tab navigation with active state
+ * - date-range-selector: Quick date range buttons
+ * - custom-date-range: Start/end date inputs
+ * - stats-grid: Key metrics (inherited from page-layouts.css)
+ * - charts-grid: 2-column chart layout (responsive)
+ * 
+ * @responsive
+ * - Desktop: 2-column charts grid
+ * - Tablet (≤1200px): Single column charts
+ * - Mobile (≤768px): Stacked layout, full-width buttons
+ * - Small (≤480px): Reduced font sizes
+ * 
+ * @print
+ * - Hides navigation, filters, and actions
+ * - Maintains chart and stats layout
+ * - Black borders for print clarity
+ * 
+ * @used-by
+ * - src/pages/analytics/Analytics.jsx
+ * 
+ * @extends
+ * - page-layouts.css (stats-grid, stat-card)
+ * - global.css (CSS variables)
+ * ============================================================================
+ */
+
+.analytics-page {
+  min-height: 100vh;
+  background: #FAFBFC;
+}
+
+.analytics-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.analytics-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 32px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.analytics-header h1 {
+  font-size: 28px;
+  font-weight: 700;
+  color: #0F172A;
+  margin: 0 0 8px 0;
+}
+
+.analytics-header p {
+  font-size: 16px;
+  color: #64748B;
+  margin: 0;
+}
+
+.export-actions {
+  display: flex;
+  gap: 12px;
+}
+
+/* Analytics Tabs */
+.analytics-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  border-bottom: 2px solid #E2E8F0;
+  padding-bottom: 0;
+}
+
+.tab-button {
+  padding: 12px 24px;
+  border: none;
+  background: transparent;
+  color: #64748B;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  transition: 200ms ease-in-out;
+  margin-bottom: -2px;
+}
+
+.tab-button:hover {
+  color: #0F172A;
+  background: #FAFBFC;
+}
+
+.tab-button.active {
+  color: #059669;
+  border-bottom-color: #059669;
+}
+
+.error-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: #FEE2E2;
+  border: 1px solid #EF4444;
+  border-radius: 8px;
+  margin-bottom: 24px;
+}
+
+.error-banner .error-icon {
+  font-size: 22px;
+  color: #EF4444;
+  flex-shrink: 0;
+}
+
+.error-banner p {
+  margin: 0;
+  color: #EF4444;
+  font-weight: 500;
+}
+
+.date-range-selector {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.date-range-selector button {
+  padding: 10px 20px;
+  border: 2px solid #E2E8F0;
+  background: #FFFFFF;
+  color: #64748B;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: 200ms ease-in-out;
+}
+
+.date-range-selector button:hover {
+  border-color: #059669;
+  color: #059669;
+}
+
+.date-range-selector button.active {
+  background: #059669;
+  border-color: #059669;
+  color: #FFFFFF;
+}
+
+.custom-date-range {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding: 20px;
+  background: #FFFFFF;
+  border-radius: 12px;
+  border: 1px solid #E2E8F0;
+}
+
+.date-input-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.date-input-group label {
+  font-size: 14px;
+  font-weight: 500;
+  color: #0F172A;
+}
+
+.date-input-group input {
+  padding: 10px 12px;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.date-input-group input:focus {
+  outline: none;
+  border-color: #059669;
+}
+
+/* REMOVED: .stats-grid and .stat-card definitions */
+/* These are now inherited from page-layouts.css for consistency */
+
+/* Analytics-specific stat customizations */
+.analytics-page .stat-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 24px;
+  background: #FFFFFF;
+  border-radius: 12px;
+  border: 1px solid #E2E8F0;
+  transition: 200ms ease-in-out;
+}
+
+.analytics-page .stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 3px 6px 0 rgba(0, 0, 0, 0.12);
+}
+
+.analytics-page .stat-icon {
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  font-size: 28px;
+  flex-shrink: 0;
+  color: #FFFFFF;
+  transition: transform 200ms ease-in-out;
+}
+
+.analytics-page .stat-card:hover .stat-icon {
+  transform: scale(1.05);
+}
+
+.analytics-page .stat-icon-primary {
+  background: var(--gradient-primary);
+}
+
+.analytics-page .stat-icon-success {
+  background: var(--gradient-success);
+}
+
+.analytics-page .stat-icon-info {
+  background: var(--gradient-blue);
+}
+
+.analytics-page .stat-icon-danger {
+  background: var(--gradient-error);
+}
+
+.analytics-page .stat-content {
+  flex: 1;
+}
+
+.analytics-page .stat-label {
+  font-size: 12px;
+  color: #64748B;
+  margin: 0 0 4px 0;
+  font-weight: 500;
+}
+
+.analytics-page .stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0F172A;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.stat-content h3 {
+  font-size: 28px;
+  font-weight: 700;
+  color: #0F172A;
+  margin: 0 0 4px 0;
+}
+
+.stat-content p {
+  font-size: 14px;
+  color: #64748B;
+  margin: 0;
+}
+
+.stat-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 8px;
+}
+
+.stat-badge.success {
+  background: #D1FAE5;
+  color: #047857;
+}
+
+.stat-badge.info {
+  background: #E0F2FE;
+  color: #2563eb;
+}
+
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.chart-card {
+  background: #FFFFFF;
+  border-radius: 12px;
+  border: 1px solid #E2E8F0;
+  padding: 24px;
+  min-height: 400px;
+}
+
+.chart-card.full-width {
+  grid-column: 1 / -1;
+}
+
+.chart-container {
+  height: 350px;
+  position: relative;
+}
+
+/* Print styles */
+@media print {
+  body .analytics-header,
+  body .export-actions,
+  body .date-range-selector,
+  body .custom-date-range,
+  body nav {
+    display: none;
+  }
+
+  .analytics-page {
+    background: white;
+  }
+
+  .stats-grid,
+  .charts-grid {
+    page-break-inside: avoid;
+  }
+
+  .chart-card {
+    border: 1px solid #000;
+    page-break-inside: avoid;
+    margin-bottom: 20px;
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 1200px) {
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chart-card.full-width {
+    grid-column: 1;
+  }
+}
+
+@media (max-width: 768px) {
+  .analytics-container {
+    padding: 16px;
+  }
+
+  .analytics-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .analytics-header h1 {
+    font-size: 24px;
+  }
+
+  .export-actions {
+    width: 100%;
+  }
+
+  .export-actions button {
+    flex: 1;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stat-card {
+    padding: 20px;
+  }
+
+  .stat-icon {
+    width: 56px;
+    height: 56px;
+    font-size: 24px;
+  }
+
+  .stat-content h3 {
+    font-size: 28px;
+  }
+
+  .date-range-selector {
+    flex-direction: column;
+  }
+
+  .date-range-selector button {
+    width: 100%;
+  }
+
+  .custom-date-range {
+    flex-direction: column;
+  }
+
+  .chart-container {
+    height: 300px;
+  }
+
+  .chart-card {
+    min-height: 350px;
+  }
+}
+
+@media (max-width: 480px) {
+  .analytics-header h1 {
+    font-size: 20px;
+  }
+
+  .stat-content h3 {
+    font-size: 24px;
+  }
+
+  .stat-icon {
+    width: 48px;
+    height: 48px;
+    font-size: 20px;
+  }
+}

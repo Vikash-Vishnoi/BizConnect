@@ -115,7 +115,7 @@ exports.saveMessageToConversation = async (conversationId, messageData) => {
     const setFields = {
       'lastMessage.text': messageData.content?.text || `[${messageData.type}]`,
       'lastMessage.type': messageData.type,
-      'lastMessage.direction': 'incoming',
+      'lastMessage.direction': 'in',
       'lastMessage.timestamp': messageData.timestamp,
       'lastMessage.status': 'delivered',
       lastMessageAt: messageData.timestamp,
@@ -190,7 +190,7 @@ exports.findOrCreateConversation = async ({ phoneNumber, name, userId, businessI
       lastMessage: {
         text: lastMessageText || 'New conversation',
         type: 'text',
-        direction: 'incoming',
+        direction: 'in',
         timestamp: lastMessageTimestamp || new Date(),
         status: 'delivered'
       },
@@ -355,7 +355,7 @@ exports.updateCampaignRecipientStatus = async (whatsappMessageId, status, status
     const updatedCampaign = await database.collection('campaigns').findOne({ _id: campaign._id });
     const stats = {
       total: updatedCampaign.recipients.length,
-      sent: updatedCampaign.recipients.filter(r => r.status === 'sent' || r.status === 'delivered' || r.status === 'read').length,
+      sent: updatedCampaign.recipients.filter(r => r.status === 'sent').length,
       delivered: updatedCampaign.recipients.filter(r => r.status === 'delivered' || r.status === 'read').length,
       read: updatedCampaign.recipients.filter(r => r.status === 'read').length,
       failed: updatedCampaign.recipients.filter(r => r.status === 'failed').length,

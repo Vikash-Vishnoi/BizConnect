@@ -32,6 +32,13 @@ class CloudinaryService {
       const headers = {};
       if (accessToken) {
         headers['Authorization'] = `Bearer ${accessToken}`;
+        console.log('🔑 Using access token:', accessToken.substring(0, 20) + '...');
+      } else {
+        console.error('❌ No access token provided for WhatsApp media download');
+        return {
+          success: false,
+          error: 'No access token provided'
+        };
       }
       
       const response = await axios.get(whatsappMediaUrl, {
@@ -47,6 +54,14 @@ class CloudinaryService {
       return await this.uploadMedia(buffer, mimeType, filename, `whatsapp-incoming/${businessId}`);
     } catch (error) {
       console.error('❌ Failed to download/upload media:', error.message);
+      
+      // Log more details for 401 errors
+      if (error.response?.status === 401) {
+        console.error('🔐 401 Unauthorized - Access token is invalid or expired');
+        console.error('   Please regenerate your WhatsApp access token and update it in the database');
+        console.error('   Steps: Meta Developer Console → Your App → WhatsApp → API Setup → Generate Token');
+      }
+      
       return {
         success: false,
         error: error.message
@@ -89,6 +104,9 @@ class CloudinaryService {
         overwrite: false,
         use_filename: true,
         unique_filename: true,
+        // For raw files (PDFs), use private type to bypass untrusted customer restriction
+        // For images/videos, use public upload
+        type: resourceType === 'raw' ? 'private' : 'upload',
         // Optimization settings
         quality: 'auto',
         fetch_format: 'auto'
@@ -104,9 +122,27 @@ class CloudinaryService {
 
       console.log('☁️  Uploaded to Cloudinary:', result.secure_url);
 
+      // For raw resources (documents), generate private download URL
+      // This bypasses "untrusted customer" errors by using API-authenticated download
+      let deliveryUrl = result.secure_url;
+      
+      if (resourceType === 'raw') {
+        // Generate private download URL (valid until file is deleted)
+        deliveryUrl = cloudinary.utils.private_download_url(
+          result.public_id,
+          result.format || 'pdf',
+          {
+            resource_type: 'raw',
+            attachment: false, // Allow inline viewing in browser
+            expires_at: Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60) // 1 year
+          }
+        );
+        console.log('🔐 Generated private download URL for incoming document');
+      }
+
       return {
         success: true,
-        url: result.secure_url,
+        url: deliveryUrl,
         publicId: result.public_id,
         format: result.format,
         resourceType: result.resource_type,

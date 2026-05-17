@@ -1,0 +1,566 @@
+/**
+ * Templates Page Styles
+ * 
+ * Full-screen layout for WhatsApp message template management.
+ * Includes search, filters, stats cards, template list, and FAB.
+ * Extends base page-layouts.css for consistency.
+ * 
+ * Features:
+ * - Full-width layout (no max-width constraint)
+ * - Search bar with debounced input
+ * - Multi-select filter chips (status, category)
+ * - Template cards with status badges
+ * - Floating Action Button (FAB) for quick create
+ * - Empty states and error handling
+ * - Responsive grid layouts
+ * - Hover effects and smooth transitions
+ * 
+ * Design Patterns:
+ * - DRY: Inherits .stats-grid, .stat-card from page-layouts.css
+ * - Consistent: Uses hardcoded values from design system
+ * - Modular: Filter chips, search bar, template cards are reusable
+ * 
+ * @extends page-layouts.css
+ * @used-by Templates.jsx
+ */
+
+/* Templates Page - Full Screen Layout */
+.templates-page.page-container {
+  /* Extends base .page-container from page-layouts.css */
+  /* No overrides needed - using base layout */
+}
+
+.templates-page-content {
+  /* Content wrapper - no max-width constraint for full screen */
+}
+
+/* Header */
+.templates-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.templates-header-text {
+  flex: 1;
+  min-width: 250px;
+}
+
+.templates-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.templates-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0F172A;
+  margin: 0 0 4px 0;
+}
+
+.templates-subtitle {
+  font-size: 11px;
+  color: #64748B;
+  margin: 0;
+}
+
+/* REMOVED: .page-content, .stats-grid, .stat-card, .stat-icon-* definitions */
+/* These are now inherited from page-layouts.css for consistency */
+
+/* Override stats grid to show 5 cards in one line */
+.templates-page .stats-grid {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+/* Responsive override for Templates page stats grid */
+@media (max-width: 1200px) {
+  .templates-page .stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .templates-page .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Search Bar */
+.templates-search-wrapper {
+  margin-bottom: 16px;
+}
+
+.templates-search-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  padding: 8px 16px;
+  transition: all 200ms ease-in-out;
+}
+
+.templates-search-container:hover {
+  border-color: #5e69ee;
+}
+
+.templates-search-container:focus-within {
+  border-color: #5e69ee;
+  box-shadow: 0 0 0 2px #7d86f2;
+}
+
+.search-icon {
+  font-size: 20px;
+  color: #5e69ee;
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+
+.templates-search-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 14px;
+  color: #0F172A;
+  padding: 4px 0;
+}
+
+.templates-search-input::placeholder {
+  color: #94A3B8;
+}
+
+.search-clear-btn {
+  background: none;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: #64748B;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 150ms ease-in-out;
+}
+
+.search-clear-btn:hover {
+  background: #F4F4FB;
+  color: #0F172A;
+}
+
+/* Filters Card */
+.filters-card {
+  margin-bottom: 16px;
+  padding: 12px;
+}
+
+.filter-section {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.filter-section:not(:last-child) {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #E2E8F0;
+}
+
+.filter-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748B;
+  min-width: 80px;
+}
+
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filter-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  background: #FFFFFF;
+  border: 2px solid #E2E8F0;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748B;
+  cursor: pointer;
+  transition: all 200ms ease-in-out;
+  white-space: nowrap;
+}
+
+.filter-chip:hover {
+  background: #F4F4FB;
+  border-color: #7d86f2;
+  transform: translateY(-1px);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.filter-chip-active {
+  background: #5e69ee;
+  border-color: #5e69ee;
+  color: #FFFFFF;
+  font-weight: 600;
+}
+
+.filter-chip-active:hover {
+  background: #4a52d9;
+  border-color: #4a52d9;
+  transform: translateY(-1px);
+}
+
+.filter-chip-icon {
+  font-size: 16px;
+}
+
+/* Template List */
+.templates-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.template-list-item {
+  padding: 16px;
+  cursor: pointer;
+  transition: all 200ms ease-in-out;
+  border: 1px solid #E2E8F0;
+}
+
+.template-list-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 3px 6px 0 rgba(0, 0, 0, 0.12);
+  border-color: #5e69ee;
+}
+
+/* Template Item Header */
+.template-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.template-item-left {
+  flex: 1;
+  min-width: 0;
+}
+
+.template-category-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: #F4F4FB;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748B;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.template-category-badge svg {
+  font-size: 14px;
+}
+
+.template-item-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #0F172A;
+  margin: 0;
+  word-break: break-word;
+  line-height: 1.4;
+}
+
+.template-item-right {
+  flex-shrink: 0;
+  margin-left: 16px;
+}
+
+/* Status Badges */
+.status-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.status-badge-icon {
+  font-size: 14px;
+}
+
+.status-draft {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+.status-approved {
+  background: #D1FAE5;
+  color: #047857;
+}
+
+.status-pending {
+  background: #FEF3C7;
+  color: #d97706;
+}
+
+.status-rejected {
+  background: #FEE2E2;
+  color: #dc2626;
+}
+
+.status-paused {
+  background: #E0F2FE;
+  color: #2563eb;
+}
+
+.status-default {
+  background: #E2E8F0;
+  color: #64748B;
+}
+
+/* Template Item Body */
+.template-item-body {
+  margin-bottom: 8px;
+}
+
+.template-item-language {
+  font-size: 10px;
+  color: #64748B;
+  margin: 0 0 4px 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.template-item-preview {
+  padding: 8px 16px;
+  background: #FFFFFF;
+  border-left: 2px solid #5e69ee;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #64748B;
+  word-break: break-word;
+}
+
+/* Template Item Footer */
+.template-item-footer {
+  display: flex;
+  gap: 24px;
+  padding-top: 8px;
+  border-top: 1px solid #F1F5F9;
+}
+
+.template-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #94A3B8;
+}
+
+.template-item-meta svg {
+  font-size: 14px;
+}
+
+.template-rejection-reason {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #FEE2E2;
+  border-left: 3px solid #EF4444;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #dc2626;
+}
+
+/* Empty State */
+.templates-empty-state {
+  text-align: center;
+  padding: 48px 32px;
+  background: #FFFFFF;
+  border-radius: 16px;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  border: 1px solid #F1F5F9;
+}
+
+.empty-state-icon {
+  font-size: 64px;
+  color: #94A3B8;
+  margin-bottom: 24px;
+  opacity: 0.5;
+}
+
+.empty-state-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #0F172A;
+  margin: 0 0 8px 0;
+}
+
+.empty-state-text {
+  font-size: 14px;
+  color: #64748B;
+  margin: 0 0 24px 0;
+}
+
+/* Floating Action Button */
+.templates-fab {
+  position: fixed;
+  bottom: 80px;
+  right: 80px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #5e69ee 0%, #7d86f2 100%);
+  border: none;
+  color: white;
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 8px 16px 0 rgba(0, 0, 0, 0.25);
+  transition: all 200ms ease-in-out;
+  z-index: 100;
+}
+
+.templates-fab:hover {
+  transform: scale(1.1) rotate(90deg);
+  box-shadow: 0 8px 24px rgba(94, 105, 238, 0.4);
+}
+
+.templates-fab:active {
+  transform: scale(1.05) rotate(90deg);
+}
+
+/* Error Card */
+.error-card {
+  padding: 24px;
+  background: #FEE2E2;
+  border-left: 4px solid #EF4444;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.error-card p {
+  margin: 0;
+  color: #dc2626;
+  font-weight: 500;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .page-content {
+    padding: 16px 12px;
+  }
+
+  .templates-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .templates-header-text {
+    min-width: auto;
+  }
+
+  .templates-header-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+
+  .templates-title {
+    font-size: 18px;
+  }
+
+  .templates-subtitle {
+    font-size: 11px;
+  }
+
+  .filter-section {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .filter-label {
+    min-width: auto;
+  }
+
+  .templates-subtitle {
+    font-size: 10px;
+  }
+
+  .filter-chips {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .filter-chip {
+    flex-shrink: 0;
+  }
+
+  .template-item-header {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .template-item-right {
+    margin-left: 0;
+    align-self: flex-start;
+  }
+
+  .template-list-item {
+    padding: 16px;
+  }
+
+  .templates-fab {
+    bottom: 24px;
+    right: 24px;
+    width: 48px;
+    height: 48px;
+    font-size: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .templates-search-container {
+    padding: 4px 8px;
+  }
+
+  .templates-stats-bar {
+    padding: 8px 16px;
+  }
+
+  .template-item-footer {
+    flex-direction: column;
+    gap: 4px;
+  }
+}
+

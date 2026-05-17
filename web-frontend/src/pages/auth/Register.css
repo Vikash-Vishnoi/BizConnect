@@ -1,0 +1,124 @@
+/**
+ * Register Page Specific Styles
+ * 
+ * Registration form enhancements beyond auth-common.css.
+ * Features password requirements validation with visual feedback.
+ * 
+ * Features:
+ * - Password requirements checklist
+ * - Real-time validation feedback
+ * - Animated checkmark icons
+ * - Character counter
+ * - Terms and conditions links
+ * - Password visibility toggle
+ * 
+ * Animations:
+ * - checkmark: 0.4s ease (scale and rotate)
+ * 
+ * @extends auth-common.css
+ * @used-by Register.jsx
+ */
+
+/* Register-specific styles */
+
+.password-requirements {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 16px;
+  background-color: #FAFBFC;
+  border-radius: 8px;
+  border: 1px solid #E2E8F0;
+}
+
+.password-req {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #64748B;
+  transition: all 200ms ease-in-out;
+}
+
+.password-req svg {
+  flex-shrink: 0;
+  opacity: 0;
+  stroke: #059669;
+  transition: opacity 200ms ease-in-out;
+}
+
+.password-req-met {
+  color: #059669;
+  font-weight: 500;
+}
+
+.password-req-met svg {
+  opacity: 1;
+  animation: checkmark 0.4s ease;
+}
+
+@keyframes checkmark {
+  0% {
+    opacity: 0;
+    transform: scale(0.5) rotate(-45deg);
+  }
+  50% {
+    transform: scale(1.2) rotate(0deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+.terms-text {
+  font-size: 11px;
+  color: #64748B;
+  text-align: center;
+  line-height: 1.75;
+  margin-top: calc(-1 * 8px);
+}
+
+.terms-text a {
+  color: #39AFEA;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.terms-text a:hover {
+  color: #2a9ad4;
+  text-decoration: underline;
+}
+
+.password-toggle-container {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: calc(-1 * 8px);
+  margin-bottom: 8px;
+}
+
+.password-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid #E2E8F0;
+  border-radius: 4px;
+  color: #64748B;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 200ms ease-in-out;
+}
+
+.password-toggle-btn:hover {
+  color: #39AFEA;
+  border-color: #39AFEA;
+  background: #68c5f0;
+}
+
+.password-toggle-btn svg {
+  flex-shrink: 0;
+}

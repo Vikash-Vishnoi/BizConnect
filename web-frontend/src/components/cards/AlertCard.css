@@ -1,0 +1,90 @@
+/* AlertCard Styles */
+
+.alert-card {
+  border-left-width: 4px;
+  transition: all 0.2s ease;
+}
+
+.alert-card .alert-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.alert-card .alert-icon {
+  display: flex;
+  align-items: center;
+  font-size: 24px;
+}
+
+.alert-card .alert-severity {
+  font-weight: 700;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.alert-card .alert-title h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary, #333);
+}
+
+.alert-card .alert-message {
+  margin: 16px 0;
+  color: var(--text-primary, #333);
+  line-height: 1.6;
+  font-size: 14px;
+}
+
+.alert-card .alert-metadata {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 16px 0;
+  padding: 12px;
+  background: var(--background-secondary, #f5f5f5);
+  border-radius: 8px;
+}
+
+.alert-card .metadata-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary, #666);
+}
+
+.alert-card.unread {
+  background: #fffbf0;
+}
+
+.alert-card.acknowledged {
+  background: #f0f8ff;
+}
+
+.alert-card.resolved {
+  opacity: 0.7;
+  background: #f5f5f5;
+}
+
+.alert-card .acknowledge-btn {
+  background-color: #2196F3;
+}
+
+.alert-card .acknowledge-btn:hover {
+  background-color: #1976D2;
+}
+
+.alert-card .resolve-btn {
+  background-color: #4CAF50;
+}
+
+.alert-card .resolve-btn:hover {
+  background-color: #388E3C;
+}

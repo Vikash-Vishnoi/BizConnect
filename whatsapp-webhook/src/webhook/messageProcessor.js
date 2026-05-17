@@ -1,5 +1,7 @@
 const { saveMessageToConversation, findOrCreateConversation } = require('../database/mongodb');
 const { notifyClients } = require('../services/notifier');
+const cloudinaryService = require('../services/cloudinaryService');
+const { getMediaUrl, downloadMedia } = require('../services/whatsappMediaService');
 
 // ✅ MULTI-BUSINESS: Import business cache for routing
 const businessCache = require('../utils/businessCache');
@@ -97,13 +99,22 @@ exports.processIncomingMessage = async (webhookData) => {
       }
     }
 
+    console.log('🔧 Building message content for type:', messageData.type);
+    const messageContent = await buildMessageContent(messageData, business._id.toString(), business);
+    console.log('📦 Message content built:', {
+      hasMediaUrl: !!messageContent.mediaUrl,
+      hasText: !!messageContent.text,
+      mediaType: messageContent.mediaType,
+      keys: Object.keys(messageContent)
+    });
+    
     const messageDoc = {
       whatsappMessageId: messageData.id,
       from: messageData.from,
       to: business.whatsappConfig.phoneNumberId,  // ✅ MULTI-BUSINESS: Use business phone
-      direction: 'incoming',
+      direction: 'in',
       type: messageData.type,
-      content: buildMessageContent(messageData),
+      content: messageContent,
       timestamp: new Date(parseInt(messageData.timestamp) * 1000),
       status: 'delivered',
       businessId: business._id  // ✅ MULTI-BUSINESS: Track business
@@ -158,17 +169,88 @@ exports.processIncomingMessage = async (webhookData) => {
   }
 };
 
-function buildMessageContent(messageData) {
+async function buildMessageContent(messageData, businessId, business) {
+  console.log('🏗️ buildMessageContent called:', {
+    type: messageData.type,
+    hasImage: !!messageData.image,
+    hasVideo: !!messageData.video,
+    hasAudio: !!messageData.audio,
+    hasDocument: !!messageData.document,
+    businessId: businessId,
+    hasBusiness: !!business,
+    hasAccessToken: !!business?.whatsappConfig?.accessToken
+  });
+  
   const content = {
     text: messageData.text?.body || ''
   };
 
   switch (messageData.type) {
     case 'text':
+      console.log('📝 Processing text message');
       break;
 
     case 'image':
-      content.mediaUrl = messageData.image?.link;
+      console.log('🖼️  Processing image message:', {
+        hasId: !!messageData.image?.id,
+        hasUrl: !!messageData.image?.url,
+        mediaId: messageData.image?.id,
+        mimeType: messageData.image?.mime_type
+      });
+      
+      // Get access token from business
+      const imageAccessToken = business.whatsappConfig?.accessToken;
+      if (!imageAccessToken) {
+        console.error('❌ No access token found for business');
+        content.text = '⚠️ Image (upload failed - no access token)';
+        break;
+      }
+      
+      // Get media URL - either from webhook directly or fetch from API
+      let imageMediaUrl = messageData.image?.url;
+      
+      if (!imageMediaUrl && messageData.image?.id) {
+        console.log('🔍 No URL in webhook, fetching from WhatsApp API...');
+        const mediaUrlResult = await getMediaUrl(messageData.image.id, imageAccessToken);
+        
+        if (!mediaUrlResult.success) {
+          console.error('❌ Failed to get media URL:', mediaUrlResult.error);
+          content.text = '⚠️ Image (failed to fetch URL from WhatsApp)';
+          break;
+        }
+        imageMediaUrl = mediaUrlResult.url;
+      }
+      
+      if (imageMediaUrl) {
+        console.log('✅ Got media URL, starting Cloudinary upload...');
+        console.log('📤 Uploading to Cloudinary from URL:', imageMediaUrl.substring(0, 80) + '...');
+        const cloudinaryResult = await cloudinaryService.uploadFromWhatsAppUrl(
+          imageMediaUrl,
+          messageData.image.mime_type,
+          `image-${messageData.id}.${messageData.image.mime_type?.split('/')[1] || 'jpg'}`,
+          businessId,
+          imageAccessToken
+        );
+        
+        console.log('📊 Cloudinary upload result:', {
+          success: cloudinaryResult.success,
+          url: cloudinaryResult.url ? cloudinaryResult.url.substring(0, 80) + '...' : null,
+          error: cloudinaryResult.error || null
+        });
+        
+        if (cloudinaryResult.success) {
+          content.mediaUrl = cloudinaryResult.url;
+          content.cloudinaryPublicId = cloudinaryResult.publicId;
+          console.log('✅ Image uploaded successfully, mediaUrl set in content');
+        } else {
+          console.error('❌ Cloudinary upload failed:', cloudinaryResult.error);
+          content.text = `⚠️ Image (Cloudinary upload failed: ${cloudinaryResult.error})`;
+        }
+      } else {
+        console.warn('⚠️  No image URL or ID found in message');
+        content.text = '⚠️ Image (no URL available)';
+      }
+      
       content.mediaId = messageData.image?.id;
       content.mediaType = 'image';
       content.mimeType = messageData.image?.mime_type;
@@ -176,7 +258,63 @@ function buildMessageContent(messageData) {
       break;
 
     case 'video':
-      content.mediaUrl = messageData.video?.link;
+      console.log('🎥 Processing video message:', {
+        hasId: !!messageData.video?.id,
+        hasUrl: !!messageData.video?.url,
+        mediaId: messageData.video?.id,
+        mimeType: messageData.video?.mime_type
+      });
+      
+      const videoAccessToken = business.whatsappConfig?.accessToken;
+      if (!videoAccessToken) {
+        console.error('❌ No access token found for business (video)');
+        content.text = '⚠️ Video (upload failed - no access token)';
+        break;
+      }
+      
+      let videoMediaUrl = messageData.video?.url;
+      
+      if (!videoMediaUrl && messageData.video?.id) {
+        console.log('🔍 No video URL in webhook, fetching from WhatsApp API...');
+        const mediaUrlResult = await getMediaUrl(messageData.video.id, videoAccessToken);
+        if (!mediaUrlResult.success) {
+          console.error('❌ Failed to get video URL:', mediaUrlResult.error);
+          content.text = '⚠️ Video (failed to fetch URL from WhatsApp)';
+          break;
+        }
+        videoMediaUrl = mediaUrlResult.url;
+      }
+      
+      if (videoMediaUrl) {
+        console.log('✅ Got video URL, starting Cloudinary upload...');
+        console.log('📤 Uploading video to Cloudinary from URL:', videoMediaUrl.substring(0, 80) + '...');
+        const cloudinaryResult = await cloudinaryService.uploadFromWhatsAppUrl(
+          videoMediaUrl,
+          messageData.video.mime_type,
+          `video-${messageData.id}.${messageData.video.mime_type?.split('/')[1] || 'mp4'}`,
+          businessId,
+          videoAccessToken
+        );
+        
+        console.log('📊 Video Cloudinary result:', {
+          success: cloudinaryResult.success,
+          url: cloudinaryResult.url ? cloudinaryResult.url.substring(0, 80) + '...' : null,
+          error: cloudinaryResult.error || null
+        });
+        
+        if (cloudinaryResult.success) {
+          content.mediaUrl = cloudinaryResult.url;
+          content.cloudinaryPublicId = cloudinaryResult.publicId;
+          console.log('✅ Video uploaded successfully, mediaUrl set in content');
+        } else {
+          console.error('❌ Video Cloudinary upload failed:', cloudinaryResult.error);
+          content.text = `⚠️ Video (Cloudinary upload failed: ${cloudinaryResult.error})`;
+        }
+      } else {
+        console.warn('⚠️ No video URL or ID found in message');
+        content.text = '⚠️ Video (no URL available)';
+      }
+      
       content.mediaId = messageData.video?.id;
       content.mediaType = 'video';
       content.mimeType = messageData.video?.mime_type;
@@ -184,18 +322,138 @@ function buildMessageContent(messageData) {
       break;
 
     case 'audio':
-      content.mediaUrl = messageData.audio?.link;
+      console.log('🎵 Processing audio message:', {
+        hasId: !!messageData.audio?.id,
+        hasUrl: !!messageData.audio?.url,
+        mediaId: messageData.audio?.id,
+        mimeType: messageData.audio?.mime_type
+      });
+      
+      const audioAccessToken = business.whatsappConfig?.accessToken;
+      if (!audioAccessToken) {
+        console.error('❌ No access token found for business (audio)');
+        content.text = '⚠️ Audio (upload failed - no access token)';
+        break;
+      }
+      
+      let audioMediaUrl = messageData.audio?.url;
+      
+      if (!audioMediaUrl && messageData.audio?.id) {
+        console.log('🔍 Fetching audio URL from WhatsApp API...');
+        const mediaUrlResult = await getMediaUrl(messageData.audio.id, audioAccessToken);
+        if (!mediaUrlResult.success) {
+          console.error('❌ Failed to get audio URL:', mediaUrlResult.error);
+          content.text = '⚠️ Audio (failed to fetch URL from WhatsApp)';
+          break;
+        }
+        audioMediaUrl = mediaUrlResult.url;
+      }
+      
+      if (audioMediaUrl) {
+        console.log('✅ Got audio URL, uploading to Cloudinary...');
+        const cloudinaryResult = await cloudinaryService.uploadFromWhatsAppUrl(
+          audioMediaUrl,
+          messageData.audio.mime_type,
+          `audio-${messageData.id}.${messageData.audio.mime_type?.split('/')[1] || 'ogg'}`,
+          businessId,
+          audioAccessToken
+        );
+        
+        console.log('📊 Audio Cloudinary result:', {
+          success: cloudinaryResult.success,
+          error: cloudinaryResult.error || null
+        });
+        
+        if (cloudinaryResult.success) {
+          content.mediaUrl = cloudinaryResult.url;
+          content.cloudinaryPublicId = cloudinaryResult.publicId;
+          console.log('✅ Audio uploaded successfully');
+        } else {
+          console.error('❌ Audio upload failed:', cloudinaryResult.error);
+          content.text = `⚠️ Audio (upload failed: ${cloudinaryResult.error})`;
+        }
+      } else {
+        console.warn('⚠️ No audio URL or ID found');
+        content.text = '⚠️ Audio (no URL available)';
+      }
+      
       content.mediaId = messageData.audio?.id;
       content.mediaType = 'audio';
       content.mimeType = messageData.audio?.mime_type;
       break;
 
     case 'document':
-      content.mediaUrl = messageData.document?.link;
+      console.log('📄 Processing document message:', {
+        hasId: !!messageData.document?.id,
+        hasUrl: !!messageData.document?.url,
+        mediaId: messageData.document?.id,
+        mimeType: messageData.document?.mime_type,
+        filename: messageData.document?.filename
+      });
+      
+      const docAccessToken = business.whatsappConfig?.accessToken;
+      if (!docAccessToken) {
+        console.error('❌ No access token found for business (document)');
+        content.text = '⚠️ Document (upload failed - no access token)';
+        content.filename = messageData.document?.filename || 'document';
+        break;
+      }
+      
+      let docMediaUrl = messageData.document?.url;
+      
+      if (!docMediaUrl && messageData.document?.id) {
+        console.log('🔍 Fetching document URL from WhatsApp API...');
+        const mediaUrlResult = await getMediaUrl(messageData.document.id, docAccessToken);
+        if (!mediaUrlResult.success) {
+          console.error('❌ Failed to get document URL:', mediaUrlResult.error);
+          content.text = '⚠️ Document (failed to fetch URL from WhatsApp)';
+          content.filename = messageData.document?.filename || 'document';
+          break;
+        }
+        docMediaUrl = mediaUrlResult.url;
+      }
+      
+      if (docMediaUrl) {
+        console.log('✅ Got document URL, uploading to Cloudinary...');
+        
+        // Clean filename - remove timestamp prefix if it exists (from forwarded/resent messages)
+        let cleanFilename = messageData.document.filename || `document-${messageData.id}.pdf`;
+        // Remove timestamp prefix pattern like "1766235980663-" from filename
+        cleanFilename = cleanFilename.replace(/^\d{13,}-/, '');
+        
+        const cloudinaryResult = await cloudinaryService.uploadFromWhatsAppUrl(
+          docMediaUrl,
+          messageData.document.mime_type,
+          cleanFilename,
+          businessId,
+          docAccessToken
+        );
+        
+        console.log('📊 Document Cloudinary result:', {
+          success: cloudinaryResult.success,
+          error: cloudinaryResult.error || null
+        });
+        
+        if (cloudinaryResult.success) {
+          content.mediaUrl = cloudinaryResult.url;
+          content.cloudinaryPublicId = cloudinaryResult.publicId;
+          console.log('✅ Document uploaded successfully');
+        } else {
+          console.error('❌ Document upload failed:', cloudinaryResult.error);
+          content.text = `⚠️ Document (upload failed: ${cloudinaryResult.error})`;
+        }
+      } else {
+        console.warn('⚠️ No document URL or ID found');
+        content.text = '⚠️ Document (no URL available)';
+      }
+      
       content.mediaId = messageData.document?.id;
       content.mediaType = 'document';
       content.mimeType = messageData.document?.mime_type;
-      content.filename = messageData.document?.filename;
+      // Clean filename - remove timestamp prefix if present
+      content.filename = messageData.document?.filename ? 
+        messageData.document.filename.replace(/^\d{13,}-/, '') : 
+        undefined;
       content.caption = messageData.document?.caption;
       break;
 
@@ -827,7 +1085,7 @@ exports.processMessageEcho = async (webhookData, business, requestId) => {
       sourceDevice: webhookData.source_device,
       sourceApp: webhookData.source_app,
       type: message.type,
-      content: buildMessageContent(message),
+      content: buildMessageContentSimple(message),
       status: 'sent',
       sentAt: new Date(parseInt(message.timestamp) * 1000),
       rawWebhookData: webhookData
@@ -857,9 +1115,10 @@ exports.processMessageEcho = async (webhookData, business, requestId) => {
 };
 
 /**
- * Build message content from message data (helper function)
+ * Build message content from message data (simple helper for echoes)
+ * Does NOT download media - just uses direct links
  */
-function buildMessageContent(messageData) {
+function buildMessageContentSimple(messageData) {
   const content = {
     text: messageData.text?.body || ''
   };

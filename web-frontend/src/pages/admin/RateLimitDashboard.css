@@ -1,0 +1,310 @@
+/**
+ * ⭐ Rate Limit Dashboard Page Styles
+ * 
+ * Styles for API rate limit monitoring and usage tracking.
+ * 
+ * @module pages/admin/RateLimitDashboard.css
+ * 
+ * @description
+ * This stylesheet defines the layout and appearance for the Rate Limit Dashboard,
+ * which displays real-time API usage across messaging, templates, API calls, and media uploads.
+ * Features color-coded progress bars, usage percentages, and reset timers.
+ * 
+ * @layout
+ * - Container: Centered layout with max-width 1400px
+ * - Header: Title, description, and refresh button
+ * - Status Banner: Overall system health indicator
+ * - Limits Grid: 4-column grid for limit cards (auto-fit, min 320px)
+ * - Info Section: Educational cards about rate limits
+ * 
+ * @components
+ * - Rate Limit Dashboard Container: Main page wrapper
+ * - Dashboard Header: Title and refresh button
+ * - Status Banner: System-wide health status with gradient background
+ * - Limits Grid: Grid layout for limit category cards
+ * - Limit Card: Individual limit display (messaging, templates, API, media)
+ * - Progress Bar: Animated color-coded usage indicator
+ * - Limit Footer: Reset timer and usage percentage
+ * - Info Section: Information cards about rate limiting
+ * 
+ * @responsive
+ * - Mobile (≤768px): Single column layout, stacked elements
+ * - Desktop: Multi-column grid with auto-fit (min 320px)
+ * 
+ * @features
+ * - Color-coded progress bars (green < 50%, yellow < 70%, orange < 90%, red ≥ 90%)
+ * - Gradient purple refresh button with hover elevation
+ * - Animated progress bar transitions
+ * - Status banner with gradient background
+ * - Usage percentage badges with warning states
+ * - Info cards with left border accent
+ * - Hover effects on limit cards
+ * - Empty states integration
+ * - Loading states integration
+ * 
+ * @colors
+ * - Healthy: #4CAF50 (green)
+ * - Caution: #FFC107 (yellow)
+ * - Warning: #FF9800 (orange)
+ * - Critical: #F44336 (red)
+ * - Primary: Gradient purple
+ * - Status Healthy: #c8e6c9 (light green)
+ * - Status Warning: #fff9c4 (light yellow)
+ * - Status Critical: #ffcdd2 (light red)
+ */
+
+.rate-limit-dashboard-container {
+  padding: 24px;
+  max-width: 1400px;
+  margin: 80px auto 0;
+  min-height: calc(100vh - 80px);
+  background: #FAFBFC;
+}
+
+.rate-limit-dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 40px;
+}
+
+.rate-limit-dashboard-header h1 {
+  font-size: 22px;
+  margin-bottom: 8px;
+  color: #0F172A;
+}
+
+.rate-limit-dashboard-header p {
+  color: #64748B;
+  font-size: 14px;
+  margin: 0;
+}
+
+.refresh-btn {
+  padding: 8px 32px;
+  background: var(--gradient-purple);
+  color: #FFFFFF;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 200ms ease-in-out;
+}
+
+.refresh-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.15);
+}
+
+/* Loading and empty states use shared components */
+
+.status-banner {
+  background: var(--gradient-purple);
+  color: #FFFFFF;
+  padding: 40px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 40px;
+  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.15);
+}
+
+.banner-icon {
+  font-size: 24px;
+}
+
+.banner-content h3 {
+  font-size: 18px;
+  margin-bottom: 8px;
+}
+
+.banner-content p {
+  font-size: 14px;
+  margin: 0;
+}
+
+.status-healthy {
+  color: #c8e6c9;
+}
+
+.status-warning {
+  color: #fff9c4;
+}
+
+.status-critical {
+  color: #ffcdd2;
+}
+
+.limits-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 24px;
+  margin-bottom: 40px;
+}
+
+.limit-card {
+  background: #FFFFFF;
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  transition: all 200ms ease-in-out;
+}
+
+.limit-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.15);
+}
+
+.limit-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.limit-header h3 {
+  font-size: 16px;
+  color: #0F172A;
+  margin: 0;
+}
+
+.limit-period {
+  font-size: 11px;
+  color: #94A3B8;
+  background: #FAFBFC;
+  padding: var(--spacing-2xs) 8px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.limit-progress {
+  margin-bottom: 16px;
+}
+
+.progress-bar-wrapper {
+  background: #F1F5F9;
+  height: 8px;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.progress-bar {
+  height: 100%;
+  border-radius: 8px;
+  transition: width 300ms ease-in-out ease, background 200ms ease-in-out ease;
+}
+
+.progress-text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.progress-text .current {
+  color: #667eea;
+}
+
+.progress-text .separator {
+  color: #E2E8F0;
+}
+
+.progress-text .limit {
+  color: #94A3B8;
+}
+
+.limit-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 16px;
+  border-top: 1px solid #E2E8F0;
+}
+
+.reset-time {
+  font-size: 12px;
+  color: #64748B;
+}
+
+.usage-percentage {
+  font-size: 14px;
+  font-weight: 700;
+  color: #059669;
+  padding: var(--spacing-2xs) 8px;
+  background: #D1FAE5;
+  border-radius: 8px;
+}
+
+.usage-percentage.warning {
+  color: #FF9800;
+  background: #fff3e0;
+}
+
+.info-section {
+  background: #FFFFFF;
+  padding: 40px;
+  border-radius: 16px;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.info-section h3 {
+  font-size: 18px;
+  color: #0F172A;
+  margin-bottom: 24px;
+}
+
+.info-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 24px;
+}
+
+.info-card {
+  padding: 32px;
+  background: linear-gradient(135deg, #FAFBFC 0%, #F1F5F9 100%);
+  border-radius: 16px;
+  border-left: 4px solid #5e69ee;
+}
+
+.info-card h4 {
+  font-size: 14px;
+  color: #0F172A;
+  margin-bottom: 8px;
+}
+
+.info-card p {
+  font-size: 14px;
+  color: #64748B;
+  line-height: 1.6;
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .rate-limit-dashboard-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .status-banner {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .limits-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .info-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .rate-limit-dashboard-container {
+    padding: 16px;
+  }
+}

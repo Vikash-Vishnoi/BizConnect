@@ -1,0 +1,354 @@
+/**
+ * Notification Dropdown Component Styles
+ * 
+ * Provides styling for the notification dropdown including:
+ * - Dropdown positioning and animations
+ * - Notification badge styling
+ * - Alert severity color coding
+ * - List item hover effects
+ * - Empty and loading states
+ */
+
+/* Notification dropdown container */
+.notification-dropdown-container {
+  position: relative;
+  display: inline-block;
+}
+
+/* Notification button (navbar notification) */
+.navbar-notification {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.navbar-notification:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.navbar-notification-icon {
+  font-size: 24px;
+  color: var(--text-primary, #0F172A);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Notification badge */
+.navbar-notification-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  background: var(--color-danger, #ff4444);
+  color: white;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+/* Notification dropdown */
+.notification-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 380px;
+  max-height: 500px;
+  background: var(--color-background-elevated, #fff);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 1000;
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Dropdown header */
+.notification-dropdown-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--color-border, #e0e0e0);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--color-background, #f8f9fa);
+}
+
+.notification-dropdown-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text-primary, #333);
+}
+
+.notification-close-btn {
+  background: transparent;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--color-text-secondary, #666);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.notification-close-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--color-text-primary, #333);
+}
+
+.notification-close-btn svg {
+  font-size: 20px;
+}
+
+/* Dropdown body */
+.notification-dropdown-body {
+  flex: 1;
+  overflow-y: auto;
+  max-height: 400px;
+}
+
+/* Custom scrollbar */
+.notification-dropdown-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.notification-dropdown-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.notification-dropdown-body::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+.notification-dropdown-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* Loading state */
+.notification-loading {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--color-text-secondary, #666);
+}
+
+.notification-spinner {
+  width: 40px;
+  height: 40px;
+  margin: 0 auto 12px;
+  border: 3px solid rgba(0, 0, 0, 0.1);
+  border-top-color: var(--color-primary, #4CAF50);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.notification-loading p {
+  margin: 0;
+  font-size: 14px;
+}
+
+/* Empty state */
+.notification-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--color-text-secondary, #666);
+}
+
+.notification-empty-icon {
+  font-size: 48px;
+  color: var(--color-success, #4CAF50);
+  margin-bottom: 12px;
+}
+
+.notification-empty p {
+  margin: 0 0 4px 0;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--color-text-primary, #333);
+}
+
+.notification-empty span {
+  font-size: 14px;
+  color: var(--color-text-secondary, #666);
+}
+
+/* Notification list */
+.notification-list {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Notification item */
+.notification-item {
+  display: flex;
+  align-items: flex-start;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--color-border, #e0e0e0);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  background: var(--color-background, #fff);
+}
+
+.notification-item:last-child {
+  border-bottom: none;
+}
+
+.notification-item:hover {
+  background: var(--color-background-hover, #f8f9fa);
+}
+
+.notification-item.notification-unread {
+  background: rgba(76, 175, 80, 0.05);
+}
+
+.notification-item.notification-unread:hover {
+  background: rgba(76, 175, 80, 0.08);
+}
+
+/* Notification icon */
+.notification-item-icon {
+  flex-shrink: 0;
+  margin-right: 12px;
+}
+
+.notification-icon {
+  font-size: 24px;
+}
+
+.notification-icon-critical {
+  color: var(--color-danger, #ff4444);
+}
+
+.notification-icon-high {
+  color: var(--color-warning, #ff9800);
+}
+
+.notification-icon-medium {
+  color: var(--color-info, #2196F3);
+}
+
+.notification-icon-low,
+.notification-icon-info {
+  color: var(--color-text-secondary, #666);
+}
+
+/* Notification content */
+.notification-item-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.notification-item-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--color-text-primary, #333);
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notification-item-message {
+  font-size: 13px;
+  color: var(--color-text-secondary, #666);
+  line-height: 1.4;
+  margin-bottom: 6px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.notification-item-time {
+  font-size: 12px;
+  color: var(--color-text-tertiary, #999);
+}
+
+/* Unread dot */
+.notification-unread-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  background: var(--color-primary, #4CAF50);
+  border-radius: 50%;
+  margin-left: 8px;
+  margin-top: 6px;
+}
+
+/* Dropdown footer */
+.notification-dropdown-footer {
+  padding: 12px;
+  border-top: 1px solid var(--color-border, #e0e0e0);
+  background: var(--color-background, #f8f9fa);
+}
+
+.notification-view-all-btn {
+  width: 100%;
+  padding: 10px 16px;
+  background: transparent;
+  border: 1px solid var(--color-primary, #4CAF50);
+  color: var(--color-primary, #4CAF50);
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.notification-view-all-btn:hover {
+  background: var(--color-primary, #4CAF50);
+  color: white;
+}
+
+/* Responsive adjustments */
+@media (max-width: 480px) {
+  .notification-dropdown {
+    width: 320px;
+    right: -60px;
+  }
+}

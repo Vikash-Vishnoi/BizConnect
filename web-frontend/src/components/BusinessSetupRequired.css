@@ -1,0 +1,90 @@
+/**
+ * Business Setup Required Component Styles
+ * Full-screen prompt for business setup completion
+ * Used as a guard for features requiring business configuration
+ */
+
+.business-setup-required {
+  margin: 0;
+  width: 100%;
+  min-height: calc(100vh - 80px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.business-setup-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 64px 24px;
+  gap: 24px;
+  width: 100%;
+  max-width: 600px;
+}
+
+.business-setup-icon {
+  font-size: 64px;
+  line-height: 1;
+  animation: bounce 2s ease-in-out infinite;
+}
+
+.business-setup-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0F172A;
+  margin: 0;
+}
+
+.business-setup-message {
+  font-size: 16px;
+  color: #64748B;
+  margin: 0;
+  max-width: 500px;
+  line-height: 1.75;
+}
+
+.business-setup-content .btn.btn-primary {
+  background: linear-gradient(135deg, #5e69ee 0%, #4a52d9 100%);
+  color: #FFFFFF;
+}
+
+.business-setup-content .btn.btn-primary svg,
+.business-setup-content .btn.btn-primary .btn-icon,
+.business-setup-content .btn.btn-primary .btn-icon svg {
+  color: #FFFFFF;
+  fill: #FFFFFF;
+}
+
+.business-setup-content .btn.btn-primary:hover {
+  background: linear-gradient(135deg, #4a52d9 0%, #5e69ee 100%);
+}
+
+@keyframes bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@media (max-width: 768px) {
+  .business-setup-content {
+    padding: 32px 16px;
+  }
+
+  .business-setup-icon {
+    font-size: 48px;
+  }
+
+  .business-setup-title {
+    font-size: 20px;
+  }
+
+  .business-setup-message {
+    font-size: 14px;
+  }
+}

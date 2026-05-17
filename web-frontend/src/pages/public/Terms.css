@@ -1,0 +1,208 @@
+/**
+ * Legal Pages Styles (Terms & Privacy Policy)
+ * 
+ * Shared styling for Terms of Service and Privacy Policy pages.
+ * Provides professional legal document presentation with smooth animations.
+ * Uses design system variables for consistency.
+ * 
+ * Features:
+ * - Full-page gradient background
+ * - Card-based content container with shadow
+ * - Smooth slide-up animation on page load
+ * - Hierarchical typography (h1-h3)
+ * - Highlighted contact info sections
+ * - Footer navigation with hover effects
+ * - Responsive design for mobile devices
+ * 
+ * @used-by Terms.jsx, PrivacyPolicy.jsx
+ */
+
+.legal-page {
+  min-height: 100vh;
+  background: var(--gradient-primary);
+  padding: 48px 24px;
+}
+
+.legal-container {
+  max-width: 900px;
+  margin: 0 auto;
+  background: #FFFFFF;
+  border-radius: 16px;
+  box-shadow: 0 12px 24px 0 rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  animation: slideUp 0.6s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.legal-header {
+  background: var(--gradient-primary);
+  color: #FFFFFF;
+  padding: 80px 48px;
+  text-align: center;
+}
+
+.legal-header h1 {
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.legal-updated {
+  font-size: 12px;
+  opacity: var(--opacity-90);
+}
+
+.legal-content {
+  padding: 80px 48px;
+}
+
+.legal-section {
+  margin-bottom: 64px;
+}
+
+.legal-section:last-child {
+  margin-bottom: 0;
+}
+
+.legal-section h2 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #0F172A;
+  margin-bottom: 24px;
+  padding-bottom: 12px;
+  border-bottom: 3px solid #5e69ee;
+}
+
+.legal-section h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #0F172A;
+  margin-top: 32px;
+  margin-bottom: 12px;
+}
+
+.legal-section p {
+  font-size: 14px;
+  line-height: 1.8;
+  color: #94A3B8;
+  margin-bottom: 16px;
+}
+
+.legal-section ul {
+  margin: 16px 0;
+  padding-left: 32px;
+}
+
+.legal-section li {
+  font-size: 14px;
+  line-height: 1.8;
+  color: #94A3B8;
+  margin-bottom: 12px;
+}
+
+.legal-section a {
+  color: #5e69ee;
+  text-decoration: none;
+  font-weight: 500;
+  transition: 200ms ease-in-out;
+}
+
+.legal-section a:hover {
+  color: #4a52d9;
+  text-decoration: underline;
+}
+
+.contact-info {
+  background: #F4F4FB;
+  padding: 32px;
+  border-radius: 8px;
+  border-left: 4px solid #39AFEA;
+  margin-top: 16px;
+}
+
+.contact-info p {
+  margin-bottom: 8px;
+}
+
+.contact-info p:last-child {
+  margin-bottom: 0;
+}
+
+.contact-info strong {
+  color: #0F172A;
+}
+
+.legal-footer {
+  padding: 40px 48px;
+  background: #F4F4FB;
+  border-top: 1px solid #E2E8F0;
+  text-align: center;
+}
+
+.legal-footer p {
+  color: #64748B;
+  font-size: 12px;
+}
+
+.legal-footer a {
+  color: #39AFEA;
+  text-decoration: none;
+  font-weight: 500;
+  margin: 0 12px;
+  transition: 200ms ease-in-out;
+}
+
+.legal-footer a:hover {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+@media (max-width: 768px) {
+  .legal-page {
+    padding: 24px 8px;
+  }
+
+  .legal-header {
+    padding: 48px 32px;
+  }
+
+  .legal-header h1 {
+    font-size: 22px;
+  }
+
+  .legal-content {
+    padding: 48px 32px;
+  }
+
+  .legal-section h2 {
+    font-size: 20px;
+  }
+
+  .legal-section h3 {
+    font-size: 16px;
+  }
+
+  .legal-section p,
+  .legal-section li {
+    font-size: 12px;
+  }
+
+  .legal-footer {
+    padding: 32px;
+  }
+
+  .legal-footer a {
+    display: block;
+    margin: 8px 0;
+  }
+}

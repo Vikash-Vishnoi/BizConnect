@@ -1,0 +1,26 @@
+{
+  "name": "WhatsApp Marketing Platform",
+  "short_name": "WA Marketing",
+  "description": "WhatsApp Business API Platform for Marketing & Campaign Management",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#5e69ee",
+  "orientation": "portrait-primary",
+  "lang": "en",
+  "dir": "ltr",
+  "scope": "/",
+  "id": "/?source=pwa",
+  "prefer_related_applications": false,
+  "icons": [],
+  "categories": [
+    "business",
+    "productivity",
+    "communication"
+  ],
+  "screenshots": [],
+  "shortcuts": [],
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "related_applications": [],
+  "iarc_rating_id": ""
+}

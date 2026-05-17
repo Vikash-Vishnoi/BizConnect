@@ -1,0 +1,42 @@
+/**
+ * Card Component Styles
+ * Reusable container with consistent styling
+ * Supports multiple padding sizes and interactive states
+ */
+
+.card {
+  background: #FFFFFF;
+  border-radius: 16px;
+  box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.1);
+  transition: all 200ms ease-in-out;
+  border: 1px solid #E2E8F0;
+}
+
+.card-padding-none {
+  padding: 0;
+}
+
+.card-padding-sm {
+  padding: 12px;
+}
+
+.card-padding-base {
+  padding: 24px;
+}
+
+.card-padding-lg {
+  padding: 32px;
+}
+
+.card-hoverable:hover {
+  box-shadow: 0 3px 6px 0 rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+}
+
+.card-clickable {
+  cursor: pointer;
+}
+
+.card-clickable:active {
+  transform: translateY(0);
+}

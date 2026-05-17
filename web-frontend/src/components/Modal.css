@@ -1,0 +1,323 @@
+/**
+ * Shared Modal Component Styles
+ * 
+ * Single source of truth for all modals and dialogs across the application.
+ * Prevents conflicts from duplicate modal definitions.
+ * Includes base modal, confirmation modal, and responsive behavior.
+ * 
+ * Features:
+ * - Fixed overlay with z-index management
+ * - Multiple size variants (small, medium, large, xlarge)
+ * - Sticky header and footer for scrollable content
+ * - Smooth fade-in and slide-up animations
+ * - Mobile-first responsive (full-screen on mobile)
+ * - Close button with hover states
+ * - Flexible footer layouts (space-between, center, end)
+ * 
+ * Sizes:
+ * - Small: 400px max-width
+ * - Medium: 600px max-width (default)
+ * - Large: 800px max-width
+ * - XLarge: 1000px max-width
+ * 
+ * @used-by All modal/dialog components across app
+ * @merged ConfirmationModal.css styles included
+ */
+
+/**
+ * Shared Modal Component
+ * Single source of truth for all modals across the app
+ * Prevents conflicts from duplicate modal definitions
+ */
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1040;
+  padding: 24px;
+  overflow-y: auto;
+  animation: modalFadeIn 200ms ease-in-out;
+}
+
+.modal-content {
+  background: #FFFFFF;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 600px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 16px 0 rgba(0, 0, 0, 0.25);
+  position: relative;
+  z-index: 1050;
+  margin: auto;
+  animation: modalSlideUp 300ms ease-in-out;
+}
+
+.modal-content--small {
+  max-width: 400px;
+}
+
+.modal-content--medium {
+  max-width: 600px;
+}
+
+.modal-content--large {
+  max-width: 800px;
+}
+
+.modal-content--xlarge {
+  max-width: 1000px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px;
+  border-bottom: 1px solid #E2E8F0;
+  position: sticky;
+  top: 0;
+  background: #FFFFFF;
+  z-index: 1;
+}
+
+.modal-header__title {
+  font-size: 22px;
+  font-weight: 600;
+  color: #0F172A;
+  margin: 0;
+}
+
+.modal-header__close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #64748B;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  transition: all 200ms ease-in-out;
+}
+
+.modal-header__close:hover {
+  color: #0F172A;
+  background: #FAFBFC;
+}
+
+.modal-body {
+  padding: 24px;
+}
+
+.modal-body--no-padding {
+  padding: 0;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 24px;
+  border-top: 1px solid #E2E8F0;
+  position: sticky;
+  bottom: 0;
+  background: #FFFFFF;
+}
+
+.modal-footer--space-between {
+  justify-content: space-between;
+}
+
+.modal-footer--center {
+  justify-content: center;
+}
+
+/* Animation */
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modalSlideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Animation classes added to initial .modal-overlay at line 7 */
+
+/* Responsive */
+@media (max-width: 768px) {
+  .modal-overlay {
+    padding: 0;
+  }
+
+  .modal-content {
+    max-width: 100%;
+    max-height: 100vh;
+    border-radius: 0;
+    margin: 0;
+  }
+
+  .modal-header__title {
+    font-size: 20px;
+  }
+}
+
+/* ============================================
+ * CONFIRMATION MODAL SPECIFIC STYLES
+ * Merged from ConfirmationModal.css
+ * ============================================ */
+
+.confirmation-modal {
+  background: #FFFFFF;
+  border-radius: 16px;
+  padding: 48px;
+  max-width: 480px;
+  width: 100%;
+  box-shadow: 0 12px 24px 0 rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease-out;
+  position: relative;
+}
+
+.modal-close-button {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: transparent;
+  border: none;
+  font-size: 32px;
+  color: #64748B;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 4px;
+  transition: all 200ms ease-in-out;
+}
+
+.modal-close-button:hover:not(:disabled) {
+  background: #e2e8f0;
+  color: #0F172A;
+}
+
+.modal-close-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.modal-icon-container {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.modal-icon {
+  font-size: 28px;
+}
+
+.modal-icon-danger {
+  color: var(--error, #ef4444);
+}
+
+.modal-icon-warning {
+  color: var(--warning, #f59e0b);
+}
+
+.modal-icon-info {
+  color: var(--info, #3b82f6);
+}
+
+.modal-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: #0F172A;
+  text-align: center;
+  margin-bottom: 12px;
+  line-height: 1.2;
+}
+
+.modal-message {
+  font-size: 14px;
+  color: #64748B;
+  text-align: center;
+  line-height: 1.75;
+  margin-bottom: 24px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.modal-actions button {
+  min-width: 100px;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Confirmation Modal Responsive */
+@media (max-width: 768px) {
+  .confirmation-modal {
+    padding: 24px;
+    max-width: 100%;
+  }
+
+  .modal-title {
+    font-size: 18px;
+  }
+
+  .modal-message {
+    font-size: 12px;
+  }
+
+  .modal-actions {
+    flex-direction: column;
+  }
+
+  .modal-actions button {
+    width: 100%;
+  }
+}

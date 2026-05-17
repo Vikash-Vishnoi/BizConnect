@@ -1,0 +1,274 @@
+/**
+ * Welcome Message Settings Page Styles
+ * 
+ * Automation settings page for configuring automatic welcome messages.
+ * Features toggle switches, message preview, and form validation.
+ * 
+ * Features:
+ * - Centered layout (max-width 900px)
+ * - Settings card with toggle switches
+ * - Message textarea with character counter
+ * - Live message preview
+ * - Toggle switch animations
+ * - Form validation styling
+ * - Loading states
+ * - Responsive mobile layout
+ * 
+ * Layout Structure:
+ * - welcome-message-container: Page wrapper
+ * - welcome-message-header: Title and description
+ * - settings-card: Main settings form
+ * - settings-section: Grouped settings
+ * - form-group-inline: Toggle switches
+ * - preview-section: Live message preview
+ * - settings-actions: Save/cancel buttons
+ * 
+ * Toggle Switch:
+ * - Custom toggle switch component
+ * - Animated slider (translateX 24px)
+ * - Primary color when active
+ * - Smooth transitions (0.3s)
+ * 
+ * Form Elements:
+ * - textarea: Auto-resizing message input
+ * - input[number]: Delay configuration
+ * - Character counter: Right-aligned below textarea
+ * - Focus states with primary outline
+ * 
+ * Preview:
+ * - Live message bubble display
+ * - WhatsApp-style bubble design
+ * - Left border with primary color
+ * - Updates as user types
+ * 
+ * @extends design-system.css
+ * @used-by WelcomeMessageSettings.jsx
+ * @responsive Mobile-first with 768px breakpoint
+ */
+
+.welcome-message-page {
+  min-height: 100vh;
+  background-color: #FAFBFC;
+}
+
+.welcome-message-container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.welcome-message-header {
+  margin-bottom: 32px;
+}
+
+.welcome-message-header h1 {
+  font-size: 28px;
+  font-weight: 700;
+  color: #0F172A;
+  margin-bottom: 8px;
+}
+
+.welcome-message-header p {
+  color: #64748B;
+  font-size: 14px;
+}
+
+.settings-card {
+  background: #FFFFFF;
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.1);
+}
+
+.settings-section {
+  margin-bottom: 32px;
+}
+
+.settings-section:last-child {
+  margin-bottom: 0;
+}
+
+.settings-section h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #0F172A;
+  margin-bottom: 24px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #E2E8F0;
+}
+
+.welcome-msg__form-group {
+  margin-bottom: 24px;
+}
+
+.welcome-msg__form-group label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  color: #0F172A;
+  margin-bottom: 8px;
+}
+
+.form-group-inline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: #FAFBFC;
+  border-radius: 8px;
+}
+
+.form-group-inline label {
+  margin: 0;
+  flex: 1;
+}
+
+.form-help {
+  font-size: 12px;
+  color: #64748B;
+  margin-top: 4px;
+}
+
+.toggle-switch {
+  position: relative;
+  width: 48px;
+  height: 24px;
+}
+
+.toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #E2E8F0;
+  transition: 200ms ease-in-out;
+  border-radius: 9999px;
+}
+
+.toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 200ms ease-in-out;
+  border-radius: 50%;
+}
+
+input:checked + .toggle-slider {
+  background-color: #5e69ee;
+}
+
+input:checked + .toggle-slider:before {
+  transform: translateX(24px);
+}
+
+textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  resize: vertical;
+  min-height: 120px;
+  transition: 150ms ease-in-out;
+  background: #FFFFFF;
+  color: #0F172A;
+}
+
+textarea:focus {
+  outline: none;
+  border-color: #5e69ee;
+  box-shadow: 0 0 0 3px rgba(94, 105, 238, 0.1);
+}
+
+input[type="number"] {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: 150ms ease-in-out;
+  background: #FFFFFF;
+  color: #0F172A;
+}
+
+input[type="number"]:focus {
+  outline: none;
+  border-color: #5e69ee;
+  box-shadow: 0 0 0 3px rgba(94, 105, 238, 0.1);
+}
+
+.char-count {
+  text-align: right;
+  font-size: 12px;
+  color: #64748B;
+  margin-top: 4px;
+}
+
+.settings-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 32px;
+  padding-top: 32px;
+  border-top: 1px solid #E2E8F0;
+}
+
+/* Removed duplicate button styles - now using shared Button component styles from src/components/Button.css */
+
+.preview-section {
+  background: #FAFBFC;
+  border-radius: 12px;
+  padding: 24px;
+  margin-top: 24px;
+}
+
+.preview-section h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #64748B;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.preview-message {
+  background: #FFFFFF;
+  border-radius: 8px;
+  padding: 16px;
+  border-left: 3px solid #5e69ee;
+  font-size: 14px;
+  color: #0F172A;
+  line-height: 1.5;
+}
+
+.loading {
+  text-align: center;
+  padding: var(--spacing-xxl);
+  color: #64748B;
+}
+
+@media (max-width: 768px) {
+  .welcome-message-container {
+    padding: 16px;
+  }
+  
+  .settings-card {
+    padding: 24px;
+  }
+  
+  .settings-actions {
+    flex-direction: column;
+  }
+}

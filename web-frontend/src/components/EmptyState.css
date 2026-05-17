@@ -1,0 +1,89 @@
+/**
+ * Shared Empty State Component
+ * Single source of truth for all empty states across the app
+ * Prevents conflicts from duplicate .empty-state definitions
+ */
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 24px;
+  text-align: center;
+  gap: 12px;
+  min-height: 300px;
+}
+
+.empty-state__icon {
+  font-size: 24px;
+  color: #94A3B8;
+  margin-bottom: 8px;
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #FAFBFC;
+  border-radius: 9999px;
+}
+
+.empty-state__title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #0F172A;
+  margin: 0 0 4px 0;
+}
+
+.empty-state__text {
+  font-size: 14px;
+  color: #64748B;
+  margin: 0 0 24px 0;
+  max-width: 400px;
+  line-height: 1.5;
+}
+
+.empty-state__action {
+  margin-top: 12px;
+}
+
+/* Variants */
+.empty-state--compact {
+  padding: 32px 16px;
+  min-height: 200px;
+}
+
+.empty-state--compact .empty-state__icon {
+  width: 60px;
+  height: 60px;
+  font-size: 20px;
+}
+
+.empty-state--large {
+  padding: 96px 24px;
+  min-height: 500px;
+}
+
+.empty-state--large .empty-state__icon {
+  width: 100px;
+  height: 100px;
+  font-size: 28px;
+}
+
+/* Content variations */
+.empty-state__content {
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+@media (max-width: 768px) {
+  .empty-state {
+    padding: 32px 16px;
+  }
+
+  .empty-state__icon {
+    width: 60px;
+    height: 60px;
+    font-size: 20px;
+  }
+}

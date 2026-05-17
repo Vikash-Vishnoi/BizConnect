@@ -1,0 +1,183 @@
+/**
+ * 404 Not Found Page Styles
+ * 
+ * User-friendly error page styling for invalid route navigation.
+ * Centered layout with helpful navigation options and quick links.
+ * Part of graceful error handling UX strategy.
+ * 
+ * Features:
+ * - Large gradient 404 number display
+ * - Clear error message and description
+ * - Multiple action buttons (Home, Back, Search)
+ * - Quick links to common pages
+ * - Smooth fade-in animation on load
+ * - Responsive mobile layout
+ * - Accessible focus states
+ * 
+ * Design Elements:
+ * - Gradient text for 404 number
+ * - Button group with flexbox wrapping
+ * - Bordered quick links section
+ * - Hover states on all interactive elements
+ * 
+ * Layout:
+ * - Centered container with max-width
+ * - Vertical stacking on mobile
+ * - Consistent spacing with design tokens
+ * 
+ * @animation fadeInUp - Smooth entrance effect
+ * @used-by NotFound.jsx
+ * @extends Button.css - Uses shared button styles
+ */
+
+/* ==========================================
+ * 404 NOT FOUND PAGE
+ * ========================================== */
+
+.not-found-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 80px);
+  padding: 40px;
+  background: #FAFBFC;
+}
+
+.not-found-content {
+  max-width: 600px;
+  text-align: center;
+  animation: fadeInUp 0.6s ease-out;
+}
+
+/* 404 Number */
+.not-found-number {
+  font-size: 120px;
+  font-weight: 800;
+  background: var(--gradient-purple);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1;
+  margin-bottom: 24px;
+  letter-spacing: -0.5px;
+}
+
+/* Title */
+.not-found-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #0F172A;
+  margin-bottom: 16px;
+}
+
+/* Description */
+.not-found-description {
+  font-size: 16px;
+  color: #64748B;
+  line-height: 1.75;
+  margin-bottom: 40px;
+}
+
+/* Action Buttons */
+.not-found-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-bottom: 40px;
+}
+
+.not-found-actions button {
+  min-width: 140px;
+}
+
+/* Helpful Links */
+.not-found-links {
+  margin-top: 40px;
+  padding-top: 40px;
+  border-top: 1px solid #E2E8F0;
+}
+
+.not-found-links h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #64748B;
+  margin-bottom: 16px;
+}
+
+.not-found-links ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.not-found-links li {
+  margin: 0;
+}
+
+.not-found-links a {
+  color: #5e69ee;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: all 150ms ease-in-out;
+  display: inline-block;
+}
+
+.not-found-links a:hover {
+  background: #e2e8f0;
+  color: #4a52d9;
+}
+
+.not-found-links a:focus-visible {
+  outline: 2px solid #5e69ee;
+  outline-offset: 2px;
+}
+
+/* Animation */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .not-found-number {
+    font-size: 80px;
+  }
+
+  .not-found-title {
+    font-size: 20px;
+  }
+
+  .not-found-description {
+    font-size: 14px;
+  }
+
+  .not-found-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .not-found-actions button {
+    width: 100%;
+    min-width: auto;
+  }
+
+  .not-found-links ul {
+    flex-direction: column;
+    align-items: center;
+  }
+}

@@ -1,0 +1,496 @@
+/**
+ * Team Members Management Page Styles
+ * 
+ * Full-screen layout for team member management with role assignments.
+ * Includes stats cards, member list, invitations, and FAB.
+ * Follows design patterns from Templates page for consistency.
+ * 
+ * Features:
+ * - Full-width layout (no max-width constraint)
+ * - Role-based access control
+ * - Member stats dashboard
+ * - Invitation management
+ * - Floating Action Button (FAB) for quick invite
+ * - Empty states and error handling
+ * - Responsive grid layouts
+ * - Hover effects and smooth transitions
+ * 
+ * Design Patterns:
+ * - Consistent: Uses design system variables throughout
+ * - Modular: Stat cards, member rows are reusable components
+ * 
+ * @used-by TeamMembers.jsx
+ */
+
+/* Team Members Page - Full Screen Layout */
+.team-page.page-container {
+  /* Extends base .page-container */
+  background: #FAFBFC;
+}
+
+.team-page__content {
+  /* Content wrapper - no max-width constraint for full screen */
+  padding: 24px 32px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Header - Matching Templates page */
+.team-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.team-header-text {
+  flex: 1;
+  min-width: 250px;
+}
+
+.team-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.team-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0F172A;
+  margin: 0 0 4px 0;
+}
+
+.team-subtitle {
+  font-size: 11px;
+  color: #64748B;
+  margin: 0;
+}
+
+/* Stats Grid - Uses shared Stats.css */
+/* Override for 5 cards in one line (matching Templates page) */
+.team-page .stats-grid {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+/* Responsive override for Team page stats grid */
+@media (max-width: 1200px) {
+  .team-page .stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .team-page .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.team-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.1);
+}
+
+.team-panel__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.team-panel__actions {
+  display: flex;
+  align-items: center;
+}
+
+.team-tabs {
+  display: inline-flex;
+  gap: 6px;
+  padding: 4px;
+  background: #FAFBFC;
+  border: 1px solid #E2E8F0;
+  border-radius: 9999px;
+}
+
+.tab-btn {
+  border: none;
+  background: transparent;
+  padding: 10px 16px;
+  border-radius: 9999px;
+  color: #64748B;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 200ms ease-in-out;
+}
+
+.tab-btn.active {
+  background: #FFFFFF;
+  color: #5e69ee;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.team-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.legend-pill {
+  padding: 6px 12px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  background: #F1F5F9;
+  color: #64748B;
+}
+
+.legend-pill.super_admin { background: #E0F2FE; color: #2563eb; }
+.legend-pill.business_admin { background: #D1FAE5; color: #047857; }
+.legend-pill.manager { background: #FEF3C7; color: #d97706; }
+.legend-pill.normal_user { background: #FAFBFC; color: #64748B; }
+
+.members-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.member-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 24px;
+  border-radius: 16px;
+  border: 1px solid #F1F5F9;
+  background: #FFFFFF;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+}
+
+.member-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 9999px;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  color: #5e69ee;
+  background: linear-gradient(145deg, rgba(94, 105, 238, 0.12), rgba(57, 175, 234, 0.12));
+}
+
+.invite-avatar {
+  background: #FEF3C7;
+  color: #d97706;
+}
+
+.member-info {
+  min-width: 0;
+}
+
+.member-name {
+  font-weight: 600;
+  color: #0F172A;
+  margin-bottom: 4px;
+}
+
+.member-email {
+  color: #64748B;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.member-role select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding: 8px 36px 8px 16px;
+  border-radius: 12px;
+  border: 1px solid #E2E8F0;
+  background-color: #FFFFFF;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 16px;
+  font-weight: 500;
+  font-size: 12px;
+  color: #0F172A;
+  cursor: pointer;
+  min-width: 160px;
+  transition: all 0.2s ease;
+}
+
+.member-role select:hover {
+  border-color: #5e69ee;
+  background-color: #f8f9fa;
+}
+
+.member-role select:focus {
+  outline: none;
+  border-color: #5e69ee;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.role-badge.super_admin { background-color: #E0F2FE; color: #2563eb; }
+.role-badge.business_admin { background-color: #D1FAE5; color: #047857; }
+.role-badge.manager { background-color: #FEF3C7; color: #d97706; }
+.role-badge.normal_user { background-color: #FAFBFC; color: #64748B; }
+
+.member-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+.action-btn {
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 8px 16px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 80px;
+  height: 36px;
+  white-space: nowrap;
+}
+
+.action-btn:hover {
+  transform: translateY(-1px);
+}
+
+.action-btn.resend {
+  color: #5e69ee;
+  background-color: #7d86f2;
+  border: 1px solid #7d86f2;
+}
+
+.action-btn.resend:hover {
+  background-color: #5e69ee;
+  color: white;
+  border-color: #5e69ee;
+  box-shadow: 0 2px 4px rgba(99, 102, 241, 0.2);
+}
+
+.action-btn.delete {
+  color: #EF4444;
+  background-color: transparent;
+  border: 1px solid #FEE2E2;
+}
+
+.action-btn.delete:hover {
+  background-color: #EF4444;
+  color: white;
+  border-color: #EF4444;
+  box-shadow: 0 2px 4px rgba(220, 38, 38, 0.2);
+}
+
+.status-badge {
+  padding: 6px 10px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.status-badge.pending {
+  background-color: #FEF3C7;
+  color: #d97706;
+}
+
+.status-badge.expired {
+  background-color: #FEE2E2;
+  color: #dc2626;
+}
+
+.loading-state,
+.empty-state {
+  text-align: center;
+  padding: 32px;
+  border: 1px dashed #E2E8F0;
+  border-radius: 16px;
+  background: #FAFBFC;
+  color: #64748B;
+}
+
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #CBD5E1;
+  border-top-color: #5e69ee;
+  border-radius: 9999px;
+  margin: 0 auto 8px;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.team-members__modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1050;
+  padding: 24px;
+}
+
+.team-members__modal-content {
+  width: 100%;
+  max-width: 540px;
+  background: #FFFFFF;
+  border-radius: 24px;
+  padding: 32px;
+  box-shadow: 0 8px 16px 0 rgba(0, 0, 0, 0.25);
+  border: 1px solid #E2E8F0;
+}
+
+.team-members__modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.team-members__modal-header h2 {
+  margin: 0;
+  font-size: 18px;
+  color: #0F172A;
+}
+
+.team-members__close-btn {
+  background: transparent;
+  border: none;
+  font-size: 22px;
+  color: #64748B;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.team-members__form-group {
+  margin-bottom: 12px;
+}
+
+.team-members__form-group label {
+  display: block;
+  margin-bottom: 6px;
+  color: #0F172A;
+  font-weight: 600;
+}
+
+.team-members__form-group input,
+.team-members__form-group select {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  font-size: 14px;
+  background: #f8f9fa;
+  transition: border-color 200ms ease-in-out, box-shadow 200ms ease-in-out;
+}
+
+.team-members__form-group input:focus,
+.team-members__form-group select:focus {
+  outline: none;
+  border-color: #5e69ee;
+  box-shadow: 0 0 0 3px rgba(94, 105, 238, 0.1);
+}
+
+.help-text {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: #64748B;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+@media (max-width: 960px) {
+  .team-page__content {
+    padding: 24px;
+  }
+
+  .team-panel__header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .member-row {
+    grid-template-columns: 1fr;
+    align-items: flex-start;
+  }
+
+  .member-actions {
+    justify-content: flex-start;
+  }
+
+  .team-fab {
+    bottom: 1.5rem;
+    right: 1.5rem;
+    width: 48px;
+    height: 48px;
+    font-size: 20px;
+  }
+}
+
+@media (max-width: 640px) {
+  /* Single column layout for very small screens */
+}
+
+/* Floating Action Button (FAB) - Same style as Templates page */
+.team-fab {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #5e69ee;
+  color: white;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  transition: all 0.3s ease;
+  z-index: 999;
+}
+
+.team-fab:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+}
+
+.team-fab:active {
+  transform: scale(0.95);
+}
+
+@media (max-width: 768px) {
+  .team-fab {
+    bottom: 1.5rem;
+    right: 1.5rem;
+    width: 48px;
+    height: 48px;
+    font-size: 20px;
+  }
+}

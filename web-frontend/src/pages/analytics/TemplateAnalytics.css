@@ -1,0 +1,347 @@
+/**
+ * 📊 Template Analytics Page Styles
+ * 
+ * Styles for template performance analytics and insights dashboard.
+ * Displays usage statistics, delivery rates, read rates, and performance indicators.
+ * 
+ * @module pages/analytics/TemplateAnalytics.css
+ * 
+ * @description
+ * This stylesheet defines the layout and appearance for the Template Analytics page,
+ * which tracks message template performance metrics including usage counts, success rates,
+ * read rates, and performance insights. Features data table, summary cards, and insights section.
+ * 
+ * @layout
+ * - Container: Wide layout with max-width 1600px
+ * - Controls Section: Horizontal flex layout for date range and sort filters
+ * - Summary Cards: 4-column grid (auto-fit, min 250px) for statistics
+ * - Analytics Table: Full-width responsive table with horizontal scroll
+ * - Insights Grid: 3-column grid (auto-fit, min 280px) for top performers
+ * 
+ * @components
+ * - Analytics Header: Page title and description
+ * - Controls Section: Date range and sorting dropdowns with labels
+ * - Summary Cards: Template count, total sent/delivered/read statistics
+ * - Analytics Table: Detailed template performance with rate bars
+ * - Rate Bars: Visual progress bars for success/read rates
+ * - Performance Badges: Color-coded indicators (excellent/good/needs work)
+ * - Category Badges: Template category labels
+ * - Insights Cards: Top performers with gradient border highlights
+ * 
+ * @responsive
+ * - Mobile (≤768px): Single column for all grids, full table scroll
+ * - Tablet (≤1200px): Table horizontal scroll enabled
+ * - Desktop (>1200px): Multi-column grids, full table visibility
+ * 
+ * @features
+ * - Color-coded rate bars (green/orange/red based on performance)
+ * - Performance indicators with emoji and color coding
+ * - Hover effects on cards and table rows
+ * - Gradient icon backgrounds for visual appeal
+ * - Category badges with light background
+ * - Sortable table columns
+ * - Scrollable table wrapper for mobile
+ * - Gradient backgrounds for insight cards
+ * - Empty state integration (shared component)
+ */
+
+.template-analytics-container {
+  padding: 20px;
+  max-width: 1600px;
+  margin: 80px auto 0;
+  min-height: calc(100vh - 80px);
+  background: #f8f9fa;
+}
+
+.template-analytics-header {
+  margin-bottom: 30px;
+}
+
+.template-analytics-header h1 {
+  font-size: 28px;
+  margin-bottom: 8px;
+  color: #0F172A;
+}
+
+.template-analytics-header p {
+  color: #64748B;
+  font-size: 16px;
+  margin: 0;
+}
+
+/* Loading and empty states use shared components */
+
+.controls-section {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+  background: #FFFFFF;
+  padding: 20px;
+  border-radius: 12px;
+  box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.1);
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+}
+
+.control-group label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0F172A;
+}
+
+.control-group select {
+  padding: 10px 12px;
+  border: 2px solid #E2E8F0;
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: 300ms ease-in-out;
+}
+
+.control-group select:focus {
+  outline: none;
+  border-color: #5e69ee;
+}
+
+/* Empty state uses shared component */
+
+.summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+  margin-bottom: 32px;
+}
+
+.summary-card {
+  background: #FFFFFF;
+  padding: 24px;
+  border-radius: 12px;
+  box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  transition: 300ms ease-in-out;
+}
+
+.summary-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.15);
+}
+
+.summary-icon {
+  font-size: 40px;
+  width: 60px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--gradient-purple);
+  border-radius: 12px;
+  box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.15);
+}
+
+.summary-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #0F172A;
+}
+
+.summary-label {
+  font-size: 14px;
+  color: #64748B;
+  margin-top: 4px;
+}
+
+.templates-table-wrapper {
+  background: #FFFFFF;
+  border-radius: 12px;
+  box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.1);
+  overflow-x: auto;
+  margin-bottom: 32px;
+}
+
+.templates-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 1200px;
+}
+
+.templates-table thead {
+  background: #f8f9fa;
+}
+
+.templates-table th {
+  padding: 16px;
+  text-align: left;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0F172A;
+  border-bottom: 2px solid #E2E8F0;
+  white-space: nowrap;
+}
+
+.templates-table tbody tr {
+  transition: 200ms ease-in-out;
+}
+
+.templates-table tbody tr:hover {
+  background: #f8f9fa;
+}
+
+.templates-table td {
+  padding: 16px;
+  font-size: 14px;
+  color: #64748B;
+  border-bottom: 1px solid #E2E8F0;
+}
+
+.template-name-cell {
+  min-width: 200px;
+}
+
+.template-name {
+  font-weight: 600;
+  color: #0F172A;
+  margin-bottom: 4px;
+}
+
+.template-status {
+  font-size: 12px;
+  color: #94A3B8;
+}
+
+.category-badge {
+  padding: 4px 10px;
+  background: #f0f4ff;
+  color: #5e69ee;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.usage-cell strong {
+  color: #5e69ee;
+  font-size: 16px;
+}
+
+.rate-cell {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rate-bar {
+  height: 8px;
+  border-radius: 4px;
+  transition: 300ms ease-in-out;
+  min-width: 60px;
+}
+
+.rate-text {
+  font-weight: 600;
+  color: #0F172A;
+  min-width: 40px;
+}
+
+.performance-indicator span {
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.perf-excellent {
+  background: #D1FAE5;
+  color: #059669;
+}
+
+.perf-good {
+  background: #FEF3C7;
+  color: #F59E0B;
+}
+
+.perf-needs-improvement {
+  background: #FEE2E2;
+  color: #EF4444;
+}
+
+.insights-section {
+  background: #FFFFFF;
+  padding: 32px;
+  border-radius: 12px;
+  box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.1);
+}
+
+.insights-section h3 {
+  font-size: 24px;
+  color: #0F172A;
+  margin-bottom: 24px;
+}
+
+.insights-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.insight-card {
+  padding: 24px;
+  background: var(--gradient-surface);
+  border-radius: 12px;
+  border-left: 4px solid #5e69ee;
+}
+
+.insight-card h4 {
+  font-size: 16px;
+  color: #0F172A;
+  margin-bottom: 8px;
+}
+
+.insight-card p {
+  color: #64748B;
+  font-size: 14px;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.insight-value {
+  display: inline-block;
+  padding: 4px 10px;
+  background: var(--gradient-purple);
+  color: #FFFFFF;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+@media (max-width: 1200px) {
+  .templates-table-wrapper {
+    overflow-x: scroll;
+  }
+}
+
+@media (max-width: 768px) {
+  .template-analytics-container {
+    padding: 16px;
+  }
+
+  .controls-section {
+    flex-direction: column;
+  }
+
+  .summary-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .insights-grid {
+    grid-template-columns: 1fr;
+  }
+}
