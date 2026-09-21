@@ -76,6 +76,7 @@ import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import AccessDenied from '../pages/core/AccessDenied';
+import LoadingSkeleton from './LoadingSkeleton';
 
 /**
  * Protected Route Component with Role-Based Access Control
@@ -89,16 +90,8 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
 
   if (loading) {
     return (
-      <div style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center', 
-        height: '100vh',
-        background: 'linear-gradient(135deg, #5e69ee 0%, #39AFEA 100%)',
-        color: 'white',
-        fontSize: '20px'
-      }}>
-        Loading...
+      <div style={{ padding: '2rem' }}>
+        <LoadingSkeleton type="dashboard" />
       </div>
     );
   }

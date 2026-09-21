@@ -29,6 +29,7 @@
 import React, { useState, useEffect } from 'react';
 import { getCapabilities } from '../services/business/capabilityService';
 import Card from './Card';
+import LoadingSkeleton from './LoadingSkeleton';
 import './BusinessCapabilityWidget.css';
 
 /**
@@ -78,7 +79,7 @@ const BusinessCapabilityWidget = () => {
     return (
       <Card className="business-capability-widget loading">
         <h3>Business Capabilities</h3>
-        <p>Loading...</p>
+        <LoadingSkeleton type="card" />
       </Card>
     );
   }

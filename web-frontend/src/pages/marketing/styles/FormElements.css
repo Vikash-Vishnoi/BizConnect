@@ -1,0 +1,55 @@
+/* ==========================================
+ * FORM ELEMENTS
+ ========================================== */
+/* ==========================================
+ * FORM ELEMENTS
+ * ========================================== */
+
+.create-campaign__form-group {
+  margin-bottom: 16px;
+}
+
+.create-campaign__form-group label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0F172A;
+  margin-bottom: 8px;
+}
+
+.form-help {
+  font-size: 11px;
+  color: #64748B;
+  margin-top: 0;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.campaign-textarea {
+  width: 100%;
+  padding: 8px 16px;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  font-size: 12px;
+  font-family: var(--font-family);
+  color: #0F172A;
+  background: #FFFFFF;
+  resize: vertical;
+  transition: all 200ms ease-in-out;
+  line-height: 1.5;
+  box-sizing: border-box;
+}
+
+.campaign-textarea:hover {
+  border-color: #CBD5E1;
+}
+
+.campaign-textarea:focus {
+  outline: none;
+  border-color: #5e69ee;
+  box-shadow: 0 0 0 3px rgba(94, 105, 238, 0.1);
+}
+
+.campaign-textarea::placeholder {
+  color: #94A3B8;
+}

@@ -89,42 +89,16 @@ const Login = () => {
     setLoading(true);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData),
-      });
+      const result = await login(formData);
 
-      const response_data = await response.json();
-
-      if (response.ok) {
-        console.log('Login successful, full response:', response_data);
-        
-        // Access nested data property (backend returns {success, data: {user, token, setupStatus}})
-        const { user, token, setupStatus, refreshToken } = response_data.data || {};
-        
-        console.log('Setup status from backend:', setupStatus);
-        console.log('User data:', user);
-        
-        // Manually set auth state since we already have the token and user
-        const userWithRole = {
-          ...user,
-          role: user.userType || user.role || 'normal_user'
-        };
-        localStorage.setItem(STORAGE_KEYS.TOKEN, token);
-        localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(userWithRole));
-        
+      if (result.success) {
         // Use setup status from backend to determine redirect
-        const redirectPath = setupStatus?.redirectTo || '/dashboard';
-        console.log('Login - Redirecting to:', redirectPath, 'Setup status:', setupStatus);
-        console.log('Using window.location.href for full page reload...');
+        const redirectPath = result.setupStatus?.redirectTo || '/dashboard';
         
-        // Force page reload to ensure auth context updates
-        window.location.href = redirectPath;
+        // Auto-redirect
+        navigate(redirectPath);
       } else {
-        setError(response_data.error || response_data.message || 'Login failed');
+        setError(result.error || 'Login failed');
       }
     } catch (err) {
       setError('Unable to connect to server. Please try again.');

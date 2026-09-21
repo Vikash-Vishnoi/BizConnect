@@ -97,7 +97,8 @@ const shouldSkipBusinessContext = (path) => {
     '/api/auth/verify',
     '/api/auth/me',  // Allow user profile fetch without business context
     '/api/business',  // Allow business list/create without business context (user selects after login)
-    '/api/webhooks/whatsapp' // Webhook endpoints handle business context internally
+    '/api/webhooks/whatsapp', // Webhook endpoints handle business context internally
+    '/api/public' // Allow public endpoints without business context
   ];
   
   return skipPaths.some(skipPath => path.startsWith(skipPath));

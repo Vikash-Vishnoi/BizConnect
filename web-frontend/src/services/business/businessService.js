@@ -121,9 +121,41 @@ const BUSINESS_ENDPOINTS = {
 };
 
 /**
+ * @typedef {Object} WhatsAppConfig
+ * @property {string} phoneNumberId
+ * @property {string} [phoneNumber]
+ * @property {string} wabaId
+ * @property {string} verifyToken
+ * @property {boolean} webhookConfigured
+ * @property {string} apiVersion
+ */
+
+/**
+ * @typedef {Object} BusinessProfile
+ * @property {string} [profilePicture]
+ * @property {string} [displayName]
+ * @property {string} [about]
+ * @property {string} [email]
+ * @property {string} [website]
+ * @property {string} [vertical]
+ */
+
+/**
+ * @typedef {Object} Business
+ * @property {string} _id
+ * @property {string} name
+ * @property {string} [displayName]
+ * @property {string} [description]
+ * @property {WhatsAppConfig} whatsappConfig
+ * @property {number} setupStep
+ * @property {BusinessProfile} profile
+ * @property {string} status
+ */
+
+/**
  * Get all businesses user has access to
  * @param {Object} params - Query parameters
- * @returns {Promise<Array>} List of businesses
+ * @returns {Promise<{success: boolean, data: Business[]}>} List of businesses
  */
 export const getBusinesses = async (params) => {
   return await get(BUSINESS_ENDPOINTS.BASE, params);

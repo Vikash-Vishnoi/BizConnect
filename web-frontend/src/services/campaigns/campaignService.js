@@ -63,6 +63,49 @@ const CAMPAIGN_ENDPOINTS = {
 };
 
 /**
+ * @typedef {Object} CampaignSchedule
+ * @property {'immediate' | 'scheduled'} type
+ * @property {string} [scheduledFor]
+ * @property {string} [scheduledTime]
+ */
+
+/**
+ * @typedef {Object} CampaignStats
+ * @property {number} total
+ * @property {number} sent
+ * @property {number} delivered
+ * @property {number} read
+ * @property {number} failed
+ * @property {number} pending
+ */
+
+/**
+ * @typedef {Object} CampaignSettings
+ * @property {number} sendRate
+ * @property {boolean} retryFailed
+ * @property {number} maxRetries
+ */
+
+/**
+ * @typedef {Object} Campaign
+ * @property {string} _id
+ * @property {string} name
+ * @property {string} [description]
+ * @property {'draft' | 'scheduled' | 'active' | 'paused' | 'completed' | 'failed'} status
+ * @property {string} templateId
+ * @property {string} [startedAt]
+ * @property {string} [completedAt]
+ * @property {CampaignSchedule} schedule
+ * @property {boolean} usesSeparateRecipients
+ * @property {CampaignStats} stats
+ * @property {CampaignSettings} settings
+ * @property {string} userId
+ * @property {string} businessId
+ * @property {string} createdAt
+ * @property {string} updatedAt
+ */
+
+/**
  * Get campaigns list with optional filtering and pagination
  * @param {Object} params - Query parameters (page, limit, status, search)
  * @returns {Promise<Object>} Campaigns list with pagination metadata

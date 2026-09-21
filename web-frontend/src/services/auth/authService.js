@@ -70,21 +70,44 @@ const AUTH_ENDPOINTS = {
 };
 
 /**
- * Register new user account
- * @param {Object} data - Registration data (email, password, name, phone)
- * @returns {Promise<Object>} Created user and token ({ user, token })
+ * @typedef {Object} RegisterData
+ * @property {string} name
+ * @property {string} email
+ * @property {string} password
+ * @property {string} [businessName]
  */
 
+/**
+ * @typedef {Object} LoginCredentials
+ * @property {string} email
+ * @property {string} password
+ */
+
+/**
+ * @typedef {Object} AuthResponse
+ * @property {boolean} success
+ * @property {Object} data
+ * @property {Object} data.user
+ * @property {string} data.token
+ * @property {string} [data.refreshToken]
+ * @property {Object} [data.setupStatus]
+ * @property {string} message
+ */
+
+/**
+ * Register new user account
+ * @param {RegisterData} data - Registration data
+ * @returns {Promise<AuthResponse>} Created user and token
+ */
 export const register = async (data) => {
   return await post(AUTH_ENDPOINTS.REGISTER, data);
 };
 
 /**
  * Login user with credentials
- * @param {Object} credentials - Login credentials (email, password)
- * @returns {Promise<Object>} User data and JWT token ({ user, token })
+ * @param {LoginCredentials} credentials - Login credentials
+ * @returns {Promise<AuthResponse>} User data and JWT token
  */
-
 export const login = async (credentials) => {
   return await post(AUTH_ENDPOINTS.LOGIN, credentials);
 };

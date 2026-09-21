@@ -62,7 +62,7 @@ const PASSWORD_REQUIREMENTS = {
 const Register = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { login } = useAuth();
+  const { register } = useAuth();
   const appName = process.env.REACT_APP_NAME || 'WhatsApp Marketing Platform';
   const [formData, setFormData] = useState({
     name: '',
@@ -121,10 +121,6 @@ const Register = () => {
     setError('');
   };
 
-  /**
-   * Handles form submission, validates password, and registers new user
-   * @param {Event} e - Form submit event
-   */
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -143,27 +139,14 @@ const Register = () => {
     setLoading(true);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/register`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: formData.name,
-          email: formData.email,
-          password: formData.password,
-          businessName: formData.businessName
-        }),
+      const result = await register({
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
+        businessName: formData.businessName
       });
 
-      const data = await response.json();
-
-      if (response.ok) {
-        // Manually set auth state since we already have the token and user
-        const userWithRole = { ...data.user, role: data.user.role || 'user' };
-        localStorage.setItem(STORAGE_KEYS.TOKEN, data.token);
-        localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(userWithRole));
-        
+      if (result.success) {
         // Store business name for setup page
         if (formData.businessName) {
           localStorage.setItem(STORAGE_KEYS.REGISTERED_BUSINESS_NAME, formData.businessName);
@@ -173,10 +156,10 @@ const Register = () => {
         localStorage.removeItem(STORAGE_KEYS.BUSINESS_SETUP_PART1);
         localStorage.removeItem(STORAGE_KEYS.BUSINESS_SETUP_FORM_DATA);
         
-        // Force auth context to reinitialize and redirect to business setup
-        window.location.href = '/business/create';
+        const redirectPath = result.setupStatus?.redirectTo || '/business/create';
+        navigate(redirectPath);
       } else {
-        setError(data.error || data.message || 'Registration failed');
+        setError(result.error || 'Registration failed');
       }
     } catch (err) {
       setError('Unable to connect to server. Please try again.');

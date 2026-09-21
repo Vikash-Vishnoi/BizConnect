@@ -1,0 +1,59 @@
+/* ==========================================
+ * CAMPAIGN SUMMARY
+ ========================================== */
+/* ==========================================
+ * CAMPAIGN SUMMARY
+ * ========================================== */
+
+.campaign-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.summary-section {
+  padding: 16px;
+  background: #FFFFFF;
+  border-radius: 8px;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.summary-section h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0F172A;
+  margin: 0 0 8px 0;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #5e69ee;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.summary-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 8px 0;
+  gap: 8px;
+}
+
+.summary-item:not(:last-child) {
+  border-bottom: 1px solid #F1F5F9;
+}
+
+.summary-label {
+  font-size: 11px;
+  color: #64748B;
+  font-weight: 500;
+  min-width: 100px;
+}
+
+.summary-value {
+  font-size: 11px;
+  color: #0F172A;
+  font-weight: 600;
+  text-align: right;
+  flex: 1;
+}

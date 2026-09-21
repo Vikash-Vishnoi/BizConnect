@@ -1,0 +1,128 @@
+/* ==========================================
+ * TEMPLATES SECTION
+ ========================================== */
+/* ==========================================
+ * TEMPLATES SECTION
+ * ========================================== */
+
+.no-templates {
+  text-align: center;
+  padding: 40px 16px;
+  background: #F4F4FB;
+  border-radius: 8px;
+  border: 1px dashed #E2E8F0;
+}
+
+.no-templates p {
+  font-size: 12px;
+  color: #64748B;
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+.templates-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.template-card {
+  padding: 16px;
+  background: #FFFFFF;
+  border: 2px solid #E2E8F0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 200ms ease-in-out;
+  position: relative;
+  overflow: hidden;
+}
+
+.template-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background: #5e69ee;
+  opacity: 0;
+  transition: opacity 200ms ease-in-out;
+}
+
+.template-card:hover {
+  border-color: #5e69ee;
+  transform: translateY(-1px);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.template-card:hover::before {
+  opacity: 1;
+}
+
+.template-card.selected {
+  border-color: #5e69ee;
+  background: #F4F4FB;
+  box-shadow: 0 0 0 3px rgba(94, 105, 238, 0.1);
+}
+
+.template-card.selected::before {
+  opacity: 1;
+}
+
+.template-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.template-card-header h4 {
+  font-size: 12px;
+  font-weight: 600;
+  color: #0F172A;
+  flex: 1;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.template-category {
+  font-size: 11px;
+  padding: var(--spacing-2xs) 8px;
+  background: #FAFBFC;
+  border-radius: 4px;
+  color: #64748B;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.template-preview {
+  font-size: 12px;
+  color: #64748B;
+  line-height: 1.6;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin: 0;
+}
+
+.selected-indicator {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: #059669;
+  color: #FFFFFF;
+  padding: var(--spacing-2xs) 8px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+  box-shadow: 0 3px 6px 0 rgba(0, 0, 0, 0.12);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2xs);
+}

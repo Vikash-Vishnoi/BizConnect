@@ -20,16 +20,14 @@
  * - Context providers (AuthProvider, ToastProvider)
  * - Loading skeleton fallback during lazy loading
  * - 404 catch-all route
- * - SEO pages for marketing and public content
- * 
+ *
  * @routing
  * Route organization:
- * - Public routes: /login, /register, /terms, /privacy, /contact
+ * - Public routes: /login, /register, /terms, /privacy
  * - Auth-required routes: Dashboard, Inbox, Templates, Analytics, Campaigns
  * - Admin routes: Team, Roles, Audit Log, Alerts, Phone Health, Quality Rating
  * - Manager routes: Templates, Campaigns, Analytics, Flows
  * - User routes: Inbox, Contacts, Saved Replies, Profile
- * - SEO routes: Features, Pricing, Integrations, Industries, Locations
  * 
  * @contexts
  * - AuthProvider: User authentication and authorization state
@@ -106,16 +104,7 @@ const ErrorsAndAlerts = lazy(() => import('./pages/admin/ErrorsAndAlerts'));
 const PhoneHealth = lazy(() => import('./pages/admin/PhoneHealth'));
 const RateLimitDashboard = lazy(() => import('./pages/admin/RateLimitDashboard'));
 
-// SEO Pages - Keep eager loading for named exports (batched files)
-// These are grouped efficiently and don't need individual lazy loading
-import * as SEO from './pages/public/seo/SEOPages';
-import * as SEOBatch2 from './pages/public/seo/SEOPagesBatch2';
-import * as SEOIntegrations from './pages/public/seo/SEOIntegrations';
-import * as SEOIndustries from './pages/public/seo/SEOIndustries';
-import * as SEOLocations from './pages/public/seo/SEOLocations';
-import * as SEOCompliance from './pages/public/seo/SEOCompliance';
-import * as SEOBlog from './pages/public/seo/SEOBlog';
-import { ContactUpdated } from './pages/public/seo/ContactUpdated';
+
 
 // Loading fallback component
 const PageLoader = () => (
@@ -394,71 +383,8 @@ function App() {
           } 
         />
         
-        {/* SEO Landing Pages - Batch 1 */}
-        
-        {/* Help & Support - Protected Route */}
-        <Route 
-          path="/help" 
-          element={
-            <ProtectedRoute allowedRoles={[ROLES.SUPER_ADMIN, ROLES.BUSINESS_ADMIN, ROLES.MANAGER, ROLES.USER]}>
-              <ContactUpdated />
-            </ProtectedRoute>
-          } 
-        />
-        
-        {/* SEO Landing Pages - Batch 1 */}
-        <Route path="/features" element={<SEO.Features />} />
-        <Route path="/pricing" element={<SEO.Pricing />} />
-        <Route path="/contact" element={<ContactUpdated />} />
-        <Route path="/whatsapp-business-api" element={<SEO.WhatsAppBusinessAPI />} />
-        <Route path="/whatsapp-campaigns" element={<SEO.WhatsAppCampaigns />} />
-        <Route path="/whatsapp-inbox" element={<SEO.WhatsAppInbox />} />
-        <Route path="/whatsapp-templates" element={<SEO.WhatsAppTemplates />} />
-        <Route path="/whatsapp-analytics" element={<SEO.WhatsAppAnalytics />} />
-        <Route path="/whatsapp-api-for-ecommerce" element={<SEO.WhatsAppAPIForEcommerce />} />
-        <Route path="/bulk-whatsapp-messages" element={<SEOBatch2.BulkWhatsAppMessages />} />
-        <Route path="/whatsapp-chatbot" element={<SEO.WhatsAppChatbot />} />
-        <Route path="/whatsapp-api-integration" element={<SEO.WhatsAppAPIIntegration />} />
-        <Route path="/whatsapp-api-provider-india" element={<SEO.WhatsAppAPIProviderIndia />} />
-        
-        {/* SEO Landing Pages - Batch 2: Feature Details */}
-        <Route path="/whatsapp-broadcasts" element={<SEOBatch2.WhatsAppBroadcasts />} />
-        <Route path="/whatsapp-notifications" element={<SEOBatch2.WhatsAppNotifications />} />
-        <Route path="/whatsapp-order-updates" element={<SEOBatch2.WhatsAppOrderUpdates />} />
-        <Route path="/whatsapp-customer-support" element={<SEOBatch2.WhatsAppCustomerSupport />} />
-        
-        {/* SEO Landing Pages - Batch 2: Integrations */}
-        <Route path="/whatsapp-crm-integration" element={<SEOIntegrations.WhatsAppCRMIntegration />} />
-        <Route path="/whatsapp-woocommerce" element={<SEOIntegrations.WhatsAppWooCommerce />} />
-        <Route path="/whatsapp-shopify" element={<SEOIntegrations.WhatsAppShopify />} />
-        <Route path="/whatsapp-api-documentation" element={<SEOIntegrations.WhatsAppAPIDocumentation />} />
-        
-        {/* SEO Landing Pages - Batch 3: Industries */}
-        <Route path="/whatsapp-api-for-healthcare" element={<SEOIndustries.WhatsAppAPIForHealthcare />} />
-        <Route path="/whatsapp-api-for-education" element={<SEOIndustries.WhatsAppAPIForEducation />} />
-        <Route path="/whatsapp-api-for-banking" element={<SEOIndustries.WhatsAppAPIForBanking />} />
-        <Route path="/whatsapp-api-for-logistics" element={<SEOIndustries.WhatsAppAPIForLogistics />} />
-        <Route path="/case-studies" element={<SEOIndustries.CaseStudies />} />
-        
-        {/* SEO Landing Pages - Batch 3: Locations */}
-        <Route path="/whatsapp-api-service-delhi" element={<SEOLocations.WhatsAppAPIServiceDelhi />} />
-        <Route path="/whatsapp-api-mumbai" element={<SEOLocations.WhatsAppAPIMumbai />} />
-        <Route path="/whatsapp-api-bangalore" element={<SEOLocations.WhatsAppAPIBangalore />} />
-        <Route path="/whatsapp-api-hyderabad" element={<SEOLocations.WhatsAppAPIHyderabad />} />
-        <Route path="/whatsapp-api-chennai" element={<SEOLocations.WhatsAppAPIChennai />} />
-        
-        {/* SEO Landing Pages - Batch 4: Compliance & Support */}
-        <Route path="/whatsapp-api-compliance" element={<SEOCompliance.WhatsAppAPICompliance />} />
-        <Route path="/whatsapp-data-security" element={<SEOCompliance.WhatsAppDataSecurity />} />
-        <Route path="/whatsapp-template-approval" element={<SEOCompliance.WhatsAppTemplateApproval />} />
-        <Route path="/help-center" element={<SEOCompliance.HelpCenter />} />
-        <Route path="/webhook-setup" element={<SEOCompliance.WebhookSetup />} />
-        
-        {/* SEO Blog Pages - Batch 5 */}
-        <Route path="/blog" element={<SEOBlog.BlogHome />} />
-        <Route path="/blog/whatsapp-business-api-guide" element={<SEOBlog.WhatsAppAPIGuide />} />
-        <Route path="/blog/whatsapp-pricing-comparison" element={<SEOBlog.WhatsAppPricingComparison />} />
-        <Route path="/blog/whatsapp-vs-sms" element={<SEOBlog.WhatsAppVsSMS />} />
+        {/* Help & Support */}
+        <Route path="/help" element={<Navigate to="/dashboard" replace />} />
         
               {/* Default Route */}
               <Route path="/" element={<Navigate to="/dashboard" />} />

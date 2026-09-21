@@ -108,11 +108,33 @@ apiClient.interceptors.response.use(
     if (status === HTTP_STATUS.UNAUTHORIZED && !originalRequest._retry) {
       originalRequest._retry = true;
 
-      // Clear auth data and redirect to login
-      localStorage.removeItem(STORAGE_KEYS.TOKEN);
-      localStorage.removeItem(STORAGE_KEYS.USER);
-      window.location.href = '/login';
-      return Promise.reject(error);
+      try {
+        const refreshToken = localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
+        if (!refreshToken) {
+          throw new Error('No refresh token available');
+        }
+
+        // Try to refresh the token
+        const response = await axios.post(`${API_BASE_URL}/auth/refresh`, { refreshToken });
+        const { token, refreshToken: newRefreshToken } = response.data.data;
+
+        // Save new tokens
+        localStorage.setItem(STORAGE_KEYS.TOKEN, token);
+        localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, newRefreshToken);
+
+        // Update the original request with the new token
+        originalRequest.headers.Authorization = `Bearer ${token}`;
+        
+        // Retry the original request
+        return apiClient(originalRequest);
+      } catch (refreshError) {
+        // Clear auth data and redirect to login if refresh fails
+        localStorage.removeItem(STORAGE_KEYS.TOKEN);
+        localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
+        localStorage.removeItem(STORAGE_KEYS.USER);
+        window.location.href = '/login';
+        return Promise.reject(error);
+      }
     }
 
     // Handle 403 Forbidden - Insufficient permissions

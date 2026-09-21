@@ -156,15 +156,16 @@ export const AuthProvider = ({ children }) => {
     }
   }, []);
 
-  /**
-   * Authenticate user with credentials
-   * @param {Object} credentials - Login credentials (email, password)
-   * @returns {Promise<Object>} Result object ({ success, user?, error? })
-   */
   const login = useCallback(async (credentials) => {
     try {
       const response = await authService.login(credentials);
-      const { user: userData, token } = response;
+      // The backend wraps the response in a 'data' object inside the main response
+      const payload = response.data || response;
+      const { user: userData, token, setupStatus } = payload;
+
+      if (!userData || !token) {
+        throw new Error('Invalid response from server');
+      }
 
       // Set default role if not provided (userType comes from backend)
       const userWithRole = {
@@ -176,18 +177,62 @@ export const AuthProvider = ({ children }) => {
       setUser(userWithRole);
       localStorage.setItem('user', JSON.stringify(userWithRole));
       localStorage.setItem('token', token);
+      if (payload.refreshToken) {
+        localStorage.setItem('refreshToken', payload.refreshToken);
+      }
 
       // Load business context if available
       if (userWithRole.businessId) {
         await loadBusinessContext(userWithRole.businessId);
       }
 
-      return { success: true, user: userWithRole };
+      return { success: true, user: userWithRole, setupStatus };
     } catch (error) {
       console.error('Login failed:', error);
       return { 
         success: false, 
-        error: error.response?.data?.message || 'Login failed. Please try again.' 
+        error: error.response?.data?.message || error.message || 'Login failed. Please try again.' 
+      };
+    }
+  }, [loadBusinessContext]);
+
+  /**
+   * Register a new user
+   * @param {Object} userData - User registration data
+   * @returns {Promise<Object>} Result object ({ success, user?, error? })
+   */
+  const register = useCallback(async (userData) => {
+    try {
+      const response = await authService.register(userData);
+      const payload = response.data || response;
+      const { user: newUserData, token, setupStatus } = payload;
+
+      if (!newUserData || !token) {
+        throw new Error('Invalid response from server');
+      }
+
+      const userWithRole = {
+        ...newUserData,
+        role: newUserData.userType || newUserData.role || 'normal_user'
+      };
+
+      setUser(userWithRole);
+      localStorage.setItem('user', JSON.stringify(userWithRole));
+      localStorage.setItem('token', token);
+      if (payload.refreshToken) {
+        localStorage.setItem('refreshToken', payload.refreshToken);
+      }
+
+      if (userWithRole.businessId) {
+        await loadBusinessContext(userWithRole.businessId);
+      }
+
+      return { success: true, user: userWithRole, setupStatus };
+    } catch (error) {
+      console.error('Registration failed:', error);
+      return { 
+        success: false, 
+        error: error.response?.data?.message || error.message || 'Registration failed. Please try again.' 
       };
     }
   }, [loadBusinessContext]);
@@ -257,14 +302,15 @@ export const AuthProvider = ({ children }) => {
     }
   }, [user, loadBusinessContext]);
 
-  /**
-   * Refresh user profile from server
-   * @returns {Promise<Object>} Result object ({ success, user?, error? })
-   */
   const refreshUserProfile = useCallback(async () => {
     try {
       const response = await authService.getMe();
-      const userData = response.user;
+      const payload = response.data || response;
+      const userData = payload.user;
+      
+      if (!userData) {
+        throw new Error('Invalid response from server');
+      }
       
       const userWithRole = {
         ...userData,
@@ -278,7 +324,7 @@ export const AuthProvider = ({ children }) => {
         await loadBusinessContext(userWithRole.businessId);
       }
 
-      return { success: true, user: userWithRole };
+      return { success: true, user: userWithRole, setupStatus: payload.setupStatus };
     } catch (error) {
       console.error('Profile refresh failed:', error);
       return { success: false, error: error.message };
@@ -305,9 +351,9 @@ export const AuthProvider = ({ children }) => {
     return hasPermission(user.role, permission);
   }, [user]);
 
-  const isSuperAdmin = user?.role === ROLES.SUPER_ADMIN;
-  const isBusinessAdmin = user?.role === ROLES.BUSINESS_ADMIN || isSuperAdmin;
-  const isManager = user?.role === ROLES.MANAGER || isBusinessAdmin;
+  const isSuperAdmin = user?.role === ROLES.SUPER_ADMIN || user?.userType === 'super_admin';
+  const isBusinessAdmin = user?.role === ROLES.BUSINESS_ADMIN || user?.userType === 'business_admin' || isSuperAdmin;
+  const isManager = user?.role === ROLES.MANAGER || user?.userType === 'manager' || isBusinessAdmin;
   const isAuthenticated = !!user;
 
   const value = useMemo(() => ({
@@ -315,6 +361,7 @@ export const AuthProvider = ({ children }) => {
     loading,
     currentBusiness,
     login,
+    register,
     logout,
     updateUser,
     switchBusiness,
@@ -322,7 +369,9 @@ export const AuthProvider = ({ children }) => {
     canAccess,
     hasPermissionTo,
     isAuthenticated,
-    role: user?.role || null,
+    role: user?.role || user?.userType || null,
+    capabilities: user?.capabilities || {},
+    roleInfo: user?.roleInfo || {},
     isSuperAdmin,
     isBusinessAdmin,
     isManager,
@@ -331,6 +380,7 @@ export const AuthProvider = ({ children }) => {
     loading,
     currentBusiness,
     login,
+    register,
     logout,
     updateUser,
     switchBusiness,

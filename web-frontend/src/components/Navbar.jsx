@@ -64,7 +64,7 @@ const DEFAULT_ROLE_NAME = 'User';
 const Navbar = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout, hasPermissionTo } = useAuth();
+  const { user, logout, hasPermissionTo, currentBusiness } = useAuth();
   
   // Position dropdowns on hover with delay to prevent rapid closing
   useEffect(() => {
@@ -189,7 +189,7 @@ const Navbar = () => {
       <div className="navbar-container">
         <div className="navbar-brand" onClick={() => navigate('/dashboard')}>
           <span className="navbar-logo"><MdWhatsapp /></span>
-          <span className="navbar-title">WhatsApp Marketing</span>
+          <span className="navbar-title">{currentBusiness ? currentBusiness.name : 'WhatsApp Marketing'}</span>
         </div>
 
         <div className="navbar-menu">

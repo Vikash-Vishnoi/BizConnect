@@ -1,0 +1,322 @@
+/* ==========================================
+ * RECIPIENTS SECTION
+ ========================================== */
+/* ==========================================
+ * RECIPIENTS SECTION
+ * ========================================== */
+
+.template-variables-info {
+  background: #E0F2FE;
+  border: 1px solid #39AFEA;
+  border-radius: 8px;
+  padding: 8px 16px;
+  margin-bottom: 16px;
+}
+
+.template-variables-info h4 {
+  font-size: 12px;
+  font-weight: 600;
+  color: #2563eb;
+  margin: 0 0 8px 0;
+}
+
+.template-variables-info p {
+  font-size: 11px;
+  color: #0F172A;
+  margin: 0 0 var(--spacing-2xs) 0;
+  line-height: 1.5;
+}
+
+.template-variables-info p:last-child {
+  margin-bottom: 0;
+}
+
+.template-variables-info strong {
+  color: #2563eb;
+  font-weight: 600;
+}
+
+.recipients-input-section {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding: 16px;
+  background: #F4F4FB;
+  border-radius: 8px;
+  border: 1px solid #E2E8F0;
+}
+
+.input-method {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.input-method h3 {
+  font-size: 12px;
+  font-weight: 600;
+  color: #0F172A;
+  margin: 0 0 var(--spacing-2xs) 0;
+}
+
+.input-divider {
+  font-size: 11px;
+  font-weight: 600;
+  color: #94A3B8;
+  align-self: center;
+  padding: 8px;
+  background: #FFFFFF;
+  border-radius: 9999px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.file-input {
+  display: none;
+}
+
+.file-input-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  border: 2px dashed #E2E8F0;
+  border-radius: 8px;
+  background: #FFFFFF;
+  cursor: pointer;
+  transition: all 200ms ease-in-out;
+  font-size: 11px;
+  color: #64748B;
+  text-align: center;
+  min-height: 90px;
+}
+
+.file-input-label:hover {
+  border-color: #5e69ee;
+  background: #F4F4FB;
+  color: #5e69ee;
+}
+
+.file-input-label span {
+  font-size: 22px;
+}
+
+/* Recipients List */
+.recipients-list {
+  margin-top: 16px;
+}
+
+.recipients-list h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0F172A;
+  margin: 0 0 8px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.no-recipients {
+  text-align: center;
+  padding: 48px;
+  color: #64748B;
+  font-size: 12px;
+  background: #F4F4FB;
+  border-radius: 8px;
+  border: 1px dashed #E2E8F0;
+}
+
+.recipients-table {
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #FFFFFF;
+  display: flex;
+  flex-direction: column;
+  max-height: 500px;
+}
+
+.recipients-header {
+  display: grid;
+  grid-template-columns: 2fr 2fr 1fr;
+  gap: 16px;
+  padding: 8px 16px;
+  background: #FAFBFC;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748B;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid #E2E8F0;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.recipients-scroll-container {
+  overflow-y: auto;
+  max-height: 400px;
+  flex: 1;
+}
+
+.recipients-header span:last-child {
+  text-align: center;
+}
+
+.recipient-row {
+  display: grid;
+  grid-template-columns: 2fr 2fr 1fr;
+  gap: 16px;
+  padding: 8px 16px;
+  border-top: 1px solid #F1F5F9;
+  font-size: 12px;
+  color: #0F172A;
+  align-items: center;
+  transition: background 150ms ease-in-out;
+}
+
+.recipient-row span:last-child {
+  display: flex;
+  justify-content: center;
+}
+
+.recipient-row:hover {
+  background: #FAFBFC;
+}
+
+.recipient-row:first-child {
+  border-top: none;
+}
+
+.remove-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: transparent;
+  border: 1.5px solid #EF4444;
+  color: #EF4444;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 4px 16px;
+  border-radius: 8px;
+  transition: all 200ms ease-in-out;
+  font-family: var(--font-family);
+  white-space: nowrap;
+  min-width: 90px;
+}
+
+.remove-btn:hover {
+  background: #EF4444;
+  color: #FFFFFF;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 6px 0 rgba(0, 0, 0, 0.12);
+}
+
+.remove-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.remove-btn svg {
+  font-size: 14px;
+}
+
+.more-recipients {
+  padding: 8px;
+  text-align: center;
+  font-size: 12px;
+  color: #64748B;
+  border-top: 1px solid #E2E8F0;
+  background: #FAFBFC;
+  font-weight: 500;
+}
+
+/* ==========================================
+ * RECIPIENTS DETAILS TABLE (Campaign Detail Page)
+ ========================================== */
+/* ==========================================
+ * RECIPIENTS DETAILS TABLE (Campaign Detail Page)
+ * ========================================== */
+
+.recipients-table-container {
+  width: 100%;
+  overflow-x: auto;
+  margin-top: 16px;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  background: #FFFFFF;
+}
+
+.recipients-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.recipients-table thead {
+  background: #FAFBFC;
+  border-bottom: 2px solid #E2E8F0;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.recipients-table thead th {
+  padding: 12px 80px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748B;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.recipients-table tbody tr {
+  border-bottom: 1px solid #F1F5F9;
+  transition: background 150ms ease-in-out;
+}
+
+.recipients-table tbody tr:hover {
+  background: #F4F4FB;
+}
+
+.recipients-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.recipients-table tbody td {
+  padding: 12px 80px;
+  color: #0F172A;
+  vertical-align: middle;
+  text-align: center;
+}
+
+.recipients-table tbody td:first-child {
+  font-weight: 500;
+}
+
+/* Responsive table */
+@media (max-width: 768px) {
+  .recipients-table-container {
+    max-height: 400px;
+    overflow-y: auto;
+  }
+  
+  .recipients-table {
+    font-size: 11px;
+  }
+  
+  .recipients-table thead th,
+  .recipients-table tbody td {
+    padding: 8px 12px;
+  }
+}

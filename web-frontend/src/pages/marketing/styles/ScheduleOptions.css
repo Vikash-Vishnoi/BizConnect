@@ -1,0 +1,161 @@
+/* ==========================================
+ * SCHEDULE OPTIONS
+ ========================================== */
+/* ==========================================
+ * SCHEDULE OPTIONS
+ * ========================================== */
+
+.schedule-options {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.schedule-option {
+  padding: 16px 24px;
+  background: #FFFFFF;
+  border: 2px solid #E2E8F0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 200ms ease-in-out;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  min-height: auto;
+}
+
+.schedule-option::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 3px;
+  background: #5e69ee;
+  opacity: 0;
+  transition: opacity 200ms ease-in-out;
+}
+
+.schedule-option:hover {
+  border-color: #5e69ee;
+  transform: translateY(-1px);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.schedule-option:hover::before {
+  opacity: 1;
+}
+
+.schedule-option.selected {
+  border-color: #5e69ee;
+  background: #F4F4FB;
+  box-shadow: 0 0 0 3px rgba(94, 105, 238, 0.1);
+}
+
+.schedule-option.selected::before {
+  opacity: 1;
+}
+
+.option-icon {
+  font-size: 40px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #0F172A;
+}
+
+.schedule-option h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0F172A;
+  margin: 0 0 8px 0;
+}
+
+.schedule-option p {
+  font-size: 11px;
+  color: #64748B;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.schedule-datetime {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  padding: 16px;
+  background: #F4F4FB;
+  border-radius: 8px;
+  border: 1px solid #E2E8F0;
+  margin-bottom: 16px;
+}
+
+.schedule-date-input,
+.schedule-time-input {
+  width: 100%;
+  padding: 8px 16px;
+  border: 2px solid #E2E8F0;
+  border-radius: 8px;
+  font-size: 12px;
+  font-family: var(--font-family);
+  color: #0F172A;
+  background: #FFFFFF;
+  transition: all 200ms ease-in-out;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.schedule-date-input:hover,
+.schedule-time-input:hover {
+  border-color: #CBD5E1;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+}
+
+.schedule-date-input:focus,
+.schedule-time-input:focus {
+  outline: none;
+  border-color: #5e69ee;
+  box-shadow: 0 0 0 3px rgba(94, 105, 238, 0.1);
+}
+
+/* Style the calendar and clock icons */
+.schedule-date-input::-webkit-calendar-picker-indicator,
+.schedule-time-input::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  padding: var(--spacing-2xs);
+  border-radius: 4px;
+  transition: background 200ms ease-in-out;
+}
+
+.schedule-date-input::-webkit-calendar-picker-indicator:hover,
+.schedule-time-input::-webkit-calendar-picker-indicator:hover {
+  background: #FAFBFC;
+}
+
+/* Timezone Info */
+.timezone-info {
+  margin-top: 8px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #e0f2fe 0%, #dbeafe 100%);
+  border: 1px solid #0ea5e9;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.timezone-info p {
+  margin: 0;
+  font-size: 11px;
+  color: #0F172A;
+  line-height: 1.6;
+}
+
+.timezone-info p:first-child {
+  font-size: 12px;
+  margin-bottom: var(--spacing-2xs);
+}
+
+.timezone-info strong {
+  color: #0369a1;
+  font-weight: 600;
+}

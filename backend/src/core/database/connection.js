@@ -61,7 +61,7 @@ const connectDB = async (retryCount = 0) => {
     }
     
     // Max retries exceeded - critical failure
-    logger.fatal('Could not establish MongoDB connection after maximum retries', {
+    logger.error('Could not establish MongoDB connection after maximum retries', {
       totalAttempts: maxRetries + 1,
       error: error.message
     });

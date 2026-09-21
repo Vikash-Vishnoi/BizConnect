@@ -1,0 +1,161 @@
+/* ==========================================
+ * HEADER
+ ========================================== */
+/* ==========================================
+ * HEADER
+ * ========================================== */
+
+.page-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 40px;
+  text-align: center;
+}
+
+.back-button {
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  color: #0F172A;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 8px 16px;
+  margin-bottom: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 200ms ease-in-out;
+  align-self: flex-start;
+  border-radius: 4px;
+}
+
+.back-button:hover {
+  background: #5e69ee;
+  color: #FFFFFF;
+  border-color: #5e69ee;
+  transform: translateX(-2px);
+}
+
+.page-header-text {
+  text-align: center;
+}
+
+.page-title {
+  margin-bottom: 4px;
+}
+
+.page-subtitle {
+  line-height: 1.5;
+}
+
+/* ==========================================
+ * PROGRESS STEPS
+ ========================================== */
+/* ==========================================
+ * PROGRESS STEPS
+ * ========================================== */
+
+.campaign-steps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  padding: 16px 0;
+  background: #FFFFFF;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  border: 1px solid #E2E8F0;
+}
+
+.campaign-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+
+.step-circle {
+  width: 36px;
+  height: 36px;
+  border-radius: 9999px;
+  background: #FAFBFC;
+  border: 2px solid #E2E8F0;
+  color: #94A3B8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 200ms ease-in-out;
+}
+
+.campaign-step.active .step-circle {
+  background: #5e69ee;
+  border-color: #5e69ee;
+  color: #FFFFFF;
+  box-shadow: 0 3px 6px 0 rgba(0, 0, 0, 0.12);
+}
+
+.campaign-step.completed .step-circle {
+  background: #059669;
+  border-color: #059669;
+  color: #FFFFFF;
+}
+
+.step-label {
+  font-size: 11px;
+  color: #94A3B8;
+  font-weight: 500;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.campaign-step.active .step-label {
+  color: #0F172A;
+  font-weight: 600;
+}
+
+.campaign-step.completed .step-label {
+  color: #64748B;
+}
+
+.step-line {
+  width: 60px;
+  height: 2px;
+  background: #E2E8F0;
+  margin: 0 16px;
+  margin-bottom: 24px;
+  transition: all 200ms ease-in-out;
+}
+
+.campaign-step.completed + .step-line {
+  background: #059669;
+}
+
+/* ==========================================
+ * STEP CONTENT CARD
+ ========================================== */
+/* ==========================================
+ * STEP CONTENT CARD
+ * ========================================== */
+
+.campaign-step-content {
+  margin-bottom: 16px;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  border: 1px solid #E2E8F0;
+}
+
+.step-container {
+  padding: 24px;
+}
+
+.step-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0F172A;
+  margin: 0 0 16px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #E2E8F0;
+}

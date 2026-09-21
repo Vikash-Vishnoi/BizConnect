@@ -164,6 +164,7 @@ const webhookRoutes = require('./modules/webhooks/routes');
 const mediaRoutes = require('./modules/media/routes');
 const configRoutes = require('./modules/config/routes');
 const automationRoutes = require('./modules/automations/routes');
+const publicRoutes = require('./modules/public/routes/publicRoutes');
 
 // Mount routes
 app.use(`${config.apiPrefix}/auth`, authRoutes);
@@ -180,6 +181,7 @@ app.use(`${config.apiPrefix}/webhooks`, webhookRoutes);
 app.use(`${config.apiPrefix}/media`, mediaRoutes);
 app.use(`${config.apiPrefix}/config`, configRoutes);
 app.use(`${config.apiPrefix}/automations`, automationRoutes);
+app.use(`${config.apiPrefix}/public`, publicRoutes);
 
 // ==================================================
 // ERROR HANDLING

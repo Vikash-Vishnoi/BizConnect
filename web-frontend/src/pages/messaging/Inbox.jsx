@@ -66,23 +66,11 @@ import { IoCheckmarkDone, IoCheckmark, IoTime, IoSend } from 'react-icons/io5';
 import { BsThreeDotsVertical, BsEmojiSmile, BsMic, BsPaperclip } from 'react-icons/bs';
 import { BiMessageDetail } from 'react-icons/bi';
 import { HiOutlineDocumentText } from 'react-icons/hi';
-import { AiOutlinePhone, AiOutlineVideoCamera } from 'react-icons/ai';
 import '../../components/Stats.css';
 import './Inbox.css';
-
-/**
- * Configuration constants for inbox behavior
- */
-const INBOX_CONFIG = {
-  MESSAGES_PER_PAGE: 20,
-  MESSAGE_HISTORY_PER_PAGE: 9,
-  MESSAGE_POLL_INTERVAL: 5000, // 5 seconds
-  MAX_FILE_SIZE: 16 * 1024 * 1024, // 16MB WhatsApp limit
-  SCROLL_THRESHOLD: 300, // px from top
-  SCROLL_BUTTON_THRESHOLD: 100, // px from bottom
-  SEARCH_DEBOUNCE: 500, // ms
-  TYPING_INDICATOR_TIMEOUT: 3000 // ms
-};
+import { INBOX_CONFIG } from './Inbox/constants';
+import { formatTime, getDateSeparator, shouldShowDateSeparator, getInitials, truncateMessage } from './Inbox/utils';
+import InboxSidebar from './Inbox/components/InboxSidebar';
 
 const Inbox = () => {
   const navigate = useNavigate();
@@ -320,58 +308,7 @@ const Inbox = () => {
     return () => container.removeEventListener('scroll', handleScroll);
   }, [hasMoreMessages, loadingMoreMessages, selectedConversation, loadMoreMessages, messagePage]);
 
-  const formatTime = (dateString) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    const now = new Date();
-    const diff = now - date;
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
 
-    if (minutes < 1) return 'Just now';
-    if (minutes < 60) return `${minutes}m ago`;
-    if (hours < 24) return `${hours}h ago`;
-    if (days < 7) return `${days}d ago`;
-    return date.toLocaleDateString();
-  };
-
-  const getDateSeparator = (date) => {
-    const msgDate = new Date(date);
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
-
-    if (msgDate.toDateString() === today.toDateString()) {
-      return 'Today';
-    } else if (msgDate.toDateString() === yesterday.toDateString()) {
-      return 'Yesterday';
-    } else {
-      return msgDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    }
-  };
-
-  const shouldShowDateSeparator = (currentMsg, previousMsg) => {
-    if (!previousMsg) return true;
-    const currentDate = new Date(currentMsg.timestamp).toDateString();
-    const previousDate = new Date(previousMsg.timestamp).toDateString();
-    return currentDate !== previousDate;
-  };
-
-  const getInitials = (name) => {
-    if (!name) return '?';
-    return name
-      .split(' ')
-      .map(word => word[0])
-      .join('')
-      .toUpperCase()
-      .substring(0, 2);
-  };
-
-  const truncateMessage = (text, maxLength = 50) => {
-    if (!text) return '';
-    return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
-  };
 
   // Helper to render message status indicators (DRY principle)
   const renderMessageStatus = (message) => {
@@ -637,142 +574,20 @@ const Inbox = () => {
       
       <div className="page-content">
         <div className="inbox-content">
-          {/* Sidebar with conversation list */}
-          <div className="inbox-sidebar">
-            {/* Search and Filters */}
-            <div className="inbox-controls">
-              <div style={{ position: 'relative' }}>
-                <MdSearch style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-secondary)', fontSize: '20px' }} />
-                <Input
-                  type="text"
-                  placeholder="Search by contact name or phone number"
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value);
-                    setPage(1);
-                  }}
-                  className="search-input"
-                  style={{ paddingLeft: '40px' }}
-                />
-              </div>
-              
-              <div className="filter-tabs">
-                <button
-                  className={`filter-tab ${filterStatus === 'all' ? 'active' : ''}`}
-                  onClick={() => {
-                    setFilterStatus('all');
-                    setPage(1);
-                  }}
-                >
-                  All
-                </button>
-                <button
-                  className={`filter-tab ${filterStatus === 'active' ? 'active' : ''}`}
-                  onClick={() => {
-                    setFilterStatus('active');
-                    setPage(1);
-                  }}
-                >
-                  Active
-                </button>
-                <button
-                  className={`filter-tab ${filterStatus === 'closed' ? 'active' : ''}`}
-                  onClick={() => {
-                    setFilterStatus('closed');
-                    setPage(1);
-                  }}
-                >
-                  Closed
-                </button>
-                <button
-                  className={`filter-tab ${filterStatus === 'blocked' ? 'active' : ''}`}
-                  onClick={() => {
-                    setFilterStatus('blocked');
-                    setPage(1);
-                  }}
-                >
-                  Blocked
-                </button>
-              </div>
-            </div>
-
-            {error && (error.includes('business') || error.includes('X-Business-ID')) ? (
-              <BusinessSetupRequired 
-                message="Please complete your business setup to start managing conversations"
-              />
-            ) : error ? (
-              <div className="error-banner">
-                <span>{error}</span>
-              </div>
-            ) : null}
-
-            {/* Conversation List */}
-            {!error && (
-              <div className="conversation-list">
-                {conversations.length === 0 ? (
-                  <div className="empty-state">
-                    <div className="empty-icon">
-                      <BiMessageDetail size={48} />
-                    </div>
-                    <h3>No conversations yet</h3>
-                    <p>Your conversations will appear here</p>
-                  </div>
-                ) : (
-                <>
-                  {conversations.map((conversation) => (
-                    <div
-                      key={conversation._id}
-                      className={`conversation-item ${conversation.unreadCount > 0 ? 'unread' : ''} ${selectedConversation?._id === conversation._id ? 'selected' : ''}`}
-                      onClick={() => handleConversationClick(conversation)}
-                    >
-                      <div className="conversation-avatar">
-                        {conversation.contact?.profilePicture ? (
-                          <img src={conversation.contact.profilePicture} alt={conversation.contact.name} />
-                        ) : (
-                          <div className="avatar-placeholder">
-                            {getInitials(conversation.contact?.name || conversation.contact?.phoneNumber)}
-                          </div>
-                        )}
-                      </div>
-                      
-                      <div className="conversation-details">
-                        <div className="conversation-header">
-                          <h4 className="conversation-name">
-                            {conversation.contact?.name || conversation.contact?.phoneNumber}
-                          </h4>
-                          <span className="conversation-time">
-                            {formatTime(conversation.lastMessageAt)}
-                          </span>
-                        </div>
-                        
-                        <div className="conversation-preview">
-                          <p className="last-message">
-                            {conversation.lastMessage?.text 
-                              ? truncateMessage(conversation.lastMessage.text) 
-                              : 'No messages'}
-                          </p>
-                          {conversation.unreadCount > 0 && (
-                            <span className="unread-badge">{conversation.unreadCount}</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  
-                  {hasMore && (
-                    <button 
-                      className="load-more-btn"
-                      onClick={handleLoadMore}
-                      disabled={loading}
-                    >
-                      {loading ? 'Loading...' : 'Load More'}
-                    </button>
-                  )}
-                </>
-              )}
-              </div>
-            )}
-          </div>
+          <InboxSidebar
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            setPage={setPage}
+            filterStatus={filterStatus}
+            setFilterStatus={setFilterStatus}
+            error={error}
+            conversations={conversations}
+            selectedConversation={selectedConversation}
+            handleConversationClick={handleConversationClick}
+            hasMore={hasMore}
+            handleLoadMore={handleLoadMore}
+            loading={loading}
+          />
 
           {/* Main content area */}
           <div className="inbox-main">

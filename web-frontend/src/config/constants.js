@@ -53,6 +53,7 @@ export const HTTP_STATUS = {
 // Local Storage Keys
 export const STORAGE_KEYS = {
   TOKEN: 'token',
+  REFRESH_TOKEN: 'refreshToken',
   USER: 'user',
   THEME: 'theme',
   LANGUAGE: 'language',
