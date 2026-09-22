@@ -5,7 +5,7 @@
  */
 
 const logger = require('../../../common/helpers/logger');
-const { Campaign, CampaignRecipient, Template, Contact, Conversation } = require('../../../core/database/models');
+const { Campaign, CampaignRecipient, Template, Contact, Conversation, Business } = require('../../../core/database/models');
 const whatsappService = require('../../../integrations/whatsapp/whatsappService');
 const { ERROR_CODES } = require('../../../common/constants');
 
@@ -331,6 +331,26 @@ class CampaignService {
    */
   async processBatch(campaign, recipients) {
     const template = campaign.templateId;
+
+    // Fetch business credentials once per batch
+    const WhatsAppService = require('../../../integrations/whatsapp/whatsappService');
+    const business = await Business.findById(campaign.businessId);
+    if (!business) {
+      logger.error('Business not found for campaign', {
+        businessId: campaign.businessId.toString(),
+        campaignId: campaign._id.toString()
+      });
+      return;
+    }
+    const credentials = await business.getWhatsAppCredentials();
+    if (!credentials) {
+      logger.error('No WhatsApp credentials found for campaign business', {
+        businessId: campaign.businessId.toString(),
+        campaignId: campaign._id.toString()
+      });
+      return;
+    }
+    const whatsapp = new WhatsAppService(credentials);
     
     for (const recipient of recipients) {
       try {
@@ -359,14 +379,20 @@ class CampaignService {
           });
         }
         
-        // Send via WhatsApp
-        const result = await whatsappService.sendTemplate({
-          businessId: campaign.businessId,
-          to: recipient.phoneNumber,
-          templateName: template.name,
-          templateLanguage: template.language,
-          components: this.buildTemplateComponents(template, recipient.variables)
-        });
+        // Send via WhatsApp using correct method signature
+        const result = await whatsapp.sendTemplateMessage(
+          recipient.phoneNumber,
+          template.name,
+          template.language,
+          this.buildTemplateComponents(template, recipient.variables)
+        );
+
+        // sendTemplateMessage returns { success, error } instead of throwing on API failure
+        if (!result.success) {
+          const err = new Error(result.error || 'WhatsApp API rejected the template message');
+          err.code = result.code || ERROR_CODES.EXTERNAL_SERVICE_ERROR;
+          throw err;
+        }
         
         // Update recipient status
         await CampaignRecipient.updateOne(
@@ -382,21 +408,30 @@ class CampaignService {
         await Conversation.updateOne(
           {
             businessId: campaign.businessId,
-            phoneNumber: recipient.phoneNumber
+            'contact.phoneNumber': recipient.phoneNumber
           },
           {
             $push: {
               messages: {
                 campaignId: campaign._id,
-                recipientId: recipient._id,
-                type: 'campaign',
+                type: 'template',
                 direction: 'out',
                 status: RECIPIENT_STATUS_SENT,
                 timestamp: new Date(),
-                whatsappMessageId: result.messageId
+                whatsappMessageId: result.messageId,
+                content: {
+                  template: {
+                    name: template.name,
+                    language: template.language
+                  }
+                }
               }
             },
-            $set: { lastMessageAt: new Date() }
+            $set: { lastMessageAt: new Date() },
+            $setOnInsert: {
+              'contact.phoneNumber': recipient.phoneNumber,
+              'contact.name': recipient.name || ''
+            }
           },
           { upsert: true }
         );

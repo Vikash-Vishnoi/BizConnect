@@ -85,6 +85,7 @@ import Button from '../../components/Button';
 import Input from '../../components/Input';
 import Card from '../../components/Card';
 import Navbar from '../../components/Navbar';
+import LoadingSkeleton from '../../components/LoadingSkeleton';
 import { MdCheckCircle, MdContentCopy, MdArrowBack } from 'react-icons/md';
 import './BusinessSetupPart3.css';
 

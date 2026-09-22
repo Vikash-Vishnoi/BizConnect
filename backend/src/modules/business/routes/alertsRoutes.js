@@ -1,6 +1,6 @@
 /**
  * Consolidated Alerts Routes
- * Reduced from 10 routes to 6 routes
+ * Handles system alerts querying, statistics, acknowledgment, resolution, and updates.
  * @module routes/alerts/alertsRoutes
  */
  
@@ -13,8 +13,7 @@ const logger = require('../../../common/helpers/logger');
 const ROUTE_CONTEXT = 'ALERTS_ROUTES';
 const ALERTS_DEFAULT_LIMIT = 50;
 const ALERTS_MAX_LIMIT = 100;
-const VALID_ALERT_STATUSES = ['UNRESOLVED', 'ACKNOWLEDGED', 'IN_PROGRESS', 'RESOLVED', 'DISMISSED'];
-const DAYS_OF_WEEK = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+const VALID_ALERT_STATUSES = ['UNREAD', 'READ', 'UNRESOLVED', 'ACKNOWLEDGED', 'IN_PROGRESS', 'RESOLVED', 'DISMISSED', 'IGNORED'];
 const DEFAULT_PAGE = 1;
 
 // Error messages
@@ -45,8 +44,11 @@ const SUCCESS_MESSAGES = {
   TEST_CREATED: 'Test alert created successfully'
 };
 
+// ==================================================
+// SPECIFIC GET ROUTES (Must be defined BEFORE /:id)
+// ==================================================
+
 // GET / - Get all alerts with filtering
-// Consolidates: /, /unresolved, /critical
 router.get('/', async (req, res) => {
   const startTime = Date.now();
   const businessContext = {
@@ -56,16 +58,31 @@ router.get('/', async (req, res) => {
   };
 
   try {
-    const { severity, status, type, limit = ALERTS_DEFAULT_LIMIT, page = DEFAULT_PAGE } = req.query;
+    const { severity, status, type, alertType, limit = ALERTS_DEFAULT_LIMIT, page = DEFAULT_PAGE } = req.query;
 
-    const requestedLimit = parseInt(limit);
+    const requestedLimit = parseInt(limit) || ALERTS_DEFAULT_LIMIT;
     const finalLimit = Math.min(requestedLimit, ALERTS_MAX_LIMIT);
-    const pageNum = parseInt(page);
+    const pageNum = parseInt(page) || DEFAULT_PAGE;
 
     const query = { businessId: req.businessId };
-    if (severity) query.severity = severity;
-    if (status) query.status = status;
-    if (type) query.type = type;
+    
+    if (severity) {
+      query.severity = severity.toUpperCase();
+    }
+    
+    if (status) {
+      const upperStatus = status.toUpperCase();
+      if (upperStatus === 'UNRESOLVED') {
+        query.status = { $nin: ['RESOLVED', 'DISMISSED', 'IGNORED'] };
+      } else {
+        query.status = upperStatus;
+      }
+    }
+    
+    const targetType = alertType || type;
+    if (targetType) {
+      query.alertType = targetType;
+    }
 
     const alerts = await AlertLog.find(query)
       .sort({ createdAt: -1 })
@@ -81,7 +98,7 @@ router.get('/', async (req, res) => {
       count: alerts.length,
       total,
       page: pageNum,
-      pages: Math.ceil(total / finalLimit),
+      pages: Math.ceil(total / finalLimit) || 1,
       alerts
     }, SUCCESS_MESSAGES.ALERTS_RETRIEVED);
   } catch (error) {
@@ -110,7 +127,7 @@ router.get('/stats', async (req, res) => {
   };
 
   try {
-    const [total, critical, high, medium, low, unread, read, resolved] = await Promise.all([
+    const [total, critical, high, medium, low, unread, read, unresolved, resolved] = await Promise.all([
       AlertLog.countDocuments({ businessId: req.businessId }),
       AlertLog.countDocuments({ businessId: req.businessId, severity: 'CRITICAL' }),
       AlertLog.countDocuments({ businessId: req.businessId, severity: 'HIGH' }),
@@ -118,6 +135,7 @@ router.get('/stats', async (req, res) => {
       AlertLog.countDocuments({ businessId: req.businessId, severity: 'LOW' }),
       AlertLog.countDocuments({ businessId: req.businessId, status: 'UNREAD' }),
       AlertLog.countDocuments({ businessId: req.businessId, status: 'READ' }),
+      AlertLog.countDocuments({ businessId: req.businessId, status: { $nin: ['RESOLVED', 'DISMISSED', 'IGNORED'] } }),
       AlertLog.countDocuments({ businessId: req.businessId, status: 'RESOLVED' })
     ]);
 
@@ -127,8 +145,14 @@ router.get('/stats', async (req, res) => {
     res.success({
       stats: {
         total,
-        bySeverity: { critical, high, medium, low },
-        byStatus: { unread, read, resolved }
+        unresolved,
+        resolved,
+        CRITICAL: critical,
+        HIGH: high,
+        MEDIUM: medium,
+        LOW: low,
+        bySeverity: { critical, high, medium, low, CRITICAL: critical, HIGH: high, MEDIUM: medium, LOW: low },
+        byStatus: { unread, read, unresolved, resolved }
       }
     }, SUCCESS_MESSAGES.STATS_RETRIEVED);
   } catch (error) {
@@ -147,151 +171,45 @@ router.get('/stats', async (req, res) => {
   }
 });
 
-// GET /:id - Get alert by ID
-router.get('/:id', async (req, res) => {
-  const startTime = Date.now();
-  const businessContext = {
-    businessId: req.businessId?.toString(),
-    context: ROUTE_CONTEXT,
-    operation: 'GET_ALERT_BY_ID',
-    alertId: req.params.id
-  };
-
+// GET /unresolved - Get unresolved alerts
+router.get('/unresolved', async (req, res) => {
   try {
-    const alert = await AlertLog.findOne({
-      _id: req.params.id,
-      businessId: req.businessId
-    });
+    const alerts = await AlertLog.find({
+      businessId: req.businessId,
+      status: { $nin: ['RESOLVED', 'DISMISSED', 'IGNORED'] }
+    }).sort({ createdAt: -1 });
 
-    if (!alert) {
-      const processingTime = Date.now() - startTime;
-      logger.warn('Alert not found', { ...businessContext, processingTime });
-      return res.status(404).json({
-        success: false,
-        message: ERROR_MESSAGES.ALERT_NOT_FOUND
-      });
-    }
-
-    const processingTime = Date.now() - startTime;
-    logger.info('Alert retrieved by ID', { ...businessContext, processingTime });
-
-    res.success({ alert }, SUCCESS_MESSAGES.ALERT_RETRIEVED);
+    res.success({ count: alerts.length, alerts }, SUCCESS_MESSAGES.ALERTS_RETRIEVED);
   } catch (error) {
-    const processingTime = Date.now() - startTime;
-    logger.error('Error getting alert', {
-      ...businessContext,
-      error: error.message,
-      stack: error.stack,
-      processingTime
-    });
     res.status(500).json({
       success: false,
-      message: ERROR_MESSAGES.GET_ALERT,
+      message: ERROR_MESSAGES.GET_ALERTS,
       error: error.message
     });
   }
 });
 
-// PUT /:id - Update alert (consolidated: acknowledge, resolve, action, status)
-// Consolidates: PUT /:id/acknowledge, PUT /:id/resolve, PUT /:id/action, PUT /:id/status
-router.put('/:id', async (req, res) => {
-  const startTime = Date.now();
-  const businessContext = {
-    businessId: req.businessId?.toString(),
-    context: ROUTE_CONTEXT,
-    operation: 'UPDATE_ALERT',
-    alertId: req.params.id
-  };
-
+// GET /critical - Get critical alerts
+router.get('/critical', async (req, res) => {
   try {
-    const { 
-      action, 
-      status, 
-      notes, 
-      resolution 
-    } = req.body;
+    const alerts = await AlertLog.find({
+      businessId: req.businessId,
+      severity: 'CRITICAL'
+    }).sort({ createdAt: -1 });
 
-    const alert = await AlertLog.findOne({
-      _id: req.params.id,
-      businessId: req.businessId
-    });
-
-    if (!alert) {
-      const processingTime = Date.now() - startTime;
-      logger.warn('Alert not found for update', { ...businessContext, processingTime });
-      return res.status(404).json({
-        success: false,
-        message: ERROR_MESSAGES.ALERT_NOT_FOUND
-      });
-    }
-
-    let message = SUCCESS_MESSAGES.ALERT_UPDATED;
-
-    if (status) {
-      if (!VALID_ALERT_STATUSES.includes(status)) {
-        const processingTime = Date.now() - startTime;
-        logger.warn('Invalid alert status', { ...businessContext, status, processingTime });
-        return res.status(400).json({
-          success: false,
-          message: `${ERROR_MESSAGES.INVALID_STATUS}. Must be one of: ${VALID_ALERT_STATUSES.join(', ')}`
-        });
-      }
-
-      alert.status = status;
-      alert.statusUpdatedAt = new Date();
-      message = SUCCESS_MESSAGES.STATUS_UPDATED;
-
-      if (status === 'ACKNOWLEDGED') {
-        alert.acknowledgedBy = req.user._id;
-        alert.acknowledgedAt = new Date();
-        if (notes) alert.notes = notes;
-        message = SUCCESS_MESSAGES.ACKNOWLEDGED;
-      } else if (status === 'RESOLVED') {
-        alert.resolvedBy = req.user._id;
-        alert.resolvedAt = new Date();
-        if (resolution) alert.resolution = resolution;
-        message = SUCCESS_MESSAGES.RESOLVED;
-      }
-    }
-
-    if (action) {
-      if (!alert.actions) alert.actions = [];
-      alert.actions.push({
-        action,
-        actionBy: req.user._id,
-        actionAt: new Date()
-      });
-      message = SUCCESS_MESSAGES.ACTION_RECORDED;
-    }
-
-    if (notes && !status) {
-      alert.notes = notes;
-    }
-
-    await alert.save();
-
-    const processingTime = Date.now() - startTime;
-    logger.info('Alert updated', { ...businessContext, status, action: !!action, processingTime });
-
-    res.success({
-      message,
-      alert
-    }, message);
+    res.success({ count: alerts.length, alerts }, SUCCESS_MESSAGES.ALERTS_RETRIEVED);
   } catch (error) {
-    const processingTime = Date.now() - startTime;
-    logger.error('Error updating alert', {
-      ...businessContext,
-      error: error.message,
-      stack: error.stack,
-      processingTime
-    });
     res.status(500).json({
       success: false,
-      message: ERROR_MESSAGES.UPDATE_ALERT,
+      message: ERROR_MESSAGES.GET_ALERTS,
       error: error.message
     });
   }
 });
+
+// ==================================================
+// SPECIFIC PUT & POST ROUTES (Must be defined BEFORE /:id)
+// ==================================================
 
 // PUT /bulk/mark-read - Mark multiple alerts as read
 router.put('/bulk/mark-read', async (req, res) => {
@@ -321,7 +239,7 @@ router.put('/bulk/mark-read', async (req, res) => {
       },
       {
         $set: {
-          read: true,
+          status: 'READ',
           readAt: new Date()
         }
       }
@@ -369,17 +287,18 @@ router.post('/test', async (req, res) => {
       });
     }
 
-    const { severity = 'HIGH', type = 'TEST', message = 'Test alert' } = req.body;
+    const { severity = 'HIGH', type = 'ACCOUNT_WARNING', alertType, message = 'Test alert', title = 'Test Alert' } = req.body;
 
     const testAlert = new AlertLog({
+      userId: req.user?._id,
       businessId: req.businessId,
-      severity,
-      type,
+      severity: severity.toUpperCase(),
+      alertType: alertType || type || 'ACCOUNT_WARNING',
+      title,
       message,
-      status: 'UNRESOLVED',
-      metadata: {
-        source: 'manual_test',
-        createdBy: req.user._id
+      status: 'UNREAD',
+      whatsappData: {
+        event: 'manual_test'
       }
     });
 
@@ -407,5 +326,152 @@ router.post('/test', async (req, res) => {
     });
   }
 });
+
+// Helper for alert updates
+async function handleAlertUpdate(req, res, targetStatus, bodyData = {}) {
+  const startTime = Date.now();
+  const alertId = req.params.id;
+  const businessContext = {
+    businessId: req.businessId?.toString(),
+    context: ROUTE_CONTEXT,
+    operation: 'UPDATE_ALERT',
+    alertId
+  };
+
+  try {
+    const alert = await AlertLog.findOne({
+      _id: alertId,
+      businessId: req.businessId
+    });
+
+    if (!alert) {
+      const processingTime = Date.now() - startTime;
+      logger.warn('Alert not found for update', { ...businessContext, processingTime });
+      return res.status(404).json({
+        success: false,
+        message: ERROR_MESSAGES.ALERT_NOT_FOUND
+      });
+    }
+
+    const { action, status, notes, resolution, reason } = { ...req.body, ...bodyData };
+    let finalStatus = targetStatus || status;
+
+    if (finalStatus) {
+      const upperStatus = finalStatus.toUpperCase();
+      if (!VALID_ALERT_STATUSES.includes(upperStatus)) {
+        const processingTime = Date.now() - startTime;
+        logger.warn('Invalid alert status', { ...businessContext, status: upperStatus, processingTime });
+        return res.status(400).json({
+          success: false,
+          message: `${ERROR_MESSAGES.INVALID_STATUS}. Must be one of: ${VALID_ALERT_STATUSES.join(', ')}`
+        });
+      }
+
+      alert.status = upperStatus;
+      if (upperStatus === 'ACKNOWLEDGED') {
+        alert.resolvedBy = req.user?._id;
+        if (notes || reason) alert.notes = notes || reason;
+      } else if (upperStatus === 'RESOLVED') {
+        alert.resolvedBy = req.user?._id;
+        alert.resolvedAt = new Date();
+        if (notes || resolution || reason) alert.notes = notes || resolution || reason;
+      }
+    }
+
+    if (action) {
+      if (!alert.actions) alert.actions = [];
+      alert.actions.push({
+        action,
+        actionBy: req.user?._id,
+        actionAt: new Date()
+      });
+    }
+
+    if ((notes || reason) && !finalStatus) {
+      alert.notes = notes || reason;
+    }
+
+    await alert.save();
+
+    const processingTime = Date.now() - startTime;
+    logger.info('Alert updated', { ...businessContext, status: alert.status, processingTime });
+
+    res.success({
+      message: SUCCESS_MESSAGES.ALERT_UPDATED,
+      alert
+    }, SUCCESS_MESSAGES.ALERT_UPDATED);
+  } catch (error) {
+    const processingTime = Date.now() - startTime;
+    logger.error('Error updating alert', {
+      ...businessContext,
+      error: error.message,
+      stack: error.stack,
+      processingTime
+    });
+    res.status(500).json({
+      success: false,
+      message: ERROR_MESSAGES.UPDATE_ALERT,
+      error: error.message
+    });
+  }
+}
+
+// Subroutes for actions (Must be defined BEFORE /:id)
+router.put('/:id/acknowledge', (req, res) => handleAlertUpdate(req, res, 'ACKNOWLEDGED'));
+router.put('/:id/resolve', (req, res) => handleAlertUpdate(req, res, 'RESOLVED'));
+router.put('/:id/action', (req, res) => handleAlertUpdate(req, res, null));
+router.put('/:id/status', (req, res) => handleAlertUpdate(req, res, req.body?.status));
+
+// ==================================================
+// PARAMETERIZED ROUTES (Must be defined LAST)
+// ==================================================
+
+// GET /:id - Get alert by ID
+router.get('/:id', async (req, res) => {
+  const startTime = Date.now();
+  const businessContext = {
+    businessId: req.businessId?.toString(),
+    context: ROUTE_CONTEXT,
+    operation: 'GET_ALERT_BY_ID',
+    alertId: req.params.id
+  };
+
+  try {
+    const alert = await AlertLog.findOne({
+      _id: req.params.id,
+      businessId: req.businessId
+    });
+
+    if (!alert) {
+      const processingTime = Date.now() - startTime;
+      logger.warn('Alert not found', { ...businessContext, processingTime });
+      return res.status(404).json({
+        success: false,
+        message: ERROR_MESSAGES.ALERT_NOT_FOUND
+      });
+    }
+
+    const processingTime = Date.now() - startTime;
+    logger.info('Alert retrieved by ID', { ...businessContext, processingTime });
+
+    res.success({ alert }, SUCCESS_MESSAGES.ALERT_RETRIEVED);
+  } catch (error) {
+    const processingTime = Date.now() - startTime;
+    logger.error('Error getting alert', {
+      ...businessContext,
+      error: error.message,
+      stack: error.stack,
+      processingTime
+    });
+    res.status(500).json({
+      success: false,
+      message: ERROR_MESSAGES.GET_ALERT,
+      error: error.message
+    });
+  }
+});
+
+// PUT /:id - Update alert
+router.put('/:id', (req, res) => handleAlertUpdate(req, res, null));
 
 module.exports = router;

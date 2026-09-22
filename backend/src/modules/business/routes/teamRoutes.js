@@ -36,9 +36,44 @@ const ERROR_MESSAGES = {
 // ROUTES
 // ============================================================================
 
-// POST /:id/team - Add team member
+// GET /:id/team - Get all team members
+router.get('/:id/team', businessContext, async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const business = await Business.findById(req.params.id)
+      .populate('team.user', 'name email profilePicture');
+    if (!business) throw new NotFoundError('Business not found');
+    
+    // Map team members to frontend expected format
+    const teamMembers = business.team.map(member => ({
+      id: member.user?._id,
+      name: member.user?.name,
+      email: member.user?.email,
+      role: member.role,
+      joinedAt: member.addedAt
+    }));
+
+    return res.status(HTTP_STATUS.OK).json({
+      success: true,
+      data: teamMembers,
+      processingTime: Date.now() - startTime
+    });
+  } catch (error) {
+    logger.error('Error fetching team members', { error: error.message, businessId: req.params.id });
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({ success: false, message: 'Failed to fetch team' });
+  }
+});
+
+// GET /:id/team/invitations - Get pending invitations (Mock for now)
+router.get('/:id/team/invitations', businessContext, async (req, res) => {
+  // Return empty list as invitations are not fully implemented in the backend yet
+  return res.status(HTTP_STATUS.OK).json({ success: true, data: [] });
+});
+
+// POST /:id/team/invite - Invite a new team member (Alias for adding member directly)
+// POST /:id/team - Add team member (Legacy)
 // RBAC: Business Admin+ only
-router.post('/:id/team', 
+router.post(['/:id/team/invite', '/:id/team'], 
   requireBusinessAdmin, 
   businessContext,
   enforceSingleBusinessAdmin,    // SECURITY: Prevent multiple business_admins

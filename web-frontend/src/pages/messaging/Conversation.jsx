@@ -348,7 +348,9 @@ const Conversation = () => {
           {message.type === 'template' && (
             <div className="message-template">
               <div className="template-badge">Template Message</div>
-              <div className="message-text">{message.content?.text}</div>
+              <div className="message-text">
+                {message.content?.text || (message.content?.template && `Template: ${message.content.template.name}`) || 'Template message'}
+              </div>
               {message.campaignName && (
                 <div className="campaign-badge">Campaign: {message.campaignName}</div>
               )}

@@ -110,6 +110,69 @@ router.post('/audit-logs/export', auth, async (req, res) => {
 });
 
 /**
+ * @route   GET /api/analytics/audit-logs
+ * @desc    Get global audit logs (Platform wide with filters)
+ * @access  Private
+ */
+router.get('/audit-logs', auth, async (req, res) => {
+  const startTime = Date.now();
+  try {
+    const { page = DEFAULT_PAGE, limit = DEFAULT_LIMIT, action, status, user, startDate, endDate } = req.query;
+
+    const AuditLog = require('../../../core/database/models/AuditLog');
+
+    const query = {};
+
+    if (action) query.action = action;
+    if (status) query.status = status;
+    if (user) query.userId = user;
+
+    if (startDate || endDate) {
+      query.timestamp = {};
+      if (startDate) query.timestamp.$gte = new Date(startDate);
+      if (endDate) query.timestamp.$lte = new Date(endDate);
+    }
+
+    const auditLogs = await AuditLog.find(query)
+      .sort(SORT_TIMESTAMP_DESC)
+      .skip((page - MIN_PAGE) * limit)
+      .limit(parseInt(limit))
+      .populate('userId', POPULATE_USER_ID)
+      .populate('businessId', POPULATE_BUSINESS_ID)
+      .lean();
+
+    const total = await AuditLog.countDocuments(query);
+
+    const processingTime = Date.now() - startTime;
+    return res.status(HTTP_STATUS.OK).json({
+      success: true,
+      logs: auditLogs,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / limit)
+      },
+      totalPages: Math.ceil(total / limit),
+      processingTime
+    });
+  } catch (error) {
+    const processingTime = Date.now() - startTime;
+    logger.error('Route error', {
+      error: error.message,
+      stack: error.stack,
+      userId: req.user?._id?.toString(),
+      processingTime
+    });
+    res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      error: error.message || ERROR_FETCH_FAILED,
+      processingTime
+    });
+  }
+});
+
+/**
  * @route   GET /api/analytics/audit-logs/stats
  * @desc    Get audit log statistics
  * @access  Private

@@ -65,8 +65,8 @@ import { MdMessage, MdCheckCircle, MdError, MdTrendingUp, MdCampaign, MdPeople, 
 import Navbar from '../../components/Navbar';
 import Card from '../../components/Card';
 import Button from '../../components/Button';
-import { API_BASE_URL } from '../../config/api';
-import { STORAGE_KEYS, ROUTES, ERROR_MESSAGES } from '../../config/constants';
+import { COOKIE_KEYS, ROUTES, ERROR_MESSAGES } from '../../config/constants';
+import { getCookie } from '../../utils/cookies';
 import { formatNumber, formatDate, sanitizeHTML } from '../../utils/format';
 import { handleApiError, isNetworkError } from '../../utils/errors';
 import '../../components/Stats.css';
@@ -121,7 +121,7 @@ const Dashboard = () => {
     setError('');
     
     // Security: Use centralized auth check
-    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    const token = getCookie(COOKIE_KEYS.TOKEN);
     if (!token) {
       navigate(ROUTES.LOGIN);
       return;

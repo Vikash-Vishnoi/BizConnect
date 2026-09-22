@@ -131,7 +131,11 @@ const InboxSidebar = ({
                     <p className="last-message">
                       {conversation.lastMessage?.text 
                         ? truncateMessage(conversation.lastMessage.text) 
-                        : 'No messages'}
+                        : conversation.lastMessage?.type === 'template'
+                          ? truncateMessage(`Template: ${conversation.lastMessage?.content?.template?.name || 'message'}`)
+                          : conversation.lastMessage?.type
+                            ? `[${conversation.lastMessage.type.charAt(0).toUpperCase() + conversation.lastMessage.type.slice(1)}]`
+                            : 'No messages'}
                     </p>
                     {conversation.unreadCount > 0 && (
                       <span className="unread-badge">{conversation.unreadCount}</span>

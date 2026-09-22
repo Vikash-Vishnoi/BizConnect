@@ -252,9 +252,11 @@ const BusinessSetupPart2 = () => {
       let webhookUrl;
       try {
         const webhookConfig = await configService.getWebhookUrl();
-        if (webhookConfig.success && webhookConfig.webhookUrl) {
-          webhookUrl = webhookConfig.webhookUrl;
-          console.log('✅ Fetched webhook URL from config:', webhookUrl, `(source: ${webhookConfig.source})`);
+        // Backend wraps data in a 'data' property: { success, message, data: { webhookUrl, source } }
+        const configData = webhookConfig.data || webhookConfig;
+        if (webhookConfig.success && configData.webhookUrl) {
+          webhookUrl = configData.webhookUrl;
+          console.log('✅ Fetched webhook URL from config:', webhookUrl, `(source: ${configData.source})`);
         } else {
           throw new Error('Invalid webhook config response');
         }

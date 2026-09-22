@@ -59,7 +59,7 @@ router.get('/failed', auth, requireBusiness, businessContext, async (req, res) =
       error: error.message,
       processingTime
     });
-    return res.status(HTTP_STATUS.INTERNAL_ERROR).json({
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       error: ERROR_CODES.INTERNAL_ERROR,
       message: 'Failed to retrieve failed messages'
     });
@@ -100,7 +100,7 @@ router.post('/:conversationId/retry/:messageId', auth, requireBusiness, business
       error: error.message,
       processingTime
     });
-    return res.status(HTTP_STATUS.INTERNAL_ERROR).json({
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       error: ERROR_CODES.INTERNAL_ERROR,
       message: 'Failed to retry message'
     });
@@ -141,7 +141,7 @@ router.post('/retry-bulk', auth, requireBusiness, businessContext, async (req, r
       error: error.message,
       processingTime
     });
-    return res.status(HTTP_STATUS.INTERNAL_ERROR).json({
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       error: ERROR_CODES.INTERNAL_ERROR,
       message: 'Failed to retry bulk messages'
     });
@@ -176,7 +176,7 @@ router.post('/auto-retry', auth, requireBusiness, businessContext, async (req, r
       error: error.message,
       processingTime
     });
-    return res.status(HTTP_STATUS.INTERNAL_ERROR).json({
+    return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       error: ERROR_CODES.INTERNAL_ERROR,
       message: 'Failed to auto-retry messages'
     });

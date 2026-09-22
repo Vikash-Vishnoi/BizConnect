@@ -191,6 +191,7 @@ class MessageRetryService {
    * @returns {Promise<Array>} List of failed messages
    */
   async getFailedMessages(businessId, options = {}) {
+    const startTime = Date.now();
     try {
       const { limit = 50, skip = 0, startDate, endDate } = options;
 

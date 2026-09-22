@@ -797,6 +797,17 @@ const Inbox = () => {
                                 {renderMessageMeta(message)}
                               </div>
                             )}
+                            {message.type === 'template' && (
+                              <div className="message-template">
+                                <div className="template-badge" style={{ fontSize: '10px', opacity: 0.8, marginBottom: '4px', textTransform: 'uppercase' }}>Template Message</div>
+                                <div className="message-content-wrapper">
+                                  <p className="message-text">
+                                    {message.content?.text || (message.content?.template && `Template: ${message.content.template.name}`) || 'Template message'}
+                                  </p>
+                                  {renderMessageMeta(message, true)}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
                         </React.Fragment>

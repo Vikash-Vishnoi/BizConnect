@@ -165,10 +165,15 @@ const mediaRoutes = require('./modules/media/routes');
 const configRoutes = require('./modules/config/routes');
 const automationRoutes = require('./modules/automations/routes');
 const publicRoutes = require('./modules/public/routes/publicRoutes');
+const alertsRoutes = require('./modules/business/routes/alertsRoutes');
+const scheduledRoutes = require('./modules/campaigns/routes/scheduledRoutes');
+const { authenticate } = require('./core/middlewares/auth');
+const { requireBusiness } = require('./core/middlewares/authorization');
 
 // Mount routes
 app.use(`${config.apiPrefix}/auth`, authRoutes);
 app.use(`${config.apiPrefix}/business`, businessRoutes);
+app.use(`${config.apiPrefix}/alerts`, authenticate, extractBusinessContext, requireBusiness, alertsRoutes);
 app.use(`${config.apiPrefix}/campaigns`, campaignRoutes);
 app.use(`${config.apiPrefix}/scheduled-messages`, campaignRoutes);
 app.use(`${config.apiPrefix}/contacts`, contactRoutes);
@@ -182,6 +187,7 @@ app.use(`${config.apiPrefix}/media`, mediaRoutes);
 app.use(`${config.apiPrefix}/config`, configRoutes);
 app.use(`${config.apiPrefix}/automations`, automationRoutes);
 app.use(`${config.apiPrefix}/public`, publicRoutes);
+app.use(`${config.apiPrefix}/scheduled`, scheduledRoutes);
 
 // ==================================================
 // ERROR HANDLING

@@ -102,3 +102,5 @@ index.js
 app.json
 *.ps1
 *.md
+
+temp-unused-files/

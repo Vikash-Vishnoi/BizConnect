@@ -156,7 +156,7 @@ const CreateCampaign = () => {
   const fetchTemplates = async () => {
     try {
       const data = await templateService.getTemplates({ status: 'approved' });
-      setTemplates(data.templates || []);
+      setTemplates(data.data?.templates || data.templates || []);
       setTemplatesLoading(false);
     } catch (err) {
       console.error('Error fetching templates:', err);
@@ -391,7 +391,8 @@ const CreateCampaign = () => {
       const data = await campaignService.createCampaign(payload);
       sessionStorage.removeItem(STORAGE_KEY); // Clear saved draft
       toast.success('🎉 Campaign created successfully!');
-      navigate(`/campaigns/${data.campaign._id}`);
+      const campaign = data.data?.campaign || data.campaign;
+      navigate(`/campaigns/${campaign._id}`);
     } catch (err) {
       console.error('Error creating campaign:', err);
       const errorMsg = err.message || 'Failed to create campaign';

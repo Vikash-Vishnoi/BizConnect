@@ -97,8 +97,12 @@ const shouldSkipBusinessContext = (path) => {
     '/api/auth/verify',
     '/api/auth/me',  // Allow user profile fetch without business context
     '/api/business',  // Allow business list/create without business context (user selects after login)
+    '/api/alerts',    // Alerts route handles auth and business context via express route middleware
     '/api/webhooks/whatsapp', // Webhook endpoints handle business context internally
-    '/api/public' // Allow public endpoints without business context
+    '/api/public', // Allow public endpoints without business context
+    '/api/config',  // Config endpoints are public (needed during business setup before businessId exists)
+    '/api/scheduled', // Scheduled routes handle their own auth + business context per route
+    '/api/analytics/audit-logs' // Audit logs handle their own auth and business context (many are platform-wide)
   ];
   
   return skipPaths.some(skipPath => path.startsWith(skipPath));
