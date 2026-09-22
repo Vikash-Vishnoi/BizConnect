@@ -15,7 +15,7 @@ const {
   validatePagination 
 } = require('../../../core/middlewares/validation');
 const { sendError, ERROR_CODES } = require('../../../common/helpers/errorCodes');
-const { HTTP_STATUS } = require('../../../common/constants/httpStatus');
+const { HTTP_STATUS } = require('../../../common/constants');
 const { asyncHandler, NotFoundError, ValidationError } = require('../../../core/middlewares/errorHandler');
 const { businessContext } = require('../../../core/middlewares/businessContext');
 const logger = require('../../../common/helpers/logger');

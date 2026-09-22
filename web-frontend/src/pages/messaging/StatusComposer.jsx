@@ -30,7 +30,7 @@
 import React, { useState, useEffect } from 'react';
 import Navbar from '../../components/Navbar';
 import { API_BASE_URL } from '../../config/api';
-import { STORAGE_KEYS } from '../../config/constants';
+import { get, post, del } from '../../services/api';
 import './StatusComposer.css';
 
 /**
@@ -77,14 +77,9 @@ const StatusComposer = () => {
   const fetchStatuses = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
-      const response = await fetch(`${API_BASE_URL}/business/status`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setStatuses(data.statuses || []);
+      const response = await get(`/business/status`);
+      if (response && response.success !== false) {
+        setStatuses(response.statuses || response.data?.statuses || []);
       }
     } catch (error) {
       console.error('Failed to fetch statuses:', error);
@@ -104,17 +99,8 @@ const StatusComposer = () => {
 
     setComposing(true);
     try {
-      const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
-      const response = await fetch(`${API_BASE_URL}/business/status`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(newStatus)
-      });
-
-      if (response.ok) {
+      const response = await post(`/business/status`, newStatus);
+      if (response) {
         alert('Status posted successfully!');
         setNewStatus({ text: '', mediaUrl: '', link: '', backgroundColor: DEFAULT_BG_COLOR });
         fetchStatuses();
@@ -134,13 +120,8 @@ const StatusComposer = () => {
     if (!confirm('Delete this status?')) return;
 
     try {
-      const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
-      const response = await fetch(`${API_BASE_URL}/business/status/${statusId}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (response.ok) {
+      const response = await del(`/business/status/${statusId}`);
+      if (response) {
         fetchStatuses();
       }
     } catch (error) {

@@ -271,7 +271,13 @@ const BusinessSetupPart3 = () => {
   };
 
   if (!webhookData) {
-    return null;
+    return (
+      <div className="setup-part3-page page-container">
+        <div style={{ padding: '2rem' }}>
+          <LoadingSkeleton type="dashboard" />
+        </div>
+      </div>
+    );
   }
 
   return (

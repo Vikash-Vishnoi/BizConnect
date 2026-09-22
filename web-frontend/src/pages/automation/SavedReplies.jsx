@@ -45,8 +45,7 @@ import Card from '../../components/Card';
 import Button from '../../components/Button';
 import Input from '../../components/Input';
 import { MdAdd, MdEdit, MdDelete, MdSearch, MdContentCopy, MdLabel, MdClose, MdChatBubble, MdTrendingUp, MdFolder, MdChatBubbleOutline } from 'react-icons/md';
-import { API_BASE_URL } from '../../config/api';
-import { STORAGE_KEYS } from '../../config/constants';
+import { get, post, put, del } from '../../services/api';
 import '../../components/Stats.css';
 import './SavedReplies.css';
 
@@ -96,17 +95,9 @@ const SavedReplies = () => {
   const fetchReplies = async () => {
     setLoading(true);
     try {
-      const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
-      const response = await fetch(`${API_BASE_URL}/messages/saved-replies`, {
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'X-Business-ID': user?.businessId
-        }
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        const repliesData = result.data || [];
+      const result = await get(`/messages/saved-replies`);
+      if (result && result.success !== false) {
+        const repliesData = result.data || result || [];
         setReplies(repliesData);
         
         // Calculate stats
@@ -119,8 +110,7 @@ const SavedReplies = () => {
         };
         setStats(newStats);
       } else {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to fetch replies');
+        throw new Error(result?.message || 'Failed to fetch replies');
       }
     } catch (error) {
       console.error('Failed to fetch saved replies:', error);
@@ -136,23 +126,15 @@ const SavedReplies = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
       const url = editingReply
-        ? `${API_BASE_URL}/messages/saved-replies/${editingReply._id}`
-        : `${API_BASE_URL}/messages/saved-replies`;
-      const method = editingReply ? 'PUT' : 'POST';
+        ? `/messages/saved-replies/${editingReply._id}`
+        : `/messages/saved-replies`;
 
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'X-Business-ID': user?.businessId
-        },
-        body: JSON.stringify(formData)
-      });
+      const response = editingReply 
+        ? await put(url, formData)
+        : await post(url, formData);
 
-      if (response.ok) {
+      if (response && response.success !== false) {
         clearSaved(); // Clear auto-saved data
         toast.success(editingReply ? '✅ Reply updated' : '🎉 Reply created');
         fetchReplies();
@@ -177,23 +159,15 @@ const SavedReplies = () => {
    */
   const handleDelete = async () => {
     try {
-      const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
-      const response = await fetch(`${API_BASE_URL}/messages/saved-replies/${deletingReplyId}`, {
-        method: 'DELETE',
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'X-Business-ID': user?.businessId
-        }
-      });
+      const response = await del(`/messages/saved-replies/${deletingReplyId}`);
 
-      if (response.ok) {
+      if (response && response.success !== false) {
         toast.success('Reply deleted successfully');
         setShowDeleteModal(false);
         setDeletingReplyId(null);
         fetchReplies();
       } else {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to delete reply');
+        throw new Error(response?.message || 'Failed to delete reply');
       }
     } catch (error) {
       console.error('Failed to delete reply:', error);

@@ -31,7 +31,7 @@ const STATUS_RUNNING = 'running';
 // GET / - Get all campaigns
 router.get('/', validatePagination, async (req, res) => {
   const startTime = Date.now();
-  const context = businessContext(req);
+  const context = req.businessContext || {};
 
   try {
     const defaultLimit = parseInt(process.env.CAMPAIGNS_DEFAULT_LIMIT || DEFAULT_CAMPAIGNS_LIMIT);
@@ -86,7 +86,7 @@ router.get('/', validatePagination, async (req, res) => {
 // GET /:id - Get campaign by ID
 router.get('/:id', validateCampaignId, async (req, res) => {
   const startTime = Date.now();
-  const context = businessContext(req);
+  const context = req.businessContext || {};
 
   console.log('🔍 GET Campaign by ID - START', {
     campaignId: req.params.id,
@@ -196,7 +196,7 @@ router.post('/',
   validateTemplateApproval,     // SECURITY: Block unapproved templates
   async (req, res) => {
     const startTime = Date.now();
-    const context = businessContext(req);
+    const context = req.businessContext || {};
 
     try {
       logger.info('📝 Campaign creation started', { 
@@ -329,7 +329,7 @@ router.post('/',
 // PUT /:id - Update campaign
 router.put('/:id', validateUpdateCampaign, async (req, res) => {
   const startTime = Date.now();
-  const context = businessContext(req);
+  const context = req.businessContext || {};
 
   try {
     const campaign = await Campaign.findOne({
@@ -462,7 +462,7 @@ router.put('/:id', validateUpdateCampaign, async (req, res) => {
 // GET /:id/recipients - Get campaign recipients (paginated)
 router.get('/:id/recipients', validateCampaignId, async (req, res) => {
   const startTime = Date.now();
-  const context = businessContext(req);
+  const context = req.businessContext || {};
 
   try {
     const { status, limit = DEFAULT_RECIPIENT_LIMIT, skip = DEFAULT_SKIP } = req.query;
@@ -526,7 +526,7 @@ router.get('/:id/recipients', validateCampaignId, async (req, res) => {
 // GET /:id/stats - Get campaign statistics
 router.get('/:id/stats', validateCampaignId, async (req, res) => {
   const startTime = Date.now();
-  const context = businessContext(req);
+  const context = req.businessContext || {};
 
   try {
     const campaign = await Campaign.findOne({
@@ -579,7 +579,7 @@ router.get('/:id/stats', validateCampaignId, async (req, res) => {
 // GET /:id/failed - Get failed recipients
 router.get('/:id/failed', validateCampaignId, async (req, res) => {
   const startTime = Date.now();
-  const context = businessContext(req);
+  const context = req.businessContext || {};
 
   try {
     const { limit = DEFAULT_RECIPIENT_LIMIT } = req.query;
@@ -628,7 +628,7 @@ router.get('/:id/failed', validateCampaignId, async (req, res) => {
 // POST /:id/retry - Retry failed recipients
 router.post('/:id/retry', validateCampaignId, async (req, res) => {
   const startTime = Date.now();
-  const context = businessContext(req);
+  const context = req.businessContext || {};
 
   try {
     const campaign = await Campaign.findOne({
@@ -675,7 +675,7 @@ router.post('/:id/retry', validateCampaignId, async (req, res) => {
 // DELETE /:id - Delete campaign (typically for draft campaigns)
 router.delete('/:id', validateCampaignId, async (req, res) => {
   const startTime = Date.now();
-  const context = businessContext(req);
+  const context = req.businessContext || {};
 
   try {
     const campaign = await Campaign.findOne({

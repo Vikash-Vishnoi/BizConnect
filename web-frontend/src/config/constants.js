@@ -50,15 +50,22 @@ export const HTTP_STATUS = {
   SERVICE_UNAVAILABLE: 503,
 };
 
-// Local Storage Keys
+// Local Storage Keys (non-sensitive data only)
 export const STORAGE_KEYS = {
-  TOKEN: 'token',
-  REFRESH_TOKEN: 'refreshToken',
   USER: 'user',
   THEME: 'theme',
   LANGUAGE: 'language',
   BUSINESS_ID: 'businessId',
   LAST_BUSINESS_SETUP_STEP: 'lastBusinessSetupStep',
+  REGISTERED_BUSINESS_NAME: 'registeredBusinessName',
+  BUSINESS_SETUP_PART1: 'businessSetupPart1',
+  BUSINESS_SETUP_FORM_DATA: 'businessSetupFormData',
+};
+
+// Cookie Keys (sensitive auth tokens — stored in cookies, not localStorage)
+export const COOKIE_KEYS = {
+  TOKEN: 'auth_token',
+  REFRESH_TOKEN: 'auth_refresh_token',
 };
 
 // Routes

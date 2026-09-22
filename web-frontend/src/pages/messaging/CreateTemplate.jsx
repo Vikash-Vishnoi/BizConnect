@@ -58,7 +58,8 @@ import Card from '../../components/Card';
 import Input from '../../components/Input';
 import Button from '../../components/Button';
 import { MdInfo, MdWarning, MdDelete, MdUpload, MdImage, MdVideocam, MdInsertDriveFile, MdFolder } from 'react-icons/md';
-import { STORAGE_KEYS } from '../../config/constants';
+import { COOKIE_KEYS } from '../../config/constants';
+import { getCookie } from '../../utils/cookies';
 import { handleApiError, logError } from '../../utils/errors';
 import './CreateTemplate.css';
 
@@ -199,7 +200,7 @@ const CreateTemplate = () => {
     setError('');
     setLoading(true);
 
-    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    const token = getCookie(COOKIE_KEYS.TOKEN);
     if (!token) {
       navigate('/login');
       return;
@@ -264,7 +265,7 @@ const CreateTemplate = () => {
     setError('');
     setLoading(true);
 
-    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    const token = getCookie(COOKIE_KEYS.TOKEN);
     if (!token) {
       navigate('/login');
       return;

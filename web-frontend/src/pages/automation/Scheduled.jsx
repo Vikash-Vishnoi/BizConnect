@@ -39,8 +39,7 @@ import BusinessSetupRequired from '../../components/BusinessSetupRequired';
 import Navbar from '../../components/Navbar';
 import Card from '../../components/Card';
 import Button from '../../components/Button';
-import { API_BASE_URL } from '../../config/api';
-import { STORAGE_KEYS } from '../../config/constants';
+import { get, post, del } from '../../services/api';
 import { MdSchedule, MdCancel, MdPlayArrow, MdPause, MdCheckCircle, MdError, MdPeople, MdDelete, MdSearch, MdAdd, MdPerson, MdPhone, MdMessage, MdEdit, MdInfo, MdClose, MdApps, MdCampaign, MdSms, MdCalendarToday, MdSend, MdDoneAll, MdVisibility } from 'react-icons/md';
 import { sanitizeHTML, formatDate, truncateText } from '../../utils/format';
 import '../../components/Stats.css';
@@ -165,29 +164,21 @@ const Scheduled = () => {
       }
       
       console.log('Fetching scheduled items with params:', params.toString());
-      const response = await fetch(`${API_BASE_URL}/scheduled?${params}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem(STORAGE_KEYS.TOKEN)}`,
-          'X-Business-ID': user.businessId
-        }
-      });
+      const data = await get(`/scheduled?${params}`);
       
-      const data = await response.json();
       console.log('========== SCHEDULED ITEMS DEBUG ==========');
-      console.log('Response status:', response.status);
-      console.log('Response OK:', response.ok);
       console.log('Full response data:', JSON.stringify(data, null, 2));
-      console.log('data.success:', data.success);
-      console.log('data.data exists:', !!data.data);
-      console.log('data.data:', data.data);
-      console.log('scheduledMessages path 1 (data.data.scheduledMessages):', data.data?.scheduledMessages);
-      console.log('scheduledMessages path 2 (data.scheduledMessages):', data.scheduledMessages);
+      console.log('data.success:', data?.success);
+      console.log('data.data exists:', !!data?.data);
+      console.log('data.data:', data?.data);
+      console.log('scheduledMessages path 1 (data.data.scheduledMessages):', data?.data?.scheduledMessages);
+      console.log('scheduledMessages path 2 (data.scheduledMessages):', data?.scheduledMessages);
       console.log('==========================================');
       
-      if (response.ok && data.success) {
+      if (data && data.success !== false) {
         // Backend wraps response in { success: true, data: { scheduledMessages, total, page, pages }, message }
         const responseData = data.data || {};
-        const items = responseData.scheduledMessages || [];
+        const items = responseData.scheduledMessages || data.scheduledMessages || [];
         console.log('Final items array:', items);
         console.log('Items count:', items.length);
         if (items.length > 0) {
@@ -197,7 +188,7 @@ const Scheduled = () => {
         setTotalPages(responseData.pages || 1);
       } else {
         console.error('Failed to fetch scheduled messages:', data);
-        throw new Error(data.message || 'Failed to fetch scheduled messages');
+        throw new Error(data?.message || 'Failed to fetch scheduled messages');
       }
     } catch (error) {
       console.error('Error fetching scheduled messages:', error);
@@ -212,18 +203,12 @@ const Scheduled = () => {
    */
   const fetchStats = async () => {
     try {
-      console.log('Fetching stats from:', `${API_BASE_URL}/scheduled/stats/summary`);
-      const response = await fetch(`${API_BASE_URL}/scheduled/stats/summary`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem(STORAGE_KEYS.TOKEN)}`,
-          'X-Business-ID': user.businessId
-        }
-      });
+      console.log('Fetching stats from:', `/scheduled/stats/summary`);
+      const data = await get(`/scheduled/stats/summary`);
       
-      const data = await response.json();
-      console.log('Stats response:', { status: response.status, data });
+      console.log('Stats response:', { data });
       
-      if (response.ok) {
+      if (data && data.success !== false) {
         // Backend wraps response in { success, data, message }
         const statsData = data.data || data;
         console.log('Setting stats:', statsData);
@@ -254,33 +239,20 @@ const Scheduled = () => {
       let response;
       if (isCampaign) {
         // Cancel campaign
-        response = await fetch(`${API_BASE_URL}/scheduled/campaigns/${itemId}/cancel`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem(STORAGE_KEYS.TOKEN)}`,
-            'X-Business-ID': user.businessId
-          }
-        });
+        response = await post(`/scheduled/campaigns/${itemId}/cancel`);
       } else {
         // Cancel message
-        response = await fetch(`${API_BASE_URL}/scheduled/${itemId}`, {
-          method: 'DELETE',
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem(STORAGE_KEYS.TOKEN)}`,
-            'X-Business-ID': user.businessId
-          }
-        });
+        response = await del(`/scheduled/${itemId}`);
       }
       
-      if (response.ok) {
+      if (response && response.success !== false) {
         toast.success(isCampaign ? 'Campaign cancelled successfully' : 'Scheduled message cancelled successfully');
         setShowCancelModal(false);
         setActioningItem(null);
         fetchScheduledMessages();
         fetchStats();
       } else {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to cancel');
+        throw new Error(response?.message || 'Failed to cancel');
       }
     } catch (error) {
       console.error('Error cancelling:', error);
@@ -296,23 +268,16 @@ const Scheduled = () => {
     try {
       const itemId = actioningItem.campaignId || actioningItem._id;
       
-      const response = await fetch(`${API_BASE_URL}/scheduled/campaigns/${itemId}/pause`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem(STORAGE_KEYS.TOKEN)}`,
-          'X-Business-ID': user.businessId
-        }
-      });
+      const response = await post(`/scheduled/campaigns/${itemId}/pause`);
       
-      if (response.ok) {
+      if (response && response.success !== false) {
         toast.success('Campaign paused successfully');
         setShowPauseModal(false);
         setActioningItem(null);
         fetchScheduledMessages();
         fetchStats();
       } else {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to pause campaign');
+        throw new Error(response?.message || 'Failed to pause campaign');
       }
     } catch (error) {
       console.error('Error pausing campaign:', error);
@@ -328,23 +293,16 @@ const Scheduled = () => {
     try {
       const itemId = actioningItem.campaignId || actioningItem._id;
       
-      const response = await fetch(`${API_BASE_URL}/scheduled/campaigns/${itemId}/resume`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem(STORAGE_KEYS.TOKEN)}`,
-          'X-Business-ID': user.businessId
-        }
-      });
+      const response = await post(`/scheduled/campaigns/${itemId}/resume`);
       
-      if (response.ok) {
+      if (response && response.success !== false) {
         toast.success('Campaign resumed successfully');
         setShowResumeModal(false);
         setActioningItem(null);
         fetchScheduledMessages();
         fetchStats();
       } else {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to resume campaign');
+        throw new Error(response?.message || 'Failed to resume campaign');
       }
     } catch (error) {
       console.error('Error resuming campaign:', error);

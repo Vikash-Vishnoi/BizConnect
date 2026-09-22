@@ -30,7 +30,8 @@ import * as templateService from '../../services/templates/templateService';
 import Navbar from '../../components/Navbar';
 import Card from '../../components/Card';
 import Button from '../../components/Button';
-import { STORAGE_KEYS } from '../../config/constants';
+import { COOKIE_KEYS } from '../../config/constants';
+import { getCookie } from '../../utils/cookies';
 import { handleApiError, logError } from '../../utils/errors';
 import './TemplateDetail.css';
 
@@ -77,7 +78,7 @@ const TemplateDetail = () => {
    * Load template details from API
    */
   const loadTemplate = async () => {
-    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    const token = getCookie(COOKIE_KEYS.TOKEN);
     
     if (!token) {
       navigate('/login');
@@ -92,8 +93,8 @@ const TemplateDetail = () => {
     } catch (err) {
       logError('Error loading template', err);
       
-      if (err.response?.status === 401) {
-        localStorage.removeItem('token');
+      if (err.message && err.message.includes('expired')) {
+        document.cookie = `${COOKIE_KEYS.TOKEN}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
         navigate('/login');
         return;
       }
@@ -129,7 +130,7 @@ const TemplateDetail = () => {
    */
   const handleDelete = async () => {
     setDeleting(true);
-    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    const token = getCookie(COOKIE_KEYS.TOKEN);
 
     if (!token) {
       navigate('/login');
@@ -158,7 +159,7 @@ const TemplateDetail = () => {
    */
   const handleSubmitForApproval = async () => {
     setSubmitting(true);
-    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    const token = getCookie(COOKIE_KEYS.TOKEN);
 
     if (!token) {
       navigate('/login');

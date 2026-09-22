@@ -22,8 +22,7 @@
 import React, { useState, useEffect } from 'react';
 import useAutoSave, { loadAutoSaved } from '../../hooks/useAutoSave';
 import Navbar from '../../components/Navbar';
-import { API_BASE_URL } from '../../config/api';
-import { STORAGE_KEYS } from '../../config/constants';
+import { get, put } from '../../services/api';
 import './WelcomeMessageSettings.css';
 
 /**
@@ -57,14 +56,9 @@ const WelcomeMessageSettings = () => {
 
   const fetchSettings = async () => {
     try {
-      const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
-      const response = await fetch(`${API_BASE_URL}/business/welcome-message`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setSettings(data.settings || settings);
+      const data = await get(`/business/welcome-message`);
+      if (data && data.success !== false) {
+        setSettings(data.settings || data.data?.settings || settings);
       }
     } catch (error) {
       console.error('Failed to fetch settings:', error);
@@ -76,17 +70,8 @@ const WelcomeMessageSettings = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
-      const response = await fetch(`${API_BASE_URL}/business/welcome-message`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(settings)
-      });
-
-      if (response.ok) {
+      const data = await put(`/business/welcome-message`, settings);
+      if (data) {
         alert('Welcome message settings saved successfully');
       } else {
         throw new Error('Failed to save settings');

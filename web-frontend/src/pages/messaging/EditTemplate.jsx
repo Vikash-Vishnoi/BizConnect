@@ -55,7 +55,8 @@ import Card from '../../components/Card';
 import Input from '../../components/Input';
 import Button from '../../components/Button';
 import { MdInfo, MdWarning, MdImage, MdVideocam, MdInsertDriveFile } from 'react-icons/md';
-import { STORAGE_KEYS } from '../../config/constants';
+import { COOKIE_KEYS } from '../../config/constants';
+import { getCookie } from '../../utils/cookies';
 import { handleApiError, logError } from '../../utils/errors';
 import './CreateTemplate.css';
 
@@ -92,7 +93,7 @@ const EditTemplate = () => {
 
 
   const loadTemplate = async () => {
-    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    const token = getCookie(COOKIE_KEYS.TOKEN);
     
     if (!token) {
       navigate('/login');
@@ -128,8 +129,9 @@ const EditTemplate = () => {
     } catch (err) {
       logError('Error loading template', err);
       
-      if (err.response?.status === 401) {
-        localStorage.removeItem(STORAGE_KEYS.TOKEN);
+      if (err.message && err.message.includes('expired')) {
+        // remove cookie manually isn't strictly necessary but for completeness:
+        document.cookie = `${COOKIE_KEYS.TOKEN}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
         navigate('/login');
         return;
       }
@@ -147,7 +149,7 @@ const EditTemplate = () => {
     setError('');
     setSaving(true);
 
-    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    const token = getCookie(COOKIE_KEYS.TOKEN);
     if (!token) {
       navigate('/login');
       return;
@@ -189,7 +191,7 @@ const EditTemplate = () => {
     setError('');
     setSaving(true);
 
-    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    const token = getCookie(COOKIE_KEYS.TOKEN);
     if (!token) {
       navigate('/login');
       return;

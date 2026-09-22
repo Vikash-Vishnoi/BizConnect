@@ -60,6 +60,7 @@ import Navbar from '../../components/Navbar';
 import Button from '../../components/Button';
 import { MdSend, MdAttachFile, MdImage, MdCheckCircle, MdError, MdAccessTime, MdInsertDriveFile, MdChatBubbleOutline, MdClose } from 'react-icons/md';
 import { API_BASE_URL } from '../../config/api';
+import { get, post } from '../../services/api';
 import './Conversation.css';
 
 /**
@@ -160,17 +161,9 @@ const Conversation = () => {
 
   const loadSavedReplies = async () => {
     try {
-      const token = localStorage.getItem('token');
-      const businessId = localStorage.getItem('businessId');
-      const response = await fetch(`${API_BASE_URL}/messages/saved-replies`, {
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'X-Business-ID': businessId
-        }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setSavedReplies(data.data || []);
+      const response = await get(`/messages/saved-replies`);
+      if (response && response.success !== false) {
+        setSavedReplies(response.data || []);
       }
     } catch (err) {
       console.error('Error loading saved replies:', err);
@@ -184,15 +177,7 @@ const Conversation = () => {
     
     // Track usage
     try {
-      const token = localStorage.getItem('token');
-      const businessId = localStorage.getItem('businessId');
-      await fetch(`${API_BASE_URL}/messages/saved-replies/${reply._id}/use`, {
-        method: 'POST',
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'X-Business-ID': businessId
-        }
-      });
+      await post(`/messages/saved-replies/${reply._id}/use`);
     } catch (err) {
       console.error('Error tracking usage:', err);
     }

@@ -27,7 +27,8 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { getCapabilities } from '../services/business/capabilityService';
+import { useAuth } from '../contexts/AuthContext';
+import { getCapabilities } from '../services/business/businessService';
 import Card from './Card';
 import LoadingSkeleton from './LoadingSkeleton';
 import './BusinessCapabilityWidget.css';
@@ -55,18 +56,23 @@ const STATUS_ICONS = {
 };
 
 const BusinessCapabilityWidget = () => {
+  const { user } = useAuth();
   const [capabilities, setCapabilities] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    loadCapabilities();
-  }, []);
+    if (user?.businessId) {
+      loadCapabilities(user.businessId);
+    } else {
+      setLoading(false);
+    }
+  }, [user?.businessId]);
 
-  const loadCapabilities = async () => {
+  const loadCapabilities = async (businessId) => {
     try {
       setLoading(true);
-      const data = await getCapabilities();
+      const data = await getCapabilities(businessId);
       setCapabilities(data);
     } catch (err) {
       setError(err.message || 'Failed to load capabilities');

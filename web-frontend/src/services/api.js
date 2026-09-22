@@ -14,7 +14,8 @@
 
 import axios from 'axios';
 import { API_BASE_URL, API_TIMEOUT, API_RETRY_ATTEMPTS, API_RETRY_DELAY } from '../config/api';
-import { STORAGE_KEYS, HTTP_STATUS, ERROR_MESSAGES, ENV } from '../config/constants';
+import { STORAGE_KEYS, COOKIE_KEYS, HTTP_STATUS, ERROR_MESSAGES, ENV } from '../config/constants';
+import { getCookie, setCookie, removeCookie } from '../utils/cookies';
 
 /**
  * Create axios instance with default config
@@ -46,8 +47,8 @@ const apiClient = axios.create({
  */
 apiClient.interceptors.request.use(
   (config) => {
-    // Add auth token
-    const token = localStorage.getItem(STORAGE_KEYS.TOKEN);
+    // Add auth token (read from secure cookie)
+    const token = getCookie(COOKIE_KEYS.TOKEN);
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -109,7 +110,7 @@ apiClient.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
-        const refreshToken = localStorage.getItem(STORAGE_KEYS.REFRESH_TOKEN);
+        const refreshToken = getCookie(COOKIE_KEYS.REFRESH_TOKEN);
         if (!refreshToken) {
           throw new Error('No refresh token available');
         }
@@ -118,19 +119,19 @@ apiClient.interceptors.response.use(
         const response = await axios.post(`${API_BASE_URL}/auth/refresh`, { refreshToken });
         const { token, refreshToken: newRefreshToken } = response.data.data;
 
-        // Save new tokens
-        localStorage.setItem(STORAGE_KEYS.TOKEN, token);
-        localStorage.setItem(STORAGE_KEYS.REFRESH_TOKEN, newRefreshToken);
+        // Persist new tokens in cookies
+        setCookie(COOKIE_KEYS.TOKEN, token, { days: 30 });
+        setCookie(COOKIE_KEYS.REFRESH_TOKEN, newRefreshToken, { days: 7 });
 
         // Update the original request with the new token
         originalRequest.headers.Authorization = `Bearer ${token}`;
-        
+
         // Retry the original request
         return apiClient(originalRequest);
       } catch (refreshError) {
-        // Clear auth data and redirect to login if refresh fails
-        localStorage.removeItem(STORAGE_KEYS.TOKEN);
-        localStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
+        // Clear tokens and user data, redirect to login
+        removeCookie(COOKIE_KEYS.TOKEN);
+        removeCookie(COOKIE_KEYS.REFRESH_TOKEN);
         localStorage.removeItem(STORAGE_KEYS.USER);
         window.location.href = '/login';
         return Promise.reject(error);
@@ -387,18 +388,9 @@ export const downloadFile = async (url, filename) => {
 
 /**
  * Batch multiple requests with Promise.all
- * 
  * @param {Promise[]} requests - Array of request promises
  * @returns {Promise<any[]>} Array of response data
  * @throws {Error} If any request fails, all pending requests are rejected
-    return true;
-  } catch (error) {
-    throw error;
-  }
-};
-
-/**
- * Batch requests with Promise.all
  */
 export const batchRequests = async (requests) => {
   try {

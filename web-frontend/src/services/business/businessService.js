@@ -94,10 +94,10 @@ import { get, post, put, del } from '../api';
  */
 const BUSINESS_ENDPOINTS = {
   BASE: '/business',
-  SWITCH: '/business/switch',
+  SWITCH: '/switch',
   CREDENTIALS: '/credentials',
   VERIFY_TOKEN: '/regenerate-verify-token',
-  WEBHOOK_COMPLETE: '/complete-webhook-setup',
+  WEBHOOK_COMPLETE: '/webhook/complete',
   PHONE_HEALTH: '/phone-health',
   TEAM: '/team',
   VERIFICATION_STATUS: '/verification/status',
@@ -198,7 +198,7 @@ export const updateBusiness = async (id, data) => {
  * @returns {Promise<Object>} Switch result
  */
 export const switchBusiness = async (id) => {
-  return await post(`${BUSINESS_ENDPOINTS.BASE}/${id}${BUSINESS_ENDPOINTS.SWITCH}`);
+  return await post(`${BUSINESS_ENDPOINTS.BASE}/${id}/switch`);
 };
 
 
@@ -230,7 +230,7 @@ export const regenerateVerifyToken = async (id, reason = null) => {
  * @returns {Promise<Object>} Webhook setup result
  */
 export const completeWebhookSetup = async (id) => {
-  return await post(`${BUSINESS_ENDPOINTS.BASE}/${id}${BUSINESS_ENDPOINTS.WEBHOOK_COMPLETE}`);
+  return await post(`${BUSINESS_ENDPOINTS.BASE}/${id}/webhook/complete`);
 };
 
 
@@ -320,27 +320,29 @@ export const getVerificationRequirements = async () => {
  * Get business location
  * @returns {Promise<Object>} Business location
  */
-export const getBusinessLocation = async () => {
-  return await get(BUSINESS_ENDPOINTS.LOCATION);
+export const getBusinessLocation = async (businessId) => {
+  return await get(`${BUSINESS_ENDPOINTS.BASE}/${businessId}${BUSINESS_ENDPOINTS.LOCATION}`);
 };
 
 
 /**
  * Update business location
+ * @param {string} businessId - Business identifier
  * @param {Object} data - Location update payload
  * @returns {Promise<Object>} Updated location
  */
-export const updateBusinessLocation = async (data) => {
-  return await put(BUSINESS_ENDPOINTS.LOCATION, data);
+export const updateBusinessLocation = async (businessId, data) => {
+  return await put(`${BUSINESS_ENDPOINTS.BASE}/${businessId}${BUSINESS_ENDPOINTS.LOCATION}`, data);
 };
 
 
 /**
  * Delete business location
+ * @param {string} businessId - Business identifier
  * @returns {Promise<Object>} Deletion result
  */
-export const deleteBusinessLocation = async () => {
-  return await del(BUSINESS_ENDPOINTS.LOCATION);
+export const deleteBusinessLocation = async (businessId) => {
+  return await del(`${BUSINESS_ENDPOINTS.BASE}/${businessId}${BUSINESS_ENDPOINTS.LOCATION}`);
 };
 
 

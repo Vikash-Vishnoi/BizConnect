@@ -8,7 +8,7 @@ const router = express.Router();
 const { Flow, FlowResponse } = require('../../../core/database/models');
 const { NotFoundError } = require('../../../core/middlewares/errorHandler');
 const { businessContext } = require('../../../core/middlewares/businessContext');
-const { ERROR_CODES, HTTP_STATUS } = require('../../../common/constants/httpConstants');
+const { ERROR_CODES, HTTP_STATUS } = require('../../../common/constants');
 const logger = require('../../../common/helpers/logger');
 
 // Constants

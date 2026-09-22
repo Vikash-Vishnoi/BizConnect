@@ -72,6 +72,8 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { ROLES, canAccessPage, hasPermission } from '../utils/roles';
+import { getCookie, setCookie, removeCookie } from '../utils/cookies';
+import { COOKIE_KEYS } from '../config/constants';
 import * as authService from '../services/auth/authService';
 import * as businessService from '../services/business/businessService';
 
@@ -94,7 +96,7 @@ export const AuthProvider = ({ children }) => {
    */
   const initializeAuth = async () => {
     try {
-      const token = localStorage.getItem('token');
+      const token = getCookie(COOKIE_KEYS.TOKEN);
       const savedUser = localStorage.getItem('user');
 
       if (token && savedUser) {
@@ -173,12 +175,13 @@ export const AuthProvider = ({ children }) => {
         role: userData.userType || userData.role || 'normal_user'
       };
 
-      // Save to state and storage
+      // Save user profile to localStorage (not a credential)
       setUser(userWithRole);
       localStorage.setItem('user', JSON.stringify(userWithRole));
-      localStorage.setItem('token', token);
+      // Store tokens in cookies (more secure than localStorage)
+      setCookie(COOKIE_KEYS.TOKEN, token, { days: 30 });
       if (payload.refreshToken) {
-        localStorage.setItem('refreshToken', payload.refreshToken);
+        setCookie(COOKIE_KEYS.REFRESH_TOKEN, payload.refreshToken, { days: 7 });
       }
 
       // Load business context if available
@@ -218,9 +221,10 @@ export const AuthProvider = ({ children }) => {
 
       setUser(userWithRole);
       localStorage.setItem('user', JSON.stringify(userWithRole));
-      localStorage.setItem('token', token);
+      // Store tokens in cookies
+      setCookie(COOKIE_KEYS.TOKEN, token, { days: 30 });
       if (payload.refreshToken) {
-        localStorage.setItem('refreshToken', payload.refreshToken);
+        setCookie(COOKIE_KEYS.REFRESH_TOKEN, payload.refreshToken, { days: 7 });
       }
 
       if (userWithRole.businessId) {
@@ -262,8 +266,11 @@ export const AuthProvider = ({ children }) => {
   const clearAuth = () => {
     setUser(null);
     setCurrentBusiness(null);
+    // Remove token cookies
+    removeCookie(COOKIE_KEYS.TOKEN);
+    removeCookie(COOKIE_KEYS.REFRESH_TOKEN);
+    // Remove non-sensitive user profile from localStorage
     localStorage.removeItem('user');
-    localStorage.removeItem('token');
   };
 
   /**

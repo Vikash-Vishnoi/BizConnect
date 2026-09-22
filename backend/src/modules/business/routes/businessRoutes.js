@@ -122,7 +122,7 @@ router.get('/', auth, async (req, res) => {
     return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
       success: false,
       error: ERROR_CODES.INTERNAL_ERROR,
-      message: 'Failed to create business',
+      message: 'Failed to retrieve businesses',
       processingTime
     });
   }
